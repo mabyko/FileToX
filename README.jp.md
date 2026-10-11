@@ -107,4 +107,4 @@ Apple siliconで、Xcodeテスト32件、Swift Packageテスト12件、内蔵エ
 
 FileToXは、[Filee](https://github.com/KnifeLemon/Filee)から着想を得て作ったMac専用のファイル変換アプリです。SwiftUIとAppKitでmacOSに合わせて開発した独立プロジェクトであり、Fileeの公式リリースではありません。
 
-Fileeの[MITライセンス](docs/upstream/Filee.LICENSE)と[外部コンポーネントの利用表記](docs/upstream/Filee.THIRD-PARTY-NOTICES.md)を保持します。MITは各外部エンジンのライセンスに代わるものではありません。実際のバンドルの利用表記はhelperの`Contents/Resources/Notices`に含めます。FileToX自体のライセンスはまだ決定していません。
+FileToXは[MITライセンス](LICENSE)で公開します。Fileeの[MITライセンス](docs/upstream/Filee.LICENSE)と[外部コンポーネントの利用表記](docs/upstream/Filee.THIRD-PARTY-NOTICES.md)を保持します。MITは各外部エンジンのライセンスに代わるものではありません。実際のバンドルの利用表記はhelperの`Contents/Resources/Notices`に含めます。

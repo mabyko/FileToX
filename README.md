@@ -107,4 +107,4 @@ Mockups from the earlier conversation are kept in `docs/archive/pre-filetox/`. A
 
 FileToX is a Mac-only file converter inspired by [Filee](https://github.com/KnifeLemon/Filee), built with SwiftUI and AppKit for macOS. It is an independent project, not an official Filee release.
 
-Filee's [MIT license](docs/upstream/Filee.LICENSE) and [third-party notices](docs/upstream/Filee.THIRD-PARTY-NOTICES.md) are preserved. MIT does not replace the licenses of external engines. Notices for the actual bundle are included in the helper's `Contents/Resources/Notices`. FileToX's own license has not been decided.
+FileToX is licensed under the [MIT License](LICENSE). Filee's [MIT license](docs/upstream/Filee.LICENSE) and [third-party notices](docs/upstream/Filee.THIRD-PARTY-NOTICES.md) are preserved. MIT does not replace the licenses of external engines. Notices for the actual bundle are included in the helper's `Contents/Resources/Notices`.
