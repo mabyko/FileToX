@@ -6,7 +6,13 @@ FileToXは、[Filee](https://github.com/KnifeLemon/Filee)から着想を得て�
 
 SwiftUIとAppKitで開発し、macOS 15以降に対応しています。初期言語は英語で、韓国語と日本語にも対応しています。
 
-![ファイル選択と最近の変換を表示するFileToXのホーム画面](docs/images/filetox-home.png)
+## 20秒で見るFileToX
+
+[![FinderでOptionキーを押してPNGをドラッグし、JPGにドロップするFileToXのデモ](docs/media/filetox-demo.gif)](docs/media/filetox-demo.mp4)
+
+[20秒の紹介動画を見る](docs/media/filetox-demo.mp4) · FinderのOptionドラッグを実際に撮影した、英語字幕付き・音声なしの動画です。
+
+FileToXをメニューバーで実行したまま、FinderでOption（⌥）キーを押してファイルをドラッグします。円形メニューの変換先にドロップすれば変換できます。アプリのメインウィンドウは閉じておけます。
 
 ## 機能
 
@@ -18,6 +24,8 @@ SwiftUIとAppKitで開発し、macOS 15以降に対応しています。初期�
 - 元のファイルを保護し、名前の衝突と複数の出力を処理します。
 
 ## アプリの画面
+
+![ファイル選択と最近の変換を表示するFileToXのホーム画面](docs/images/filetox-home.png)
 
 <table>
 <tr><th>円形の変換メニュー</th><th>テーマとアクセント色</th></tr>

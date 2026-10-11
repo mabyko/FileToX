@@ -6,7 +6,13 @@ FileToX is a Mac-only file converter inspired by [Filee](https://github.com/Knif
 
 Built with SwiftUI and AppKit for macOS 15 or later. English is the default language, with Korean and Japanese also available.
 
-![FileToX home screen with file selection and recent conversions](docs/images/filetox-home.png)
+## See it in action
+
+[![FileToX demo: hold Option and drag a PNG in Finder, then drop on JPG](docs/media/filetox-demo.gif)](docs/media/filetox-demo.mp4)
+
+[Watch the 20-second video](docs/media/filetox-demo.mp4) · Finder Option-drag, English captions, no audio.
+
+With FileToX running in the menu bar, hold Option (⌥) and drag a file in Finder. Drop it on a format in the radial menu; the main app window can stay closed.
 
 ## Features
 
@@ -18,6 +24,8 @@ Built with SwiftUI and AppKit for macOS 15 or later. English is the default lang
 - Keep source files protected, with clear handling of name conflicts and multiple outputs.
 
 ## Screenshots
+
+![FileToX home screen with file selection and recent conversions](docs/images/filetox-home.png)
 
 <table>
 <tr><th>Radial conversion menu</th><th>Theme and accent color</th></tr>

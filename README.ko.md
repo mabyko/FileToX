@@ -6,7 +6,13 @@ FileToX는 [Filee](https://github.com/KnifeLemon/Filee)에서 영감을 받아 �
 
 SwiftUI와 AppKit으로 만들었으며 macOS 15 이상에서 실행한다. 기본 언어는 영어이고 한국어와 일본어도 지원한다.
 
-![파일 선택과 최근 변환을 보여주는 FileToX 홈 화면](docs/images/filetox-home.png)
+## 20초로 보는 FileToX
+
+[![Finder에서 Option 키로 PNG를 드래그하고 JPG에 드롭하는 FileToX 시연](docs/media/filetox-demo.gif)](docs/media/filetox-demo.mp4)
+
+[20초 소개 영상 보기](docs/media/filetox-demo.mp4) · Finder Option 드래그를 실제로 촬영한 영어 자막의 무음 영상이다.
+
+FileToX를 메뉴 막대에서 실행해 둔 채, Finder에서 Option(⌥)을 누르고 파일을 드래그한다. 원형 메뉴의 변환 형식에 드롭하면 된다. 앱의 메인 창은 닫아둬도 된다.
 
 ## 기능
 
@@ -18,6 +24,8 @@ SwiftUI와 AppKit으로 만들었으며 macOS 15 이상에서 실행한다. 기�
 - 원본 파일을 보호하고, 이름 충돌과 여러 결과를 처리한다.
 
 ## 앱 화면
+
+![파일 선택과 최근 변환을 보여주는 FileToX 홈 화면](docs/images/filetox-home.png)
 
 <table>
 <tr><th>원형 변환 메뉴</th><th>테마와 강조색</th></tr>
