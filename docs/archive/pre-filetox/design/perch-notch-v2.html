@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Perch — 노치 시안 v2</title>
+<style>
+*{box-sizing:border-box}body{margin:0;color:var(--foreground,#222);font-family:var(--font-sans,-apple-system,BlinkMacSystemFont),"Apple SD Gothic Neo",sans-serif}button{font:inherit;cursor:pointer}button:focus-visible{outline:2px solid #b4d89b;outline-offset:4px}button:disabled{cursor:default;opacity:.4}svg{display:block}.tools{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.states,.extras{display:flex;gap:6px;align-items:center}.tool{border:1px solid var(--border,#ddd);background:transparent;color:inherit;padding:8px 11px;border-radius:8px;font-size:12px;min-height:34px}.tool[aria-pressed=true]{background:var(--foreground,#222);color:var(--background,#fff)}.tool svg{width:14px;height:14px;display:inline-block;vertical-align:-2px;margin-right:5px}.scene{position:relative;width:100%;height:452px;overflow:hidden;border-radius:var(--radius,14px);padding:16px;background:#d5dad0;color:#27332c;isolation:isolate}.wallpaper{position:absolute;inset:0;background:radial-gradient(ellipse at 0 90%,#a9bdad 0,transparent 60%),radial-gradient(ellipse at 100% 0,#efe6d9 0,transparent 65%),linear-gradient(150deg,#d9e2d8,#c6d5cc);transition:background .4s}.wallpaper:after{content:"";position:absolute;width:110%;height:310px;left:10%;top:230px;border-radius:50%;background:linear-gradient(120deg,#a3b8a850,#759d9245);transform:rotate(-17deg)}.scene.dark .wallpaper{background:radial-gradient(ellipse at 0 90%,#274944 0,transparent 60%),radial-gradient(ellipse at 100% 0,#4b5056 0,transparent 65%),linear-gradient(150deg,#26362f,#142a2b)}.menu{position:absolute;inset:0 0 auto;height:28px;display:flex;justify-content:space-between;align-items:center;padding:0 16px;z-index:2;font-size:11px;background:#ffffff20;backdrop-filter:blur(8px)}.menu .left,.menu .right{display:flex;gap:13px;align-items:center}.menu .left strong{font-size:11px}.menu svg{width:13px;height:13px}.dark .menu{color:#eceeea;background:#ffffff05}.hardware{position:absolute;left:50%;top:0;width:132px;height:28px;transform:translateX(-50%);background:#000;border-radius:0 0 13px 13px;z-index:8;pointer-events:none}.surface{position:absolute;left:50%;top:0;transform:translateX(-50%);width:456px;height:250px;z-index:6;filter:drop-shadow(0 10px 16px #16251c28);color:#f6f6f5;overflow:hidden}.surface[data-state=rest]{filter:none}.shape{position:absolute;inset:0;width:100%;height:100%;z-index:-1;overflow:visible}.surface-content{position:absolute;left:50%;top:41px;transform:translateX(-50%) translateY(0);width:408px;opacity:1;transition:opacity .16s ease,transform .22s ease;transition-delay:.11s}.surface:not([data-state=open]) .surface-content{opacity:0;transform:translateX(-50%) translateY(-5px);transition-delay:0s;pointer-events:none}.meta{display:flex;justify-content:space-between;align-items:center;height:17px;margin-bottom:12px;font-size:11px;color:#a4a4a4}.meta button{padding:2px 0;border:0;background:none;color:#a4a4a4;font-size:11px}.meta button:hover{color:#fff}.items{display:flex;gap:16px}.file{border:0;background:none;color:#e5e5e4;padding:0;flex:1;min-width:0;text-align:center;border-radius:8px}.thumb{position:relative;height:68px;border-radius:9px;overflow:hidden;margin-bottom:8px;background:#f0ede6;box-shadow:inset 0 0 0 1px #ffffff14}.thumb svg{width:100%;height:100%;object-fit:cover}.file-name{display:block;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:17px}.file-type{display:block;color:#a6a6a6;font-size:10px;line-height:15px}.check{position:absolute;right:5px;bottom:5px;display:flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:#c9e0b2;color:#23351a;box-shadow:0 0 0 2px #000}.check svg{width:11px;height:11px}.file[aria-pressed=false] .check{background:#0009;color:transparent;box-shadow:0 0 0 1px #fff9}.file[aria-pressed=false] .thumb{opacity:.68}.file:hover .thumb{box-shadow:inset 0 0 0 1px #b4d89b}.action-row{display:flex;gap:8px;margin-top:16px;height:32px}.action{display:flex;justify-content:center;align-items:center;gap:7px;flex:1;min-width:0;border:1px solid #343434;border-radius:8px;background:#1c1c1c;color:#dededb;font-size:12px;padding:7px}.action svg{width:14px;height:14px}.action.primary{color:#24351c;background:#c9e0b2;border-color:#c9e0b2}.action:hover{filter:brightness(1.1)}.action.back{flex:0 0 32px;padding:7px}.hint{height:15px;margin-top:10px;color:#a5a5a5;text-align:center;font-size:10px;line-height:15px}.peek{position:absolute;top:33px;left:0;right:0;text-align:center;font-size:11px;color:#c3d7b3;opacity:0;transition:opacity .12s;pointer-events:none}.surface[data-state=peek] .peek{opacity:1;transition-delay:.12s}.desktop{position:absolute;left:24px;right:24px;bottom:23px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;z-index:1}.finder{width:256px;border-radius:12px;background:#f7f9f5cf;backdrop-filter:blur(16px);box-shadow:0 8px 26px #24442c18;border:1px solid #ffffff80;overflow:hidden}.finder-top{height:34px;display:flex;align-items:center;gap:5px;padding:0 13px;border-bottom:1px solid #bac8b83b}.light{width:7px;height:7px;border-radius:50%;background:#e28e80}.light:nth-child(2){background:#dfc483}.light:nth-child(3){background:#9aba96}.finder-top strong{margin-left:12px;font-size:11px;color:#526453;font-weight:500}.finder-body{padding:10px 13px 12px}.finder-file{display:flex;align-items:center;gap:9px;font-size:11px;padding:6px 0;color:#536153}.finder-file svg{width:16px;height:16px;color:#789179;flex-shrink:0}.desktop-folder{width:100px;text-align:center;color:#48604e}.desktop-folder svg{width:46px;height:39px;margin:auto auto 7px;fill:#8bab97;stroke:#668c77;stroke-width:1.4}.desktop-folder span{font-size:11px}.dark .finder{background:#dfe8dfd6}.dark .desktop-folder{color:#e0e8e0}.caption{font-size:12px;color:var(--muted-foreground,#777);line-height:1.8;margin:12px 0 0}.label-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:15px;font-size:12px}.label-row strong{font-size:13px;font-weight:600}.label-row span{color:var(--muted-foreground,#777)}.facts{margin-top:11px;display:flex;gap:16px;flex-wrap:wrap;color:var(--muted-foreground,#777);font-size:11px}.facts span:before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:#8aa97b;margin-right:6px;vertical-align:2px}
+@media(max-width:500px){.tools{gap:8px}.states{gap:5px}.tool{padding:8px 9px;font-size:11px}.extras{gap:5px}.scene{height:426px}.menu .optional,.menu .right span{display:none}.menu{padding:0 12px}.desktop{left:16px;right:16px;bottom:19px;gap:14px}.finder{width:205px}.desktop-folder{width:62px}.desktop-folder svg{width:38px;height:33px}.items{gap:10px}.thumb{height:59px}.file-name{font-size:11px}.file-type{font-size:9px}.surface-content{top:42px}.action-row{gap:6px}.action{padding:6px;font-size:11px}.label-row{align-items:flex-start}.label-row span{font-size:11px}.facts{gap:9px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<svg style="display:none" aria-hidden="true"><defs>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+<symbol id="i-move" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-convert" viewBox="0 0 24 24"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3zm8 0v5h4M9 12h6m-6 4h6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+<symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8 3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</defs></svg>
+<div class="tools">
+<div class="states" role="group" aria-label="시안의 화면 상태">
+<button class="tool" data-state-button="rest" aria-pressed="false">대기</button>
+<button class="tool" data-state-button="peek" aria-pressed="false">드롭 준비</button>
+<button class="tool" data-state-button="open" aria-pressed="true">파일 선반</button>
+</div>
+<div class="extras">
+<button class="tool" id="replay"><svg aria-hidden="true"><use href="#i-play"/></svg>열림·닫힘</button>
+<button class="tool" id="theme" aria-pressed="false">어두운 배경</button>
+</div>
+</div>
+<div class="scene" id="scene" aria-label="macOS 노치와 이어지는 Perch 화면 시안">
+<div class="wallpaper" aria-hidden="true"></div>
+<div class="menu" aria-hidden="true">
+<div class="left"><svg viewBox="0 0 20 20"><path d="M12 4c.8-1 1-2.2.9-2.9-1 .1-2.1.7-2.8 1.5-.6.7-1 1.8-.9 2.7 1.1.1 2-.5 2.8-1.3ZM15 10c0-2 1.6-3 1.7-3.1-1-1.5-2.6-1.7-3.2-1.7-1.4-.1-2.7.8-3.4.8-.7 0-1.9-.8-3.1-.8-1.7 0-3.4 1-4.3 2.4-1.8 3.1-.4 7.8 1.3 10.2.8 1.2 1.8 2.5 3.1 2.4 1.2 0 1.7-.8 3.2-.8 1.4 0 1.8.8 3.2.7 1.4 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.8-1.1-2.8-4.9Z" fill="currentColor" transform="translate(1 -1) scale(.88)"/></svg><strong class="optional">Finder</strong><span class="optional">파일</span></div>
+<div class="right"><svg viewBox="0 0 22 16"><rect x="1" y="3" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="3" y="5" width="12" height="6" rx="1" fill="currentColor"/><path d="M19 6v4" stroke="currentColor" stroke-width="2"/></svg><span class="optional">10월 11일</span><span>10:24</span></div>
+</div>
+<div class="hardware" aria-hidden="true"></div>
+<div class="surface" id="surface" data-state="open">
+<svg class="shape" id="shape" aria-hidden="true"><path id="outline" fill="#000"/></svg>
+<div class="peek" aria-hidden="true">여기에 파일을 놓으세요</div>
+<div class="surface-content" id="content">
+<div class="meta"><span id="count" role="status" aria-live="polite">파일 3개 선택</span><button id="selection">선택 해제</button></div>
+<div class="items">
+<button class="file" data-file="photo1" aria-pressed="true" aria-label="산책.heic 선택">
+<div class="thumb"><svg viewBox="0 0 140 88" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="sky1" x2="0" y2="1"><stop stop-color="#c4d6d4"/><stop offset="1" stop-color="#eee7d1"/></linearGradient><linearGradient id="hill1" x2="1" y2="1"><stop stop-color="#728972"/><stop offset="1" stop-color="#3f675e"/></linearGradient></defs><path fill="url(#sky1)" d="M0 0h140v88H0z"/><circle cx="102" cy="22" r="9" fill="#f8edd0"/><path d="M0 65 43 28l45 37 26-23 26 22v24H0Z" fill="#93a995"/><path d="M0 72 35 50l36 29 31-26 38 31v4H0Z" fill="url(#hill1)"/></svg><span class="check"><svg aria-hidden="true"><use href="#i-check"/></svg></span></div>
+<span class="file-name">산책.heic</span><span class="file-type">사진 · 2.4 MB</span>
+</button>
+<button class="file" data-file="photo2" aria-pressed="true" aria-label="카페.png 선택">
+<div class="thumb"><svg viewBox="0 0 140 88" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="room" x2="1" y2="1"><stop stop-color="#d4c6b4"/><stop offset="1" stop-color="#b49a83"/></linearGradient></defs><path fill="url(#room)" d="M0 0h140v88H0z"/><path d="M86 0h54v62H86z" fill="#e7dccc"/><path d="M99 0v62m24-62v62M86 28h54" stroke="#a8917a" stroke-width="3"/><path d="M0 64h140v24H0Z" fill="#8e725e"/><ellipse cx="61" cy="73" rx="29" ry="5" fill="#63564740"/><path d="M44 42h35v20a11 11 0 0 1-11 11H55a11 11 0 0 1-11-11Z" fill="#ece4d6"/><path d="M79 47h5a8 8 0 0 1 0 16h-5" fill="none" stroke="#ece4d6" stroke-width="5"/><ellipse cx="61" cy="43" rx="17" ry="4" fill="#6e5442"/></svg><span class="check"><svg aria-hidden="true"><use href="#i-check"/></svg></span></div>
+<span class="file-name">카페.png</span><span class="file-type">이미지 · 840 KB</span>
+</button>
+<button class="file" data-file="document" aria-pressed="true" aria-label="회의자료.pdf 선택">
+<div class="thumb"><svg viewBox="0 0 140 88" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path fill="#eeeae2" d="M0 0h140v88H0z"/><rect x="39" y="8" width="62" height="78" rx="2" fill="#faf9f5"/><path d="M48 23h35" stroke="#687f72" stroke-width="4"/><path d="M48 33h44m-44 5h38m-38 5h44m-44 10h44m-44 5h35m-35 5h44" stroke="#c6ccc1" stroke-width="2"/><rect x="49" y="72" width="10" height="7" fill="#a3b49f"/><rect x="64" y="68" width="10" height="11" fill="#879f89"/><rect x="79" y="64" width="10" height="15" fill="#687f72"/></svg><span class="check"><svg aria-hidden="true"><use href="#i-check"/></svg></span></div>
+<span class="file-name">회의자료.pdf</span><span class="file-type">문서 · 320 KB</span>
+</button>
+</div>
+<div class="action-row" id="actions">
+<button class="action primary" data-action="move"><svg aria-hidden="true"><use href="#i-move"/></svg>이동</button>
+<button class="action" data-action="copy"><svg aria-hidden="true"><use href="#i-copy"/></svg>복사</button>
+<button class="action" data-action="convert"><svg aria-hidden="true"><use href="#i-convert"/></svg>변환</button>
+</div>
+<div class="hint" id="hint" role="status">다른 창으로 끌어 꺼내세요.</div>
+</div>
+</div>
+<div class="desktop" aria-hidden="true">
+<div class="finder"><div class="finder-top"><i class="light"></i><i class="light"></i><i class="light"></i><strong>다운로드</strong></div><div class="finder-body"><div class="finder-file"><svg><use href="#i-file"/></svg>산책.heic</div><div class="finder-file"><svg><use href="#i-file"/></svg>카페.png</div><div class="finder-file"><svg><use href="#i-file"/></svg>회의자료.pdf</div></div></div>
+<div class="desktop-folder"><svg viewBox="0 0 52 42"><path d="M3 9a3 3 0 0 1 3-3h14l5 5h21a3 3 0 0 1 3 3v23a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3Z"/><path d="M3 15h46" fill="none"/></svg><span>모아둔 파일</span></div>
+</div>
+</div>
+<div class="label-row"><strong>Perch · 노치 시안 v2</strong><span id="state-label">펼친 상태</span></div>
+<div class="facts"><span>상단 고정</span><span>하나의 검은 윤곽</span><span>내용 크기 유지</span></div>
+<p class="caption">상태 버튼과 ‘열림·닫힘’으로 움직임을 확인해보세요. 파일 선택과 이동·변환 옵션을 눌러볼 수 있는 화면 시안이며, 실제 파일 작업은 수행하지 않습니다.</p>
+<script>
+const surface=document.getElementById('surface'),scene=document.getElementById('scene'),outline=document.getElementById('outline'),shape=document.getElementById('shape'),content=document.getElementById('content'),count=document.getElementById('count'),actions=document.getElementById('actions'),hint=document.getElementById('hint');
+const motion=matchMedia('(prefers-reduced-motion: reduce)');
+const selected=new Set(['photo1','photo2','document']);
+let state='open',current={w:456,h:250},frame=0,sequence=0,activeAction=null;
+const defaultActions=actions.innerHTML;
+const camera={w:132,h:28};
+function openWidth(){return Math.min(456,scene.clientWidth-56)}
+function target(s){return s==='rest'?{...camera}:s==='peek'?{w:216,h:64}:{w:openWidth(),h:250}}
+function notchPath(w,h){const shoulder=6,bottom=Math.min(27,h*.43);return 'M0 0Q'+shoulder+' 0 '+shoulder+' '+shoulder+'L'+shoulder+' '+(h-bottom)+'Q'+shoulder+' '+h+' '+(shoulder+bottom)+' '+h+'L'+(w-shoulder-bottom)+' '+h+'Q'+(w-shoulder)+' '+h+' '+(w-shoulder)+' '+(h-bottom)+'L'+(w-shoulder)+' '+shoulder+'Q'+(w-shoulder)+' 0 '+w+' 0Z'}
+function draw(size){current={w:Math.max(camera.w,size.w),h:Math.max(camera.h,size.h)};surface.style.width=current.w+'px';surface.style.height=current.h+'px';shape.setAttribute('viewBox','0 0 '+current.w+' '+current.h);outline.setAttribute('d',notchPath(current.w,current.h));console.assert(current.w>=camera.w&&current.h>=camera.h,'The surface must always contain the hardware notch')}
+function updateSelection(){count.textContent=selected.size?'파일 '+selected.size+'개 선택':'파일 3개';document.getElementById('selection').textContent=selected.size?'선택 해제':'전체 선택';document.querySelectorAll('[data-file]').forEach(b=>b.setAttribute('aria-pressed',String(selected.has(b.dataset.file))));actions.querySelectorAll('button:not(.back)').forEach(b=>b.disabled=selected.size===0)}
+function bindActions(){actions.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>showAction(b.dataset.action)))}
+function resetAction(){activeAction=null;actions.innerHTML=defaultActions;hint.textContent='다른 창으로 끌어 꺼내세요.';bindActions();updateSelection()}
+function showAction(action){activeAction=action;const conversion=action==='convert';const choices=conversion?['JPEG','PNG']:['다운로드','문서','폴더 선택…'];actions.innerHTML='<button class="action back" aria-label="작업 선택으로 돌아가기"><svg aria-hidden="true"><use href="#i-back"/></svg></button>'+choices.map((x,i)=>'<button class="action '+(i===0?'primary':'')+'" data-choice="'+x+'">'+x+'</button>').join('');actions.querySelector('.back').addEventListener('click',resetAction);actions.querySelectorAll('[data-choice]').forEach(b=>b.addEventListener('click',()=>{hint.textContent=conversion?b.dataset.choice+' 형식으로 새 파일을 만듭니다.':b.dataset.choice+(action==='move'?' 폴더로 이동합니다.':' 폴더에 복사합니다.')}));hint.textContent=conversion?'이미지의 출력 형식을 선택하세요.':(action==='move'?'이동할':'복사할')+' 폴더를 선택하세요.'}
+function setState(next,animate=true){cancelAnimationFrame(frame);state=next;surface.dataset.state=next;content.inert=next!=='open';content.setAttribute('aria-hidden',String(next!=='open'));document.querySelectorAll('[data-state-button]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.stateButton===next)));document.getElementById('state-label').textContent={rest:'노치 크기로 접힌 상태',peek:'파일을 받을 준비',open:'펼친 상태'}[next];const goal=target(next);content.style.width=(openWidth()-48)+'px';if(!animate||motion.matches){draw(goal);return}const origin={...current},started=performance.now();const run=now=>{const t=Math.min((now-started)/560,1);const p=t===1?1:1-Math.exp(-7*t)*(Math.cos(10*t)+.7*Math.sin(10*t));draw({w:origin.w+(goal.w-origin.w)*p,h:origin.h+(goal.h-origin.h)*p});if(t<1)frame=requestAnimationFrame(run);else draw(goal)};frame=requestAnimationFrame(run)}
+document.querySelectorAll('[data-state-button]').forEach(b=>b.addEventListener('click',()=>{sequence++;setState(b.dataset.stateButton)}));
+document.querySelectorAll('[data-file]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.file;selected.has(id)?selected.delete(id):selected.add(id);if(activeAction)resetAction();else updateSelection()}));
+document.getElementById('selection').addEventListener('click',()=>{if(selected.size)selected.clear();else document.querySelectorAll('[data-file]').forEach(b=>selected.add(b.dataset.file));if(activeAction)resetAction();else updateSelection()});
+document.getElementById('theme').addEventListener('click',e=>{const dark=scene.classList.toggle('dark');e.currentTarget.setAttribute('aria-pressed',String(dark));e.currentTarget.textContent=dark?'밝은 배경':'어두운 배경'});
+document.getElementById('replay').addEventListener('click',async()=>{const token=++sequence;resetAction();const steps=[['rest',750],['peek',800],['open',1450],['rest',600]];for(const [s,delay]of steps){if(token!==sequence)return;setState(s);await new Promise(r=>setTimeout(r,motion.matches?450:delay))}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){sequence++;setState('rest')}});
+new ResizeObserver(()=>setState(state,false)).observe(scene);
+bindActions();updateSelection();setState('open',false);
+console.assert(selected.size===3,'The three example files start selected');
+console.assert(surface.style.top===''&&getComputedStyle(surface).top==='0px','Surface stays anchored to the screen top');
+console.assert(!outline.getAttribute('d').includes('NaN'),'Notch silhouette has finite geometry');
+window.perchDemo={setState,getState:()=>({state,selected:[...selected],width:current.w,height:current.h,activeAction})};
+</script>
+</body>
+</html>

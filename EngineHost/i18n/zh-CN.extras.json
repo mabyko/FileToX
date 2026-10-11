@@ -1,0 +1,5 @@
+{
+  "error.output_exists": "输出位置已有同名文件",
+  "error.output_is_source": "输出文件不能覆盖源文件",
+  "error.output_commit_failed": "无法保存转换结果"
+}

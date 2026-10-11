@@ -1,0 +1,48 @@
+# macOS metadata
+.DS_Store
+
+# Local workspace tools and personal configuration
+.reference/
+.serena/
+Config/Local.xcconfig
+Config/Identities/
+
+# Swift, Xcode and packaged build outputs
+.build/
+.swiftpm/
+/build/
+DerivedData/
+/*.app/
+*.dSYM/
+*.xcarchive/
+*.xcresult/
+*.profraw
+*.profdata
+
+# Xcode user state (keep shared projects and schemes)
+*.xcuserstate
+xcuserdata/
+
+# .NET build and restore outputs, including vendor test projects
+bin/
+obj/
+
+# Python bytecode and caches, including Tests/Tools
+__pycache__/
+*.py[cod]
+
+# Local execution logs
+*.log
+
+# Environment secrets and signing credentials
+.env
+.env.*
+!.env.example
+!.env.sample
+*.p8
+*.p12
+*.pfx
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile

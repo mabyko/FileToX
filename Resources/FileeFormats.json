@@ -1,0 +1,1817 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "repository": "https://github.com/KnifeLemon/Filee",
+    "commit": "21fdd05ef7181b032ed83ec895cc9bbc4b198985",
+    "source": "src/Filee.Core/Formats/FormatRegistry.cs",
+    "license": "MIT"
+  },
+  "formats": [
+    {
+      "id": "png",
+      "displayName": "PNG",
+      "category": "Image",
+      "extensions": [
+        "png"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "jpg",
+      "displayName": "JPG",
+      "category": "Image",
+      "extensions": [
+        "jpg",
+        "jpeg",
+        "jpe",
+        "jfif"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "webp",
+      "displayName": "WEBP",
+      "category": "Image",
+      "extensions": [
+        "webp"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "tiff",
+      "displayName": "TIFF",
+      "category": "Image",
+      "extensions": [
+        "tiff",
+        "tif"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "bmp",
+      "displayName": "BMP",
+      "category": "Image",
+      "extensions": [
+        "bmp",
+        "dib"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "gif",
+      "displayName": "GIF",
+      "category": "Image",
+      "extensions": [
+        "gif"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ico",
+      "displayName": "ICO",
+      "category": "Image",
+      "extensions": [
+        "ico"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "avif",
+      "displayName": "AVIF",
+      "category": "Image",
+      "extensions": [
+        "avif"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "heic",
+      "displayName": "HEIC",
+      "category": "Image",
+      "extensions": [
+        "heic",
+        "heif"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "jxl",
+      "displayName": "JPEG XL",
+      "category": "Image",
+      "extensions": [
+        "jxl"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "jp2",
+      "displayName": "JPEG 2000",
+      "category": "Image",
+      "extensions": [
+        "jp2",
+        "j2k",
+        "jpf",
+        "jpx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "psd",
+      "displayName": "PSD",
+      "category": "Image",
+      "extensions": [
+        "psd"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "psb",
+      "displayName": "PSB",
+      "category": "Image",
+      "extensions": [
+        "psb"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "tga",
+      "displayName": "TGA",
+      "category": "Image",
+      "extensions": [
+        "tga",
+        "icb",
+        "vda",
+        "vst"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ppm",
+      "displayName": "PPM",
+      "category": "Image",
+      "extensions": [
+        "ppm",
+        "pgm",
+        "pbm",
+        "pnm"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "icns",
+      "displayName": "ICNS",
+      "category": "Image",
+      "extensions": [
+        "icns"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "xcf",
+      "displayName": "XCF",
+      "category": "Image",
+      "extensions": [
+        "xcf"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "raw",
+      "displayName": "RAW",
+      "category": "Image",
+      "extensions": [
+        "dng",
+        "cr2",
+        "cr3",
+        "crw",
+        "nef",
+        "nrw",
+        "arw",
+        "srf",
+        "sr2",
+        "orf",
+        "rw2",
+        "raf",
+        "pef",
+        "dcr",
+        "kdc",
+        "erf",
+        "mos",
+        "mrw",
+        "x3f",
+        "3fr",
+        "fff",
+        "iiq",
+        "mef",
+        "rwl",
+        "srw",
+        "raw"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "svg",
+      "displayName": "SVG",
+      "category": "Vector",
+      "extensions": [
+        "svg"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "svgz",
+      "displayName": "SVGZ",
+      "category": "Vector",
+      "extensions": [
+        "svgz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "eps",
+      "displayName": "EPS",
+      "category": "Vector",
+      "extensions": [
+        "eps",
+        "epsf",
+        "epsi"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ps",
+      "displayName": "PS",
+      "category": "Vector",
+      "extensions": [
+        "ps"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ai",
+      "displayName": "AI",
+      "category": "Vector",
+      "extensions": [
+        "ai"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "emf",
+      "displayName": "EMF",
+      "category": "Vector",
+      "extensions": [
+        "emf"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "wmf",
+      "displayName": "WMF",
+      "category": "Vector",
+      "extensions": [
+        "wmf"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "cdr",
+      "displayName": "CDR",
+      "category": "Vector",
+      "extensions": [
+        "cdr"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "cgm",
+      "displayName": "CGM",
+      "category": "Vector",
+      "extensions": [
+        "cgm"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "vsd",
+      "displayName": "VSD",
+      "category": "Vector",
+      "extensions": [
+        "vsd",
+        "vsdx"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "odg",
+      "displayName": "ODG",
+      "category": "Vector",
+      "extensions": [
+        "odg"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "pdf",
+      "displayName": "PDF",
+      "category": "Pdf",
+      "extensions": [
+        "pdf"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "docx",
+      "displayName": "DOCX",
+      "category": "Document",
+      "extensions": [
+        "docx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "docm",
+      "displayName": "DOCM",
+      "category": "Document",
+      "extensions": [
+        "docm"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "dotx",
+      "displayName": "DOTX",
+      "category": "Document",
+      "extensions": [
+        "dotx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "dotm",
+      "displayName": "DOTM",
+      "category": "Document",
+      "extensions": [
+        "dotm"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "doc",
+      "displayName": "DOC",
+      "category": "Document",
+      "extensions": [
+        "doc"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "dot",
+      "displayName": "DOT",
+      "category": "Document",
+      "extensions": [
+        "dot"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "odt",
+      "displayName": "ODT",
+      "category": "Document",
+      "extensions": [
+        "odt"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "rtf",
+      "displayName": "RTF",
+      "category": "Document",
+      "extensions": [
+        "rtf"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "wps",
+      "displayName": "WPS",
+      "category": "Document",
+      "extensions": [
+        "wps"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "wpd",
+      "displayName": "WPD",
+      "category": "Document",
+      "extensions": [
+        "wpd"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "lwp",
+      "displayName": "LWP",
+      "category": "Document",
+      "extensions": [
+        "lwp"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "abw",
+      "displayName": "ABW",
+      "category": "Document",
+      "extensions": [
+        "abw",
+        "zabw"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "pages",
+      "displayName": "Pages",
+      "category": "Document",
+      "extensions": [
+        "pages"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "sdw",
+      "displayName": "SDW",
+      "category": "Document",
+      "extensions": [
+        "sdw"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "pub",
+      "displayName": "PUB",
+      "category": "Document",
+      "extensions": [
+        "pub"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "eml",
+      "displayName": "EML",
+      "category": "Document",
+      "extensions": [
+        "eml"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "hwpx",
+      "displayName": "HWPX",
+      "category": "Hwp",
+      "extensions": [
+        "hwpx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "hwp",
+      "displayName": "HWP",
+      "category": "Hwp",
+      "extensions": [
+        "hwp"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "xlsx",
+      "displayName": "XLSX",
+      "category": "Spreadsheet",
+      "extensions": [
+        "xlsx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "xlsm",
+      "displayName": "XLSM",
+      "category": "Spreadsheet",
+      "extensions": [
+        "xlsm"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "xltx",
+      "displayName": "XLTX",
+      "category": "Spreadsheet",
+      "extensions": [
+        "xltx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "xls",
+      "displayName": "XLS",
+      "category": "Spreadsheet",
+      "extensions": [
+        "xls",
+        "xlt"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ods",
+      "displayName": "ODS",
+      "category": "Spreadsheet",
+      "extensions": [
+        "ods"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "csv",
+      "displayName": "CSV",
+      "category": "Spreadsheet",
+      "extensions": [
+        "csv"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "tsv",
+      "displayName": "TSV",
+      "category": "Spreadsheet",
+      "extensions": [
+        "tsv",
+        "tab"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "et",
+      "displayName": "ET",
+      "category": "Spreadsheet",
+      "extensions": [
+        "et"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "numbers",
+      "displayName": "Numbers",
+      "category": "Spreadsheet",
+      "extensions": [
+        "numbers"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "sdc",
+      "displayName": "SDC",
+      "category": "Spreadsheet",
+      "extensions": [
+        "sdc"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "pptx",
+      "displayName": "PPTX",
+      "category": "Presentation",
+      "extensions": [
+        "pptx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "pptm",
+      "displayName": "PPTM",
+      "category": "Presentation",
+      "extensions": [
+        "pptm"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "potx",
+      "displayName": "POTX",
+      "category": "Presentation",
+      "extensions": [
+        "potx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ppsx",
+      "displayName": "PPSX",
+      "category": "Presentation",
+      "extensions": [
+        "ppsx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ppt",
+      "displayName": "PPT",
+      "category": "Presentation",
+      "extensions": [
+        "ppt",
+        "pps",
+        "pot"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "odp",
+      "displayName": "ODP",
+      "category": "Presentation",
+      "extensions": [
+        "odp"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "key",
+      "displayName": "Keynote",
+      "category": "Presentation",
+      "extensions": [
+        "key"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "dps",
+      "displayName": "DPS",
+      "category": "Presentation",
+      "extensions": [
+        "dps"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "sda",
+      "displayName": "SDA",
+      "category": "Presentation",
+      "extensions": [
+        "sda",
+        "sdd"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "txt",
+      "displayName": "TXT",
+      "category": "Text",
+      "extensions": [
+        "txt"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "md",
+      "displayName": "Markdown",
+      "category": "Text",
+      "extensions": [
+        "md",
+        "markdown"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "html",
+      "displayName": "HTML",
+      "category": "Text",
+      "extensions": [
+        "html",
+        "htm",
+        "xhtml"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "rst",
+      "displayName": "reStructuredText",
+      "category": "Text",
+      "extensions": [
+        "rst"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "tex",
+      "displayName": "LaTeX",
+      "category": "Text",
+      "extensions": [
+        "tex",
+        "latex"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "epub",
+      "displayName": "EPUB",
+      "category": "Ebook",
+      "extensions": [
+        "epub"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "mobi",
+      "displayName": "MOBI",
+      "category": "Ebook",
+      "extensions": [
+        "mobi"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "azw3",
+      "displayName": "AZW3",
+      "category": "Ebook",
+      "extensions": [
+        "azw3"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "azw",
+      "displayName": "AZW",
+      "category": "Ebook",
+      "extensions": [
+        "azw"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "azw4",
+      "displayName": "AZW4",
+      "category": "Ebook",
+      "extensions": [
+        "azw4"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "prc",
+      "displayName": "PRC",
+      "category": "Ebook",
+      "extensions": [
+        "prc"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "fb2",
+      "displayName": "FB2",
+      "category": "Ebook",
+      "extensions": [
+        "fb2"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "cbz",
+      "displayName": "CBZ",
+      "category": "Ebook",
+      "extensions": [
+        "cbz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "cbr",
+      "displayName": "CBR",
+      "category": "Ebook",
+      "extensions": [
+        "cbr"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "cb7",
+      "displayName": "CB7",
+      "category": "Ebook",
+      "extensions": [
+        "cb7"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "cbt",
+      "displayName": "CBT",
+      "category": "Ebook",
+      "extensions": [
+        "cbt"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "cbc",
+      "displayName": "CBC",
+      "category": "Ebook",
+      "extensions": [
+        "cbc"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "htmlz",
+      "displayName": "HTMLZ",
+      "category": "Ebook",
+      "extensions": [
+        "htmlz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "txtz",
+      "displayName": "TXTZ",
+      "category": "Ebook",
+      "extensions": [
+        "txtz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "chm",
+      "displayName": "CHM",
+      "category": "Ebook",
+      "extensions": [
+        "chm"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "lit",
+      "displayName": "LIT",
+      "category": "Ebook",
+      "extensions": [
+        "lit"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "lrf",
+      "displayName": "LRF",
+      "category": "Ebook",
+      "extensions": [
+        "lrf"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "pdb",
+      "displayName": "PDB",
+      "category": "Ebook",
+      "extensions": [
+        "pdb"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "pml",
+      "displayName": "PML",
+      "category": "Ebook",
+      "extensions": [
+        "pml"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "rb",
+      "displayName": "RB",
+      "category": "Ebook",
+      "extensions": [
+        "rb"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "snb",
+      "displayName": "SNB",
+      "category": "Ebook",
+      "extensions": [
+        "snb"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "tcr",
+      "displayName": "TCR",
+      "category": "Ebook",
+      "extensions": [
+        "tcr"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "oeb",
+      "displayName": "OEB",
+      "category": "Ebook",
+      "extensions": [
+        "oeb",
+        "opf"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "mp4",
+      "displayName": "MP4",
+      "category": "Video",
+      "extensions": [
+        "mp4"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "m4v",
+      "displayName": "M4V",
+      "category": "Video",
+      "extensions": [
+        "m4v"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "mov",
+      "displayName": "MOV",
+      "category": "Video",
+      "extensions": [
+        "mov",
+        "qt"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "mkv",
+      "displayName": "MKV",
+      "category": "Video",
+      "extensions": [
+        "mkv"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "webm",
+      "displayName": "WEBM",
+      "category": "Video",
+      "extensions": [
+        "webm"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "avi",
+      "displayName": "AVI",
+      "category": "Video",
+      "extensions": [
+        "avi",
+        "divx"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "wmv",
+      "displayName": "WMV",
+      "category": "Video",
+      "extensions": [
+        "wmv",
+        "asf"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "flv",
+      "displayName": "FLV",
+      "category": "Video",
+      "extensions": [
+        "flv",
+        "f4v"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "mpg",
+      "displayName": "MPEG",
+      "category": "Video",
+      "extensions": [
+        "mpg",
+        "mpeg",
+        "mpe",
+        "m1v",
+        "m2v"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ts",
+      "displayName": "TS",
+      "category": "Video",
+      "extensions": [
+        "ts"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "m2ts",
+      "displayName": "M2TS",
+      "category": "Video",
+      "extensions": [
+        "m2ts",
+        "mts",
+        "m2t"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "3gp",
+      "displayName": "3GP",
+      "category": "Video",
+      "extensions": [
+        "3gp",
+        "3gpp"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "3g2",
+      "displayName": "3G2",
+      "category": "Video",
+      "extensions": [
+        "3g2"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ogv",
+      "displayName": "OGV",
+      "category": "Video",
+      "extensions": [
+        "ogv"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "vob",
+      "displayName": "VOB",
+      "category": "Video",
+      "extensions": [
+        "vob"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "mod",
+      "displayName": "MOD",
+      "category": "Video",
+      "extensions": [
+        "mod",
+        "tod"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "dv",
+      "displayName": "DV",
+      "category": "Video",
+      "extensions": [
+        "dv",
+        "dif"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "mxf",
+      "displayName": "MXF",
+      "category": "Video",
+      "extensions": [
+        "mxf"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "rm",
+      "displayName": "RM",
+      "category": "Video",
+      "extensions": [
+        "rm",
+        "rmvb"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "swf",
+      "displayName": "SWF",
+      "category": "Video",
+      "extensions": [
+        "swf"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "wtv",
+      "displayName": "WTV",
+      "category": "Video",
+      "extensions": [
+        "wtv",
+        "dvr-ms",
+        "dvr"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "cavs",
+      "displayName": "CAVS",
+      "category": "Video",
+      "extensions": [
+        "cavs"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "mp3",
+      "displayName": "MP3",
+      "category": "Audio",
+      "extensions": [
+        "mp3"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "m4a",
+      "displayName": "M4A",
+      "category": "Audio",
+      "extensions": [
+        "m4a"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "m4b",
+      "displayName": "M4B",
+      "category": "Audio",
+      "extensions": [
+        "m4b"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "aac",
+      "displayName": "AAC",
+      "category": "Audio",
+      "extensions": [
+        "aac"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "wav",
+      "displayName": "WAV",
+      "category": "Audio",
+      "extensions": [
+        "wav",
+        "wave"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "flac",
+      "displayName": "FLAC",
+      "category": "Audio",
+      "extensions": [
+        "flac"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ogg",
+      "displayName": "OGG",
+      "category": "Audio",
+      "extensions": [
+        "ogg",
+        "oga"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "opus",
+      "displayName": "OPUS",
+      "category": "Audio",
+      "extensions": [
+        "opus"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "wma",
+      "displayName": "WMA",
+      "category": "Audio",
+      "extensions": [
+        "wma"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "aiff",
+      "displayName": "AIFF",
+      "category": "Audio",
+      "extensions": [
+        "aiff",
+        "aif",
+        "aifc"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ac3",
+      "displayName": "AC3",
+      "category": "Audio",
+      "extensions": [
+        "ac3"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "amr",
+      "displayName": "AMR",
+      "category": "Audio",
+      "extensions": [
+        "amr"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "au",
+      "displayName": "AU",
+      "category": "Audio",
+      "extensions": [
+        "au",
+        "snd"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "caf",
+      "displayName": "CAF",
+      "category": "Audio",
+      "extensions": [
+        "caf"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "weba",
+      "displayName": "WEBA",
+      "category": "Audio",
+      "extensions": [
+        "weba"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "mka",
+      "displayName": "MKA",
+      "category": "Audio",
+      "extensions": [
+        "mka"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "mp2",
+      "displayName": "MP2",
+      "category": "Audio",
+      "extensions": [
+        "mp2",
+        "mpa"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "dss",
+      "displayName": "DSS",
+      "category": "Audio",
+      "extensions": [
+        "dss"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "voc",
+      "displayName": "VOC",
+      "category": "Audio",
+      "extensions": [
+        "voc"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "zip",
+      "displayName": "ZIP",
+      "category": "Archive",
+      "extensions": [
+        "zip"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "7z",
+      "displayName": "7Z",
+      "category": "Archive",
+      "extensions": [
+        "7z"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "rar",
+      "displayName": "RAR",
+      "category": "Archive",
+      "extensions": [
+        "rar"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "tar",
+      "displayName": "TAR",
+      "category": "Archive",
+      "extensions": [
+        "tar"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "tgz",
+      "displayName": "TAR.GZ",
+      "category": "Archive",
+      "extensions": [
+        "tar.gz",
+        "tgz",
+        "taz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "tbz2",
+      "displayName": "TAR.BZ2",
+      "category": "Archive",
+      "extensions": [
+        "tar.bz2",
+        "tbz2",
+        "tar.bz",
+        "tbz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "txz",
+      "displayName": "TAR.XZ",
+      "category": "Archive",
+      "extensions": [
+        "tar.xz",
+        "txz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "tar7z",
+      "displayName": "TAR.7Z",
+      "category": "Archive",
+      "extensions": [
+        "tar.7z"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "tlz",
+      "displayName": "TAR.LZ",
+      "category": "Archive",
+      "extensions": [
+        "tar.lz",
+        "tlz"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "tz",
+      "displayName": "TAR.Z",
+      "category": "Archive",
+      "extensions": [
+        "tar.z",
+        "tz"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "gz",
+      "displayName": "GZ",
+      "category": "Archive",
+      "extensions": [
+        "gz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "bz2",
+      "displayName": "BZ2",
+      "category": "Archive",
+      "extensions": [
+        "bz2",
+        "bz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "xz",
+      "displayName": "XZ",
+      "category": "Archive",
+      "extensions": [
+        "xz"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "lz",
+      "displayName": "LZ",
+      "category": "Archive",
+      "extensions": [
+        "lz"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "lzma",
+      "displayName": "LZMA",
+      "category": "Archive",
+      "extensions": [
+        "lzma"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "z",
+      "displayName": "Z",
+      "category": "Archive",
+      "extensions": [
+        "z"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "jar",
+      "displayName": "JAR",
+      "category": "Archive",
+      "extensions": [
+        "jar"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "cab",
+      "displayName": "CAB",
+      "category": "Archive",
+      "extensions": [
+        "cab"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "cpio",
+      "displayName": "CPIO",
+      "category": "Archive",
+      "extensions": [
+        "cpio"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "deb",
+      "displayName": "DEB",
+      "category": "Archive",
+      "extensions": [
+        "deb"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "rpm",
+      "displayName": "RPM",
+      "category": "Archive",
+      "extensions": [
+        "rpm"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "dmg",
+      "displayName": "DMG",
+      "category": "Archive",
+      "extensions": [
+        "dmg"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "iso",
+      "displayName": "ISO",
+      "category": "Archive",
+      "extensions": [
+        "iso"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "img",
+      "displayName": "IMG",
+      "category": "Archive",
+      "extensions": [
+        "img"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "lha",
+      "displayName": "LHA",
+      "category": "Archive",
+      "extensions": [
+        "lha",
+        "lzh"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "arj",
+      "displayName": "ARJ",
+      "category": "Archive",
+      "extensions": [
+        "arj"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "alz",
+      "displayName": "ALZ",
+      "category": "Archive",
+      "extensions": [
+        "alz"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "egg",
+      "displayName": "EGG",
+      "category": "Archive",
+      "extensions": [
+        "egg"
+      ],
+      "writable": false,
+      "isVirtual": false
+    },
+    {
+      "id": "folder",
+      "displayName": "Folder",
+      "category": "Archive",
+      "extensions": [
+        ""
+      ],
+      "writable": true,
+      "isVirtual": true
+    },
+    {
+      "id": "dwg",
+      "displayName": "DWG",
+      "category": "Cad",
+      "extensions": [
+        "dwg"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "dxf",
+      "displayName": "DXF",
+      "category": "Cad",
+      "extensions": [
+        "dxf"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "ttf",
+      "displayName": "TTF",
+      "category": "Font",
+      "extensions": [
+        "ttf"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "otf",
+      "displayName": "OTF",
+      "category": "Font",
+      "extensions": [
+        "otf"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "woff",
+      "displayName": "WOFF",
+      "category": "Font",
+      "extensions": [
+        "woff"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "woff2",
+      "displayName": "WOFF2",
+      "category": "Font",
+      "extensions": [
+        "woff2"
+      ],
+      "writable": true,
+      "isVirtual": false
+    },
+    {
+      "id": "eot",
+      "displayName": "EOT",
+      "category": "Font",
+      "extensions": [
+        "eot"
+      ],
+      "writable": true,
+      "isVirtual": false
+    }
+  ]
+}

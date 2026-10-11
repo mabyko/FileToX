@@ -1,0 +1,317 @@
+diff --git c/src/Filee.Core/Conversion/OutputCommit.cs i/src/Filee.Core/Conversion/OutputCommit.cs
+index bc42aeb..6970ed1 100644
+--- c/src/Filee.Core/Conversion/OutputCommit.cs
++++ i/src/Filee.Core/Conversion/OutputCommit.cs
+@@ -67,24 +67,42 @@ public static class OutputCommit
+                 throw new OutputCommitException("error.output_exists", $"{final} appeared while converting.");
+             return;
+         }
+-        if (!overwrite)
+-            throw new OutputCommitException("error.output_exists", $"{final} already exists.");
+-        if (IsSource(final, sources))
+-            throw new OutputCommitException("error.output_is_source", $"{final} is a source file of this job.");
+-
++        CheckExisting(staged, final, overwrite, sources);
+         if (!isDirectory)
+         {
+             Rename(staged, final);
+             return;
+         }
+-        if (!Directory.Exists(final) || new DirectoryInfo(final).Attributes.HasFlag(FileAttributes.ReparsePoint))
+-            throw new OutputCommitException("error.output_exists", $"{final} is in the way of the extracted folder.");
+         // Merge like Filee always did: each entry replaced on its own, the folder's other files are kept.
+         foreach (var entry in Directory.EnumerateFileSystemEntries(staged))
+             Move(entry, Path.Combine(final, Path.GetFileName(entry)), overwrite, sources);
+         TryDelete(staged);
+     }
+ 
++    /// <summary>
++    /// Throws what <see cref="Move"/> would throw, without moving anything. Lets a caller refuse a conflict in a side
++    /// file before it publishes the output they belong to.
++    /// </summary>
++    public static void Check(string staged, string final, bool overwrite, IReadOnlyList<string> sources)
++    {
++        if (!Exists(final))
++            return;
++        CheckExisting(staged, final, overwrite, sources);
++        if (Directory.Exists(staged))
++            foreach (var entry in Directory.EnumerateFileSystemEntries(staged))
++                Check(entry, Path.Combine(final, Path.GetFileName(entry)), overwrite, sources);
++    }
++
++    private static void CheckExisting(string staged, string final, bool overwrite, IReadOnlyList<string> sources)
++    {
++        if (!overwrite)
++            throw new OutputCommitException("error.output_exists", $"{final} already exists.");
++        if (IsSource(final, sources))
++            throw new OutputCommitException("error.output_is_source", $"{final} is a source file of this job.");
++        if (Directory.Exists(staged) && (!Directory.Exists(final) || new DirectoryInfo(final).Attributes.HasFlag(FileAttributes.ReparsePoint)))
++            throw new OutputCommitException("error.output_exists", $"{final} is in the way of the extracted folder.");
++    }
++
+     /// <summary>
+     /// True when <paramref name="path"/> is the same file system object as one of <paramref name="sources"/> (or what
+     /// a source link points to). Compares device and inode numbers where the OS has them, full paths elsewhere.
+@@ -276,11 +294,15 @@ internal sealed class StagedOutputs(Action<string>? onStaging)
+                     entries[i] = entry with { StageDir = "" };
+                     continue;
+                 }
++                // Side files named after the output (Pandoc "<name>_files", Markdown images) go next to it. A conflict
++                // in one is found before the output moves, so nothing of this file is published.
++                var folder = Path.GetDirectoryName(entry.Final)!;
++                var sides = Directory.EnumerateFileSystemEntries(entry.StageDir).Where(p => p != entry.Staged).ToList();
++                foreach (var side in sides)
++                    OutputCommit.Check(side, Path.Combine(folder, Path.GetFileName(side)), overwrite, sources);
+                 OutputCommit.Move(entry.Staged, entry.Final, overwrite, sources);
+                 outputs.Add(entry.Final);
+-                // Side files named after the output (Pandoc "<name>_files", Markdown images) go next to it.
+-                var folder = Path.GetDirectoryName(entry.Final)!;
+-                foreach (var side in Directory.EnumerateFileSystemEntries(entry.StageDir))
++                foreach (var side in sides)
+                     OutputCommit.Move(side, Path.Combine(folder, Path.GetFileName(side)), overwrite, sources);
+                 OutputCommit.TryDelete(entry.StageDir);
+                 entries[i] = entry with { StageDir = "" };
+diff --git c/src/Filee.Engines/Office/PandocConverter.cs i/src/Filee.Engines/Office/PandocConverter.cs
+index 61c8cf6..a5f9236 100644
+--- c/src/Filee.Engines/Office/PandocConverter.cs
++++ i/src/Filee.Engines/Office/PandocConverter.cs
+@@ -77,16 +77,21 @@ public sealed class PandocConverter : IConverter
+             return [];
+ 
+         progress?.Report(0.1);
+-        List<string> args = [step.InputPath, "-f", Readers[step.From], "-t", Writers[step.To], "-o", output];
++        // Pandoc runs inside the folder the output is written to (the staging folder of JobQueue), so the media it
++        // extracts ("<name>_files", linked relatively) is staged and committed with the output, never written into the
++        // final folder. The input's folder stays the place relative resources are found.
++        var input = Path.GetFullPath(step.InputPath);
++        var folder = Path.GetDirectoryName(Path.GetFullPath(output))!;
++        List<string> args = [input, "-f", Readers[step.From], "-t", Writers[step.To], "-o", Path.GetFullPath(output),
++            "--resource-path=" + Path.GetDirectoryName(input)];
+         if (step.To is "html" or "tex")
+             args.Add("--standalone");
+         if (step.To is "md" or "html" or "rst" or "tex")
+-            args.Add("--extract-media=" + Path.Combine(Path.GetDirectoryName(output)!, Path.GetFileNameWithoutExtension(output) + "_files"));
++            args.Add("--extract-media=" + Path.GetFileNameWithoutExtension(output) + "_files");
+ 
+         ProcessResult result;
+         using (ProgressEstimate.Start(progress, TimeSpan.FromSeconds(1.5)))
+-            result = await ProcessRunner.RunAsync(pandoc, args, Timeout, cancellationToken,
+-                workingDirectory: Path.GetDirectoryName(Path.GetFullPath(step.InputPath)));
++            result = await ProcessRunner.RunAsync(pandoc, args, Timeout, cancellationToken, workingDirectory: folder);
+         if (!File.Exists(output))
+             throw new InvalidOperationException($"Pandoc failed (exit {result.ExitCode}). {result.StandardError.Trim()}");
+         progress?.Report(1);
+diff --git c/src/Filee.Engines/Text/MarkdownConverter.cs i/src/Filee.Engines/Text/MarkdownConverter.cs
+index 6e56ceb..85daa2c 100644
+--- c/src/Filee.Engines/Text/MarkdownConverter.cs
++++ i/src/Filee.Engines/Text/MarkdownConverter.cs
+@@ -50,7 +50,8 @@ public sealed class MarkdownConverter : IConverter
+     {
+         var document = Markdown.Parse(markdown, MarkdownReader.Pipeline);
+         var inputFolder = Path.GetDirectoryName(inputPath)!;
+-        if (!string.Equals(inputFolder, Path.GetDirectoryName(Path.GetFullPath(outputPath)), StringComparison.OrdinalIgnoreCase))
++        // A staged output (JobQueue) is compared by where it will end up.
++        if (!string.Equals(inputFolder, Path.GetDirectoryName(Path.GetFullPath(OutputCommit.FinalPathOf(outputPath))), StringComparison.OrdinalIgnoreCase))
+         {
+             // Relative image paths would break away from the Markdown file: point them at the original files.
+             foreach (var image in document.Descendants<LinkInline>().Where(l => l.IsImage))
+diff --git c/tests/Filee.Core.Tests/JobQueueStagingTests.cs i/tests/Filee.Core.Tests/JobQueueStagingTests.cs
+index ffabd5a..fc45c2b 100644
+--- c/tests/Filee.Core.Tests/JobQueueStagingTests.cs
++++ i/tests/Filee.Core.Tests/JobQueueStagingTests.cs
+@@ -132,6 +132,37 @@ public class JobQueueStagingTests
+         Assert.Empty(Leftovers(dir.Path));
+     }
+ 
++    [Fact]
++    public async Task A_conflicting_side_folder_publishes_nothing_of_the_file()
++    {
++        using var dir = new TempDir();
++        var source = dir.File("x.docx");
++        var media = Directory.CreateDirectory(Path.Combine(dir.Path, "x_files")).FullName;
++        Write(Path.Combine(media, "keep.txt"), "mine");
++        var converter = new ScriptedConverter(step =>
++        {
++            var output = step.Output.Allocate("html")!;
++            var staged = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(output)!, "x_files")).FullName;
++            Write(Path.Combine(staged, "img.png"), "img");
++            return [Write(output, "<img src=\"x_files/img.png\">")];
++        }, new ConversionEdge("docx", "html"));
++
++        var job = await Run(converter, [source], new Preset { TargetFormat = "html" });
++
++        Assert.Equal(FileState.Failed, job.Files[0].State);
++        Assert.Equal("error.output_exists", job.Files[0].ErrorKey);
++        Assert.Empty(job.Files[0].Outputs);
++        Assert.False(File.Exists(Path.Combine(dir.Path, "x.html")));
++        Assert.Equal(["keep.txt"], Directory.GetFileSystemEntries(media).Select(Path.GetFileName));
++        Assert.Empty(Leftovers(dir.Path));
++
++        // With overwriting, the folder is merged: its other files stay.
++        var again = await Run(converter, [source], new Preset { TargetFormat = "html", Output = { Conflict = ConflictPolicy.Overwrite } });
++        Assert.Equal(FileState.Done, again.Files[0].State);
++        Assert.Equal("mine", File.ReadAllText(Path.Combine(media, "keep.txt")));
++        Assert.Equal("img", File.ReadAllText(Path.Combine(media, "img.png")));
++    }
++
+     [Fact]
+     public async Task When_the_second_output_cannot_be_moved_the_first_is_reported()
+     {
+diff --git c/tests/Filee.Engines.Tests/CancelEngineTests.cs i/tests/Filee.Engines.Tests/CancelEngineTests.cs
+new file mode 100644
+index 0000000..cfd4e0b
+--- /dev/null
++++ i/tests/Filee.Engines.Tests/CancelEngineTests.cs
+@@ -0,0 +1,48 @@
++// Cancelling a job while a real engine runs: the engine's processes end, nothing reaches the final folder and no
++// staging folder is left. Skipped when LibreOffice is not installed.
++
++using System.Diagnostics;
++using Filee.Core.Conversion;
++using Filee.Core.Presets;
++
++namespace Filee.Engines.Tests;
++
++public class CancelEngineTests(EngineFixture fx) : IClassFixture<EngineFixture>
++{
++    [Fact]
++    public async Task Cancelling_LibreOffice_stops_every_process_and_publishes_nothing()
++    {
++        Assert.SkipUnless(fx.Catalog.StatusOf(fx.Converters.Single(c => c.Id == "libreoffice")).IsAvailable, "LibreOffice not installed");
++        var dir = fx.NewFolder();
++        var source = Path.Combine(dir, "doc.rtf");
++        await File.WriteAllTextAsync(source, "{\\rtf1\\ansi Hello}", TestContext.Current.CancellationToken);
++        Assert.Equal("libreoffice", fx.Catalog.CreatePlanner().Plan("rtf", "pdf")!.Steps.Single().Converter.Id);
++
++        await using var queue = new JobQueue(fx.Catalog);
++        var job = new ConversionJob([source], new Preset { TargetFormat = "pdf" }, "Test");
++        var run = queue.RunAsync(job);
++        // Wait until LibreOffice runs (its profile folder lives under this fixture's data folder).
++        var deadline = DateTime.UtcNow.AddSeconds(30);
++        while (!Running() && DateTime.UtcNow < deadline && !run.IsCompleted)
++            await Task.Delay(50, TestContext.Current.CancellationToken);
++        Assert.True(Running(), "LibreOffice never started");
++        job.Cancel();
++        await run.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
++
++        Assert.Equal(JobState.Cancelled, job.State);
++        Assert.False(File.Exists(Path.Combine(dir, "doc.pdf")));
++        Assert.Empty(Directory.GetFileSystemEntries(dir, ".filee-out-*", SearchOption.AllDirectories));
++        for (var i = 0; i < 40 && Running(); i++)
++            await Task.Delay(100, TestContext.Current.CancellationToken);
++        Assert.False(Running(), "a LibreOffice process survived the cancel");
++    }
++
++    private bool Running()
++    {
++        using var pgrep = Process.Start(new ProcessStartInfo("/usr/bin/pgrep", ["-f", Path.Combine(fx.Root, "data")])
++            { RedirectStandardOutput = true, UseShellExecute = false })!;
++        pgrep.StandardOutput.ReadToEnd();
++        pgrep.WaitForExit();
++        return pgrep.ExitCode == 0;
++    }
++}
+diff --git c/tests/Filee.Engines.Tests/PandocStagingTests.cs i/tests/Filee.Engines.Tests/PandocStagingTests.cs
+new file mode 100644
+index 0000000..0115ba8
+--- /dev/null
++++ i/tests/Filee.Engines.Tests/PandocStagingTests.cs
+@@ -0,0 +1,98 @@
++// Pandoc's extracted media ("<name>_files") is staged with the output and committed with it: never written into the
++// final folder while converting, linked relatively, and not published when it conflicts. Skipped when Pandoc is not
++// installed.
++
++using Filee.Core.Conversion;
++using Filee.Core.Presets;
++using ImageMagick;
++
++namespace Filee.Engines.Tests;
++
++public class PandocStagingTests(EngineFixture fx) : IClassFixture<EngineFixture>
++{
++    private void SkipUnlessInstalled() =>
++        Assert.SkipUnless(fx.Catalog.StatusOf(fx.Converters.Single(c => c.Id == "pandoc")).IsAvailable, "Pandoc not installed");
++
++    /// <summary>A DOCX with one picture, in a folder of its own.</summary>
++    private async Task<string> DocxWithPictureAsync()
++    {
++        var dir = fx.NewFolder();
++        using (var chart = new MagickImage(MagickColors.Teal, 160, 90))
++            chart.Write(Path.Combine(dir, "chart.png"));
++        await File.WriteAllTextAsync(Path.Combine(dir, "doc.md"), "# Title\n\n![chart](chart.png)\n", TestContext.Current.CancellationToken);
++        var job = await fx.ConvertAsync([Path.Combine(dir, "doc.md")], new Preset { TargetFormat = "docx" });
++        Assert.True(job.State == JobState.Completed, string.Join("; ", job.Files.Select(f => $"{f.ErrorKey} {f.ErrorDetail}")));
++        var docx = Path.Combine(dir, "doc.docx");
++        Assert.Contains(docx, job.Outputs);
++        File.Delete(Path.Combine(dir, "doc.md"));
++        File.Delete(Path.Combine(dir, "chart.png"));
++        return docx;
++    }
++
++    private Task<ConversionJob> ToMarkdownAsync(string docx, string outFolder, ConflictPolicy conflict) =>
++        fx.ConvertAsync([docx], new Preset
++        {
++            TargetFormat = "md",
++            Output = { Location = OutputLocation.CustomFolder, CustomFolder = outFolder, Conflict = conflict },
++        });
++
++    private static string[] Leftovers(string dir) => Directory.GetFileSystemEntries(dir, ".filee-out-*", SearchOption.AllDirectories);
++
++    [Fact]
++    public async Task Media_is_staged_committed_next_to_the_output_and_linked_relatively()
++    {
++        SkipUnlessInstalled();
++        var docx = await DocxWithPictureAsync();
++        var outFolder = fx.NewFolder();
++
++        var job = await ToMarkdownAsync(docx, outFolder, ConflictPolicy.Rename);
++
++        Assert.True(job.State == JobState.Completed, string.Join("; ", job.Files.Select(f => $"{f.ErrorKey} {f.ErrorDetail}")));
++        var md = Assert.Single(job.Outputs);
++        Assert.Equal(Path.Combine(outFolder, "doc.md"), md);
++        var link = System.Text.RegularExpressions.Regex.Match(await File.ReadAllTextAsync(md, TestContext.Current.CancellationToken),
++            "src=\"(doc_files/[^\"]+)\"|\\]\\((doc_files/[^)]+)\\)");
++        Assert.True(link.Success, "no relative media link");
++        Assert.True(File.Exists(Path.Combine(outFolder, link.Groups[1].Value + link.Groups[2].Value)));
++        // Nothing went next to the source, and no staging folder is left.
++        Assert.False(Directory.Exists(Path.Combine(Path.GetDirectoryName(docx)!, "doc_files")));
++        Assert.Empty(Leftovers(outFolder));
++        Assert.Empty(Leftovers(Path.GetDirectoryName(docx)!));
++    }
++
++    [Fact]
++    public async Task A_media_folder_in_the_way_is_not_touched_and_nothing_is_published()
++    {
++        SkipUnlessInstalled();
++        var docx = await DocxWithPictureAsync();
++        var outFolder = fx.NewFolder();
++        var theirs = Directory.CreateDirectory(Path.Combine(outFolder, "doc_files", "media")).FullName;
++        await File.WriteAllTextAsync(Path.Combine(theirs, "rId9.png"), "mine", TestContext.Current.CancellationToken);
++
++        var job = await ToMarkdownAsync(docx, outFolder, ConflictPolicy.Rename);
++
++        Assert.Equal(FileState.Failed, job.Files[0].State);
++        Assert.Equal("error.output_exists", job.Files[0].ErrorKey);
++        Assert.False(File.Exists(Path.Combine(outFolder, "doc.md")));
++        Assert.Equal("mine", await File.ReadAllTextAsync(Path.Combine(theirs, "rId9.png"), TestContext.Current.CancellationToken));
++        Assert.Equal(["rId9.png"], Directory.GetFileSystemEntries(theirs).Select(Path.GetFileName));
++        Assert.Empty(Leftovers(outFolder));
++    }
++
++    [Fact]
++    public async Task Overwriting_merges_the_media_folder_and_keeps_unrelated_files()
++    {
++        SkipUnlessInstalled();
++        var docx = await DocxWithPictureAsync();
++        var outFolder = fx.NewFolder();
++        var media = Directory.CreateDirectory(Path.Combine(outFolder, "doc_files")).FullName;
++        await File.WriteAllTextAsync(Path.Combine(media, "keep.txt"), "mine", TestContext.Current.CancellationToken);
++
++        var job = await ToMarkdownAsync(docx, outFolder, ConflictPolicy.Overwrite);
++
++        Assert.True(job.State == JobState.Completed, string.Join("; ", job.Files.Select(f => $"{f.ErrorKey} {f.ErrorDetail}")));
++        Assert.Equal("mine", await File.ReadAllTextAsync(Path.Combine(media, "keep.txt"), TestContext.Current.CancellationToken));
++        Assert.NotEmpty(Directory.GetFiles(Path.Combine(media, "media")));
++        Assert.Empty(Leftovers(outFolder));
++    }
++}

@@ -1,0 +1,5 @@
+{
+  "error.output_exists": "저장할 위치에 같은 이름의 파일이 있습니다",
+  "error.output_is_source": "원본 파일을 덮어쓰는 위치에는 저장할 수 없습니다",
+  "error.output_commit_failed": "변환 결과를 저장하지 못했습니다"
+}

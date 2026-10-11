@@ -1,0 +1,892 @@
+diff --git c/src/Filee.Core/Conversion/JobQueue.cs i/src/Filee.Core/Conversion/JobQueue.cs
+index f875902..f36112b 100644
+--- c/src/Filee.Core/Conversion/JobQueue.cs
++++ i/src/Filee.Core/Conversion/JobQueue.cs
+@@ -17,6 +17,7 @@ public sealed class JobQueue : IAsyncDisposable
+     private readonly IPdfMerger? _pdfMerger;
+     private readonly IFileCombiner? _combiner;
+     private readonly ITiffMerger? _tiffMerger;
++    private readonly Action<string>? _onStaging;
+     private readonly ILogger _log;
+     private readonly Channel<ConversionJob> _channel = Channel.CreateUnbounded<ConversionJob>();
+     private readonly ConcurrentDictionary<string, SemaphoreSlim> _engineGates = new();
+@@ -28,9 +29,14 @@ public sealed class JobQueue : IAsyncDisposable
+     /// <param name="log">Optional logger.</param>
+     /// <param name="combiner">Used by "Compress into one archive" presets (<see cref="ArchiveOptions.CombineIntoOne"/>).</param>
+     /// <param name="tiffMerger">Used by multi-page TIFF presets (<see cref="ImageOptions.MultiPageTiff"/>).</param>
++    /// <param name="onStaging">
++    /// Called with every staging folder before anything is written into it, so a host can remove folders left by a
++    /// crash (see <see cref="OutputCommit"/>).
++    /// </param>
+     public JobQueue(ConverterCatalog catalog, IPdfMerger? pdfMerger = null, ILogger<JobQueue>? log = null, IFileCombiner? combiner = null,
+-        ITiffMerger? tiffMerger = null)
++        ITiffMerger? tiffMerger = null, Action<string>? onStaging = null)
+     {
++        _onStaging = onStaging;
+         _catalog = catalog;
+         _pdfMerger = pdfMerger;
+         _combiner = combiner;
+@@ -136,21 +142,62 @@ public sealed class JobQueue : IAsyncDisposable
+ 
+         var first = job.Files[0];
+         var allocator = CreateFinalAllocator(job, first.SourcePath, 1);
+-        var output = allocator.Allocate("pdf");
+-        if (output is null)
++        try
+         {
+-            foreach (var f in job.Files) f.State = FileState.Skipped;
+-            return;
+-        }
++            var output = allocator.Allocate("pdf");
++            if (output is null)
++            {
++                foreach (var f in job.Files) f.State = FileState.Skipped;
++                return;
++            }
+ 
+-        await _pdfMerger!.MergeAsync(inputs, output, job.CancellationToken);
+-        first.Outputs.Add(output);
+-        foreach (var f in job.Files.Where(f => f.State != FileState.Failed))
++            await _pdfMerger!.MergeAsync(inputs, output, job.CancellationToken);
++            if (!TryCommit(job, first, allocator, [output]))
++            {
++                // The one output holds every file: none of them was converted.
++                foreach (var f in job.Files.Where(f => f != first && f.State != FileState.Failed))
++                {
++                    f.State = FileState.Failed;
++                    f.ErrorKey = first.ErrorKey;
++                    f.ErrorDetail = first.ErrorDetail;
++                }
++                return;
++            }
++            foreach (var f in job.Files.Where(f => f.State != FileState.Failed))
++            {
++                f.State = FileState.Done;
++                f.Progress = 1;
++            }
++            Notify(job);
++        }
++        finally
+         {
+-            f.State = FileState.Done;
+-            f.Progress = 1;
++            allocator.Abort();
++        }
++    }
++
++    /// <summary>
++    /// Moves the staged outputs of <paramref name="file"/> into place. False (the file failed, the outputs moved before
++    /// the failure are in its <see cref="FileResult.Outputs"/>) when one of them can't be moved.
++    /// </summary>
++    private bool TryCommit(ConversionJob job, FileResult file, FinalAllocator allocator, IReadOnlyList<string> produced)
++    {
++        job.CancellationToken.ThrowIfCancellationRequested();
++        try
++        {
++            allocator.Commit(produced, file.Outputs);
++            return true;
++        }
++        catch (OutputCommitException ex)
++        {
++            _log.LogWarning(ex, "Moving the result of {File} into place failed", file.SourcePath);
++            file.State = FileState.Failed;
++            file.ErrorKey = ex.ErrorKey;
++            file.ErrorDetail = ex.Message;
++            file.Progress = 1;
++            Notify(job);
++            return false;
+         }
+-        Notify(job);
+     }
+ 
+     /// <summary>
+@@ -175,21 +222,39 @@ public sealed class JobQueue : IAsyncDisposable
+             return;
+ 
+         var first = job.Files[0];
+-        var output = CreateFinalAllocator(job, first.SourcePath, 1).Allocate("tiff");
+-        if (output is null)
++        var allocator = CreateFinalAllocator(job, first.SourcePath, 1);
++        try
+         {
+-            foreach (var f in job.Files) f.State = FileState.Skipped;
+-            return;
+-        }
++            var output = allocator.Allocate("tiff");
++            if (output is null)
++            {
++                foreach (var f in job.Files) f.State = FileState.Skipped;
++                return;
++            }
+ 
+-        await _tiffMerger!.MergeAsync(inputs, output, job.Preset.Image, job.CancellationToken);
+-        first.Outputs.Add(output);
+-        foreach (var f in job.Files.Where(f => f.State != FileState.Failed))
++            await _tiffMerger!.MergeAsync(inputs, output, job.Preset.Image, job.CancellationToken);
++            if (!TryCommit(job, first, allocator, [output]))
++            {
++                // The one output holds every file: none of them was converted.
++                foreach (var f in job.Files.Where(f => f != first && f.State != FileState.Failed))
++                {
++                    f.State = FileState.Failed;
++                    f.ErrorKey = first.ErrorKey;
++                    f.ErrorDetail = first.ErrorDetail;
++                }
++                return;
++            }
++            foreach (var f in job.Files.Where(f => f.State != FileState.Failed))
++            {
++                f.State = FileState.Done;
++                f.Progress = 1;
++            }
++            Notify(job);
++        }
++        finally
+         {
+-            f.State = FileState.Done;
+-            f.Progress = 1;
++            allocator.Abort();
+         }
+-        Notify(job);
+     }
+ 
+     /// <summary>Packs every source file, unchanged, into one archive named after the first file.</summary>
+@@ -211,7 +276,8 @@ public sealed class JobQueue : IAsyncDisposable
+             return;
+         }
+ 
+-        var output = CreateFinalAllocator(job, inputs[0].SourcePath, 1).Allocate(format.PrimaryExtension);
++        var allocator = CreateFinalAllocator(job, inputs[0].SourcePath, 1);
++        var output = allocator.Allocate(format.PrimaryExtension);
+         if (output is null)
+         {
+             foreach (var f in inputs)
+@@ -241,11 +307,18 @@ public sealed class JobQueue : IAsyncDisposable
+         {
+             await _combiner!.CombineAsync(inputs.Select(f => f.SourcePath).ToList(), output, format.Id, job.Preset,
+                 workDir, progress, job.CancellationToken);
+-            inputs[0].Outputs.Add(output);
+-            foreach (var f in inputs)
++            if (TryCommit(job, inputs[0], allocator, [output]))
+             {
+-                f.State = FileState.Done;
+-                f.Progress = 1;
++                foreach (var f in inputs)
++                {
++                    f.State = FileState.Done;
++                    f.Progress = 1;
++                }
++            }
++            else
++            {
++                foreach (var f in inputs.Skip(1))
++                    MarkFailed(f, inputs[0].ErrorDetail ?? "", inputs[0].ErrorKey!);
+             }
+         }
+         catch (OperationCanceledException)
+@@ -259,12 +332,16 @@ public sealed class JobQueue : IAsyncDisposable
+             foreach (var f in inputs)
+                 MarkFailed(f, ex.Message);
+         }
++        finally
++        {
++            allocator.Abort();
++        }
+         Notify(job);
+ 
+-        static void MarkFailed(FileResult f, string detail)
++        static void MarkFailed(FileResult f, string detail, string key = "error.conversion_failed")
+         {
+             f.State = FileState.Failed;
+-            f.ErrorKey = "error.conversion_failed";
++            f.ErrorKey = key;
+             f.ErrorDetail = detail;
+             f.Progress = 1;
+         }
+@@ -323,6 +400,7 @@ public sealed class JobQueue : IAsyncDisposable
+         file.State = FileState.Running;
+         Notify(job);
+ 
++        FinalAllocator? final = null;
+         try
+         {
+             IReadOnlyList<string> inputs = [file.SourcePath];
+@@ -331,7 +409,7 @@ public sealed class JobQueue : IAsyncDisposable
+                 var step = route.Steps[s];
+                 var isLast = s == route.Steps.Count - 1;
+                 IOutputAllocator allocator = isLast && finalOutput
+-                    ? CreateFinalAllocator(job, file.SourcePath, index)
++                    ? final = CreateFinalAllocator(job, file.SourcePath, index)
+                     : new TempAllocator(workDir, FormatRegistry.NameWithoutExtension(file.SourcePath));
+ 
+                 var outputs = new List<string>();
+@@ -366,9 +444,15 @@ public sealed class JobQueue : IAsyncDisposable
+ 
+             if (finalOutput)
+             {
+-                file.Outputs.AddRange(inputs);
++                var produced = inputs.Count;
++                var committed = file.Outputs.Count;
++                if (!TryCommit(job, file, final!, inputs))
++                    return [];
++                inputs = file.Outputs.Skip(committed).ToList();
+                 if (job.Preset.Output.KeepDates)
+                     CopyDates(file.SourcePath, inputs);
++                if (produced > 0 && inputs.Count == 0)
++                    return Fail(file, "error.output_commit_failed", "No output was written.");
+             }
+             file.State = inputs.Count == 0 && finalOutput ? FileState.Skipped : FileState.Done;
+             file.Progress = 1;
+@@ -386,6 +470,10 @@ public sealed class JobQueue : IAsyncDisposable
+             _log.LogWarning(ex, "Converting {File} failed", file.SourcePath);
+             return Fail(file, "error.conversion_failed", ex.Message);
+         }
++        finally
++        {
++            final?.Abort();
++        }
+ 
+         IReadOnlyList<string> Fail(FileResult f, string key, string? detail)
+         {
+@@ -406,7 +494,7 @@ public sealed class JobQueue : IAsyncDisposable
+         });
+ 
+     private FinalAllocator CreateFinalAllocator(ConversionJob job, string sourcePath, int index) =>
+-        new(this, job.Preset.Output, new OutputPathResolver.Tokens(sourcePath, job.PresetDisplayName, index, job.CreatedAt));
++        new(this, job, new OutputPathResolver.Tokens(sourcePath, job.PresetDisplayName, index, job.CreatedAt));
+ 
+     private void Notify(ConversionJob job)
+     {
+@@ -452,24 +540,51 @@ public sealed class JobQueue : IAsyncDisposable
+         await _worker;
+     }
+ 
+-    /// <summary>Allocates final output paths according to the preset's <see cref="OutputRule"/>.</summary>
+-    private sealed class FinalAllocator(JobQueue queue, OutputRule rule, OutputPathResolver.Tokens tokens) : IOutputAllocator
++    /// <summary>
++    /// Allocates final output paths according to the preset's <see cref="OutputRule"/>. The converter writes into a
++    /// staging folder next to each final path (same file name, so side files and links named after it work);
++    /// <see cref="Commit"/> moves the results into place and <see cref="Abort"/> removes what was not committed.
++    /// </summary>
++    private sealed class FinalAllocator(JobQueue queue, ConversionJob job, OutputPathResolver.Tokens tokens) : IOutputAllocator
+     {
++        private readonly StagedOutputs _staged = new(queue._onStaging);
++
+         public string? Allocate(string extension, string? suffix = null)
+         {
++            string path;
+             // Reserve under a lock so two parallel files never pick the same name.
+             lock (queue._reservedOutputs)
+             {
+-                var path = OutputPathResolver.Resolve(rule, tokens, extension,
++                var resolved = OutputPathResolver.Resolve(job.Preset.Output, tokens, extension,
+                     p => File.Exists(p) || Directory.Exists(p) || queue._reservedOutputs.Contains(p), suffix);
+-                if (path is null)
++                if (resolved is null)
+                     return null;
+ 
++                path = resolved;
+                 queue._reservedOutputs.Add(path);
++            }
++            try
++            {
+                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                 // An empty extension asks for a folder (archive extraction): the converter creates it.
+-                return path;
++                return _staged.Stage(path);
+             }
++            catch
++            {
++                Release(path);
++                throw;
++            }
++        }
++
++        public void Commit(IReadOnlyList<string> produced, List<string> outputs) =>
++            _staged.Commit(produced, outputs, job.Preset.Output, job.Sources, Release);
++
++        public void Abort() => _staged.Abort(Release);
++
++        private void Release(string path)
++        {
++            lock (queue._reservedOutputs)
++                queue._reservedOutputs.Remove(path);
+         }
+     }
+ 
+diff --git c/src/Filee.Core/Conversion/OutputCommit.cs i/src/Filee.Core/Conversion/OutputCommit.cs
+new file mode 100644
+index 0000000..bc42aeb
+--- /dev/null
++++ i/src/Filee.Core/Conversion/OutputCommit.cs
+@@ -0,0 +1,315 @@
++// Final outputs are written into a hidden staging folder next to their final path and only moved into place, path by
++// path, once the conversion succeeded. A failed or cancelled conversion leaves nothing at the final paths, an
++// existing file is replaced atomically or not at all, and the source of a job is never replaced (also not through
++// another spelling of its path: Unicode normalization, case, linked folders).
++
++using System.Collections.Concurrent;
++using System.Runtime.InteropServices;
++using Filee.Core.Presets;
++
++namespace Filee.Core.Conversion;
++
++/// <summary>A staged output that could not be moved to its final path.</summary>
++public sealed class OutputCommitException(string errorKey, string message, Exception? inner = null) : IOException(message, inner)
++{
++    /// <summary><c>error.output_exists</c>, <c>error.output_is_source</c> or <c>error.output_commit_failed</c>.</summary>
++    public string ErrorKey { get; } = errorKey;
++}
++
++/// <summary>Moves staged files and folders to their final paths.</summary>
++public static class OutputCommit
++{
++    /// <summary>Prefix of staging folder names (followed by 8 hex digits).</summary>
++    public const string StagingPrefix = ".filee-out-";
++
++    private static readonly ConcurrentDictionary<string, string> Finals = new(StringComparer.Ordinal);
++
++    /// <summary>
++    /// The path a staged output will be moved to, or <paramref name="path"/> itself when it isn't staged. For engines
++    /// that write links relative to where the result ends up (next to the source or not).
++    /// </summary>
++    public static string FinalPathOf(string path) => Finals.TryGetValue(path, out var final) ? final : path;
++
++    internal static void Track(string staged, string final) => Finals[staged] = final;
++
++    internal static void Untrack(string staged) => Finals.TryRemove(staged, out _);
++
++    /// <summary>True for a folder name made by <see cref="CreateStagingFolder"/>.</summary>
++    public static bool IsStagingFolderName(string name) =>
++        name.Length == StagingPrefix.Length + 8 && name.StartsWith(StagingPrefix, StringComparison.Ordinal)
++        && name[StagingPrefix.Length..].All(Uri.IsHexDigit);
++
++    /// <summary>Creates a new hidden staging folder in <paramref name="directory"/>.</summary>
++    public static string CreateStagingFolder(string directory)
++    {
++        while (true)
++        {
++            var path = Path.Combine(directory, StagingPrefix + Guid.NewGuid().ToString("N")[..8]);
++            if (Directory.Exists(path) || File.Exists(path))
++                continue;
++            Directory.CreateDirectory(path).Attributes |= FileAttributes.Hidden;
++            return path;
++        }
++    }
++
++    /// <summary>
++    /// Moves <paramref name="staged"/> (a file or a folder) to <paramref name="final"/>. With <paramref name="overwrite"/>
++    /// an existing file is replaced in one step and an existing folder receives the staged files (others stay);
++    /// otherwise an existing path fails with <c>error.output_exists</c>.
++    /// </summary>
++    public static void Move(string staged, string final, bool overwrite, IReadOnlyList<string> sources)
++    {
++        var isDirectory = Directory.Exists(staged);
++        var existing = Exists(final);
++        if (!existing)
++        {
++            if (!TryRenameExclusive(staged, final, isDirectory))
++                throw new OutputCommitException("error.output_exists", $"{final} appeared while converting.");
++            return;
++        }
++        if (!overwrite)
++            throw new OutputCommitException("error.output_exists", $"{final} already exists.");
++        if (IsSource(final, sources))
++            throw new OutputCommitException("error.output_is_source", $"{final} is a source file of this job.");
++
++        if (!isDirectory)
++        {
++            Rename(staged, final);
++            return;
++        }
++        if (!Directory.Exists(final) || new DirectoryInfo(final).Attributes.HasFlag(FileAttributes.ReparsePoint))
++            throw new OutputCommitException("error.output_exists", $"{final} is in the way of the extracted folder.");
++        // Merge like Filee always did: each entry replaced on its own, the folder's other files are kept.
++        foreach (var entry in Directory.EnumerateFileSystemEntries(staged))
++            Move(entry, Path.Combine(final, Path.GetFileName(entry)), overwrite, sources);
++        TryDelete(staged);
++    }
++
++    /// <summary>
++    /// True when <paramref name="path"/> is the same file system object as one of <paramref name="sources"/> (or what
++    /// a source link points to). Compares device and inode numbers where the OS has them, full paths elsewhere.
++    /// </summary>
++    public static bool IsSource(string path, IReadOnlyList<string> sources)
++    {
++        if (Unix.Identity(path, follow: false) is { } target)
++        {
++            foreach (var source in sources)
++                if (Unix.Identity(source, follow: false) == target || Unix.Identity(source, follow: true) == target)
++                    return true;
++            return false;
++        }
++        var full = Path.GetFullPath(path);
++        return sources.Any(s => string.Equals(Path.GetFullPath(s), full, StringComparison.OrdinalIgnoreCase));
++    }
++
++    public static void TryDelete(string path)
++    {
++        try
++        {
++            if (Directory.Exists(path))
++                Directory.Delete(path, recursive: true);
++            else if (File.Exists(path))
++                File.Delete(path);
++        }
++        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
++    }
++
++    private static bool Exists(string path) =>
++        File.Exists(path) || Directory.Exists(path) || new FileInfo(path).LinkTarget is not null;
++
++    private static void Rename(string from, string to)
++    {
++        if (OperatingSystem.IsWindows())
++        {
++            try { File.Move(from, to, overwrite: true); }
++            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
++            { throw new OutputCommitException("error.output_commit_failed", ex.Message, ex); }
++            return;
++        }
++        if (Unix.rename(from, to) != 0)
++            throw Failed(to);
++    }
++
++    /// <summary>Renames unless <paramref name="to"/> exists, atomically. False when it exists.</summary>
++    private static bool TryRenameExclusive(string from, string to, bool isDirectory)
++    {
++        if (OperatingSystem.IsWindows())
++        {
++            try
++            {
++                if (isDirectory) Directory.Move(from, to);
++                else File.Move(from, to, overwrite: false);
++                return true;
++            }
++            catch (IOException) when (Exists(to)) { return false; }
++            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
++            { throw new OutputCommitException("error.output_commit_failed", ex.Message, ex); }
++        }
++
++        int result, errno;
++        try
++        {
++            result = OperatingSystem.IsMacOS() ? Unix.renamex_np(from, to, Unix.RenameExclMac)
++                : Unix.renameat2(Unix.AtFdCwd, from, Unix.AtFdCwd, to, Unix.RenameNoReplaceLinux);
++            errno = Marshal.GetLastPInvokeError();
++        }
++        catch (EntryPointNotFoundException)
++        {
++            (result, errno) = (-1, Unix.ENOSYS);
++        }
++        if (result == 0)
++            return true;
++        if (errno == Unix.EEXIST)
++            return false;
++        if (!isDirectory && (errno == Unix.ENOTSUP || errno == Unix.EINVAL || errno == Unix.ENOSYS))
++        {
++            // No exclusive rename on this file system: a hard link is just as exclusive for a file.
++            if (Unix.link(from, to) == 0)
++            {
++                Unix.unlink(from);
++                return true;
++            }
++            if (Marshal.GetLastPInvokeError() == Unix.EEXIST)
++                return false;
++        }
++        throw Failed(to);
++    }
++
++    private static OutputCommitException Failed(string to)
++    {
++        var errno = Marshal.GetLastPInvokeError();
++        return new OutputCommitException("error.output_commit_failed", $"Could not move the result to {to}: {Marshal.GetPInvokeErrorMessage(errno)} (errno {errno}).");
++    }
++
++    private static class Unix
++    {
++        public const uint RenameExclMac = 0x4;
++        public const uint RenameNoReplaceLinux = 0x1;
++        public const int AtFdCwd = -100;
++        public static readonly int EEXIST = 17;
++        public static readonly int EINVAL = 22;
++        public static readonly int ENOSYS = OperatingSystem.IsMacOS() ? 78 : 38;
++        public static readonly int ENOTSUP = OperatingSystem.IsMacOS() ? 45 : 95;
++
++        [DllImport("libc", SetLastError = true)] public static extern int rename(string from, string to);
++        [DllImport("libc", SetLastError = true)] public static extern int renamex_np(string from, string to, uint flags);
++        [DllImport("libc", SetLastError = true)] public static extern int renameat2(int fromDir, string from, int toDir, string to, uint flags);
++        [DllImport("libc", SetLastError = true)] public static extern int link(string from, string to);
++        [DllImport("libc", SetLastError = true)] public static extern int unlink(string path);
++        [DllImport("libc", SetLastError = true, EntryPoint = "lstat")] private static extern int lstat_arm64(string path, byte[] buf);
++        [DllImport("libc", SetLastError = true, EntryPoint = "lstat$INODE64")] private static extern int lstat_x64(string path, byte[] buf);
++        [DllImport("libc", SetLastError = true, EntryPoint = "stat")] private static extern int stat_arm64(string path, byte[] buf);
++        [DllImport("libc", SetLastError = true, EntryPoint = "stat$INODE64")] private static extern int stat_x64(string path, byte[] buf);
++
++        /// <summary>(st_dev, st_ino) on macOS; null elsewhere or when the path is missing.</summary>
++        public static (long Device, ulong Inode)? Identity(string path, bool follow)
++        {
++            if (!OperatingSystem.IsMacOS())
++                return null;
++            // struct stat (64-bit inodes): dev_t st_dev at 0 (int32), ino_t st_ino at 8 (uint64); 144 bytes.
++            var buf = new byte[256];
++            var x64 = RuntimeInformation.ProcessArchitecture == Architecture.X64;
++            var result = follow ? (x64 ? stat_x64(path, buf) : stat_arm64(path, buf))
++                : (x64 ? lstat_x64(path, buf) : lstat_arm64(path, buf));
++            return result != 0 ? null : (BitConverter.ToInt32(buf, 0), BitConverter.ToUInt64(buf, 8));
++        }
++    }
++}
++
++/// <summary>
++/// Hands out staged paths for one source file (or one merged output) and moves them to their final paths on commit.
++/// </summary>
++internal sealed class StagedOutputs(Action<string>? onStaging)
++{
++    private sealed record Entry(string Final, string StageDir, string Staged);
++
++    private readonly List<Entry> _entries = [];
++
++    /// <summary>Called when a final path was reserved: returns where the converter writes instead.</summary>
++    public string Stage(string final)
++    {
++        var stageDir = OutputCommit.CreateStagingFolder(Path.GetDirectoryName(final)!);
++        try
++        {
++            onStaging?.Invoke(stageDir);
++        }
++        catch
++        {
++            OutputCommit.TryDelete(stageDir);
++            throw;
++        }
++        var staged = Path.Combine(stageDir, Path.GetFileName(final));
++        OutputCommit.Track(staged, final);
++        lock (_entries)
++            _entries.Add(new Entry(final, stageDir, staged));
++        return staged;
++    }
++
++    /// <summary>
++    /// Moves the staged outputs in <paramref name="produced"/> (in the order they were allocated) and their side files
++    /// into place, adding every final path to <paramref name="outputs"/> right after it was moved. Throws
++    /// <see cref="OutputCommitException"/> at the first path that can't be moved; the paths before it stay in place.
++    /// </summary>
++    public void Commit(IReadOnlyList<string> produced, List<string> outputs, OutputRule rule, IReadOnlyList<string> sources,
++        Action<string> release)
++    {
++        List<Entry> entries;
++        lock (_entries)
++        {
++            entries = [.. _entries];
++            _entries.Clear();
++        }
++        foreach (var entry in entries)
++            OutputCommit.Untrack(entry.Staged);
++        var wanted = produced.ToHashSet(StringComparer.Ordinal);
++        var overwrite = rule.Conflict == ConflictPolicy.Overwrite;
++        try
++        {
++            for (var i = 0; i < entries.Count; i++)
++            {
++                var entry = entries[i];
++                if (!wanted.Contains(entry.Staged) || !(File.Exists(entry.Staged) || Directory.Exists(entry.Staged)))
++                {
++                    // Allocated but not written (or not reported): nothing to keep.
++                    release(entry.Final);
++                    OutputCommit.TryDelete(entry.StageDir);
++                    entries[i] = entry with { StageDir = "" };
++                    continue;
++                }
++                OutputCommit.Move(entry.Staged, entry.Final, overwrite, sources);
++                outputs.Add(entry.Final);
++                // Side files named after the output (Pandoc "<name>_files", Markdown images) go next to it.
++                var folder = Path.GetDirectoryName(entry.Final)!;
++                foreach (var side in Directory.EnumerateFileSystemEntries(entry.StageDir))
++                    OutputCommit.Move(side, Path.Combine(folder, Path.GetFileName(side)), overwrite, sources);
++                OutputCommit.TryDelete(entry.StageDir);
++                entries[i] = entry with { StageDir = "" };
++            }
++        }
++        finally
++        {
++            foreach (var entry in entries.Where(e => e.StageDir.Length > 0))
++            {
++                release(entry.Final);
++                OutputCommit.TryDelete(entry.StageDir);
++            }
++        }
++    }
++
++    /// <summary>Deletes everything not committed and releases its reserved final paths.</summary>
++    public void Abort(Action<string> release)
++    {
++        List<Entry> entries;
++        lock (_entries)
++        {
++            entries = [.. _entries];
++            _entries.Clear();
++        }
++        foreach (var entry in entries)
++        {
++            OutputCommit.Untrack(entry.Staged);
++            release(entry.Final);
++            OutputCommit.TryDelete(entry.StageDir);
++        }
++    }
++}
+diff --git c/tests/Filee.Core.Tests/JobQueueStagingTests.cs i/tests/Filee.Core.Tests/JobQueueStagingTests.cs
+new file mode 100644
+index 0000000..ffabd5a
+--- /dev/null
++++ i/tests/Filee.Core.Tests/JobQueueStagingTests.cs
+@@ -0,0 +1,249 @@
++using System.Security.Cryptography;
++using System.Text;
++using Filee.Core.Conversion;
++using Filee.Core.Presets;
++
++namespace Filee.Core.Tests;
++
++/// <summary>Final outputs are staged next to their final path and moved into place only after a conversion worked.</summary>
++public class JobQueueStagingTests
++{
++    /// <summary>Converter whose behaviour is a delegate over (step, allocator).</summary>
++    private sealed class ScriptedConverter(Func<ConversionStep, IReadOnlyList<string>> run, params ConversionEdge[] edges) : IConverter
++    {
++        public string Id => "scripted";
++        public string DisplayName => "scripted";
++        public IReadOnlyList<ConversionEdge> Edges => edges;
++        public int MaxParallelism => 0;
++        public EngineStatus GetStatus() => EngineStatus.Available();
++
++        public Task<IReadOnlyList<string>> ConvertAsync(ConversionStep step, IProgress<double>? progress, CancellationToken cancellationToken) =>
++            Task.FromResult(run(step));
++    }
++
++    private static async Task<ConversionJob> Run(IConverter converter, IReadOnlyList<string> sources, Preset preset, List<string>? staged = null)
++    {
++        await using var queue = new JobQueue(new ConverterCatalog([converter]), onStaging: staged is null ? null : staged.Add);
++        var job = new ConversionJob(sources, preset, "Test");
++        await queue.RunAsync(job);
++        return job;
++    }
++
++    private static string Write(string path, string text)
++    {
++        File.WriteAllText(path, text);
++        return path;
++    }
++
++    private static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
++
++    private static string[] Leftovers(string dir) =>
++        Directory.GetFileSystemEntries(dir, ".filee-out-*", SearchOption.AllDirectories);
++
++    [Fact]
++    public async Task Failure_after_some_pages_leaves_no_output_and_releases_the_names()
++    {
++        using var dir = new TempDir();
++        var source = dir.File("doc.pdf");
++        var fail = true;
++        var converter = new ScriptedConverter(step =>
++        {
++            var written = new List<string>();
++            for (var page = 1; page <= 3; page++)
++            {
++                if (page == 3 && fail)
++                    throw new InvalidOperationException("boom");
++                written.Add(Write(step.Output.Allocate("png", $"_p{page}")!, "page"));
++            }
++            return written;
++        }, new ConversionEdge("pdf", "png"));
++
++        var staged = new List<string>();
++        var job = await Run(converter, [source], new Preset { TargetFormat = "png" }, staged);
++
++        Assert.Equal(FileState.Failed, job.Files[0].State);
++        Assert.Empty(job.Files[0].Outputs);
++        Assert.Empty(Directory.GetFiles(dir.Path, "doc_p*"));
++        Assert.Empty(Leftovers(dir.Path));
++        Assert.Equal(2, staged.Count);
++        Assert.All(staged, s => Assert.StartsWith(OutputCommit.StagingPrefix, Path.GetFileName(s)));
++
++        fail = false;
++        var again = await Run(converter, [source], new Preset { TargetFormat = "png" });
++        Assert.Equal([Path.Combine(dir.Path, "doc_p1.png"), Path.Combine(dir.Path, "doc_p2.png"), Path.Combine(dir.Path, "doc_p3.png")],
++            again.Files[0].Outputs);
++    }
++
++    [Fact]
++    public async Task A_failed_overwrite_keeps_the_existing_file()
++    {
++        using var dir = new TempDir();
++        var source = dir.File("a.jpg");
++        var existing = dir.File("a.png", "old");
++        var before = Hash(existing);
++        var converter = new ScriptedConverter(step =>
++        {
++            Write(step.Output.Allocate("png")!, "half");
++            throw new InvalidOperationException("boom");
++        }, new ConversionEdge("jpg", "png"));
++
++        var job = await Run(converter, [source], new Preset { TargetFormat = "png", Output = { Conflict = ConflictPolicy.Overwrite } });
++
++        Assert.Equal(FileState.Failed, job.Files[0].State);
++        Assert.Equal(before, Hash(existing));
++        Assert.Empty(Leftovers(dir.Path));
++    }
++
++    [Fact]
++    public async Task Overwrite_replaces_the_existing_file_after_success()
++    {
++        using var dir = new TempDir();
++        var source = dir.File("a.jpg");
++        var existing = dir.File("a.png", "old");
++        var converter = new ScriptedConverter(step => [Write(step.Output.Allocate("png")!, "new")], new ConversionEdge("jpg", "png"));
++
++        var job = await Run(converter, [source], new Preset { TargetFormat = "png", Output = { Conflict = ConflictPolicy.Overwrite } });
++
++        Assert.Equal(FileState.Done, job.Files[0].State);
++        Assert.Equal([existing], job.Files[0].Outputs);
++        Assert.Equal("new", File.ReadAllText(existing));
++    }
++
++    [Fact]
++    public async Task Side_files_named_after_the_output_land_next_to_it()
++    {
++        using var dir = new TempDir();
++        var source = dir.File("x.docx");
++        var converter = new ScriptedConverter(step =>
++        {
++            var output = step.Output.Allocate("html")!;
++            Assert.Equal(Path.Combine(dir.Path, "x.html"), OutputCommit.FinalPathOf(output));
++            var media = Path.Combine(Path.GetDirectoryName(output)!, Path.GetFileNameWithoutExtension(output) + "_files");
++            Directory.CreateDirectory(media);
++            Write(Path.Combine(media, "img.png"), "img");
++            return [Write(output, "<img src=\"x_files/img.png\">")];
++        }, new ConversionEdge("docx", "html"));
++
++        var job = await Run(converter, [source], new Preset { TargetFormat = "html" });
++
++        Assert.Equal([Path.Combine(dir.Path, "x.html")], job.Files[0].Outputs);
++        Assert.True(File.Exists(Path.Combine(dir.Path, "x_files", "img.png")));
++        Assert.Equal("/elsewhere/y.html", OutputCommit.FinalPathOf("/elsewhere/y.html"));
++        Assert.Empty(Leftovers(dir.Path));
++    }
++
++    [Fact]
++    public async Task When_the_second_output_cannot_be_moved_the_first_is_reported()
++    {
++        using var dir = new TempDir();
++        var source = dir.File("s.pdf");
++        Directory.CreateDirectory(Path.Combine(dir.Path, "s_p2.png")); // a folder in the way of page 2
++        var converter = new ScriptedConverter(step =>
++        [
++            Write(step.Output.Allocate("png", "_p1")!, "1"),
++            Write(step.Output.Allocate("png", "_p2")!, "2"),
++        ], new ConversionEdge("pdf", "png"));
++
++        var job = await Run(converter, [source], new Preset { TargetFormat = "png", Output = { Conflict = ConflictPolicy.Overwrite } });
++
++        Assert.Equal(FileState.Failed, job.Files[0].State);
++        Assert.Equal([Path.Combine(dir.Path, "s_p1.png")], job.Files[0].Outputs);
++        Assert.Equal("error.output_commit_failed", job.Files[0].ErrorKey);
++        Assert.True(Directory.Exists(Path.Combine(dir.Path, "s_p2.png")));
++        Assert.Empty(Leftovers(dir.Path));
++    }
++
++    [Fact]
++    public async Task A_file_made_by_someone_else_meanwhile_is_not_overwritten()
++    {
++        using var dir = new TempDir();
++        var source = dir.File("a.jpg");
++        var converter = new ScriptedConverter(step =>
++        {
++            var output = step.Output.Allocate("png")!;
++            Write(Path.Combine(dir.Path, "a.png"), "theirs");
++            return [Write(output, "ours")];
++        }, new ConversionEdge("jpg", "png"));
++
++        var job = await Run(converter, [source], new Preset { TargetFormat = "png" });
++
++        Assert.Equal(FileState.Failed, job.Files[0].State);
++        Assert.Equal("error.output_exists", job.Files[0].ErrorKey);
++        Assert.Equal("theirs", File.ReadAllText(Path.Combine(dir.Path, "a.png")));
++        Assert.Empty(job.Files[0].Outputs);
++    }
++
++    [Fact]
++    public async Task Overwrite_never_replaces_a_source_reached_through_another_path()
++    {
++        if (!OperatingSystem.IsMacOS())
++            return; // inode comparison is macOS only; elsewhere the resolver's own path check applies
++        using var dir = new TempDir();
++        var name = "한글.txt".Normalize(NormalizationForm.FormC);
++        var source = dir.File(name, "original");
++        var alias = Path.Combine(dir.Path, "alias");
++        Directory.CreateSymbolicLink(alias, dir.Path);
++        var before = Hash(source);
++        var converter = new ScriptedConverter(step => [Write(step.Output.Allocate("txt")!, "replaced")], new ConversionEdge("txt", "txt"));
++
++        var preset = new Preset
++        {
++            TargetFormat = BuiltInData.SameAsSource,
++            Output = { Location = OutputLocation.CustomFolder, CustomFolder = alias, Conflict = ConflictPolicy.Overwrite },
++        };
++        var job = await Run(converter, [source], preset);
++
++        Assert.Equal(FileState.Failed, job.Files[0].State);
++        Assert.Equal("error.output_is_source", job.Files[0].ErrorKey);
++        Assert.Equal(before, Hash(source));
++        Assert.Empty(Leftovers(dir.Path));
++    }
++
++    [Fact]
++    public async Task Overwriting_a_folder_merges_and_keeps_unrelated_files()
++    {
++        using var dir = new TempDir();
++        var source = dir.File("pack.zip");
++        var target = Directory.CreateDirectory(Path.Combine(dir.Path, "pack")).FullName;
++        Write(Path.Combine(target, "keep.txt"), "mine");
++        Write(Path.Combine(target, "same.txt"), "old");
++        var converter = new ScriptedConverter(step =>
++        {
++            var output = step.Output.Allocate("")!;
++            Directory.CreateDirectory(output);
++            Write(Path.Combine(output, "same.txt"), "new");
++            return [output];
++        }, new ConversionEdge("zip", "folder"));
++
++        var job = await Run(converter, [source], new Preset { TargetFormat = "folder", Output = { Conflict = ConflictPolicy.Overwrite } });
++
++        Assert.Equal(FileState.Done, job.Files[0].State);
++        Assert.Equal([target], job.Files[0].Outputs);
++        Assert.Equal("mine", File.ReadAllText(Path.Combine(target, "keep.txt")));
++        Assert.Equal("new", File.ReadAllText(Path.Combine(target, "same.txt")));
++        Assert.Empty(Leftovers(dir.Path));
++    }
++
++    [Fact]
++    public async Task Cancelling_before_the_commit_leaves_nothing()
++    {
++        using var dir = new TempDir();
++        var source = dir.File("a.jpg");
++        ConversionJob? job = null;
++        var converter = new ScriptedConverter(step =>
++        {
++            var output = Write(step.Output.Allocate("png")!, "x");
++            job!.Cancel();
++            return [output];
++        }, new ConversionEdge("jpg", "png"));
++
++        await using var queue = new JobQueue(new ConverterCatalog([converter]));
++        job = new ConversionJob([source], new Preset { TargetFormat = "png" }, "Test");
++        await queue.RunAsync(job);
++
++        Assert.Equal(JobState.Cancelled, job.State);
++        Assert.Equal(FileState.Cancelled, job.Files[0].State);
++        Assert.False(File.Exists(Path.Combine(dir.Path, "a.png")));
++        Assert.Empty(Leftovers(dir.Path));
++    }
++}

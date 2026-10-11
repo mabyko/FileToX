@@ -1,0 +1,5 @@
+{
+  "error.output_exists": "A file already exists at the output path",
+  "error.output_is_source": "The output would replace a source file",
+  "error.output_commit_failed": "The converted output could not be saved"
+}

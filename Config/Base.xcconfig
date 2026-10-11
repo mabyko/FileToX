@@ -1,0 +1,7 @@
+// Fresh checkouts use a local identity. Set FILETOX_BUNDLE_ID and DEVELOPMENT_TEAM
+// in the ignored Local.xcconfig only after choosing the intended personal team.
+FILETOX_BUNDLE_ID = forked.filetox.local
+FILETOX_BUNDLE_ID[config=Debug] = forked.filetox.local.dev
+APP_DISPLAY_NAME = FileToX
+APP_DISPLAY_NAME[config=Debug] = FileToX Dev
+#include? "Local.xcconfig"

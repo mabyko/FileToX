@@ -1,0 +1,82 @@
+name: FileToX
+options:
+  minimumXcodeGenVersion: 2.46.0
+  deploymentTarget:
+    macOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    DEVELOPMENT_LANGUAGE: en
+targets:
+  FileToX:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+      - path: Resources
+        buildPhase: resources
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID)
+        PRODUCT_NAME: $(APP_DISPLAY_NAME)
+        PRODUCT_MODULE_NAME: FileToX
+        ARCHS: $(NATIVE_ARCH_ACTUAL)
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Config/Info.plist
+      properties:
+        CFBundleDisplayName: $(APP_DISPLAY_NAME)
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, ko, ja]
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        LSUIElement: true
+        NSHighResolutionCapable: true
+        NSHumanReadableCopyright: "FileToX · Inspired by Filee"
+    postBuildScripts:
+      - name: Build and embed conversion engine host
+        basedOnDependencyAnalysis: false
+        script: |
+          case "$ARCHS" in
+            x86_64) engine_rid=osx-x64 ;;
+            arm64) engine_rid=osx-arm64 ;;
+            *) echo "Build one architecture at a time (ARCHS=arm64 or ARCHS=x86_64)." >&2; exit 1 ;;
+          esac
+          "$SRCROOT/Tools/build-engine-host.sh" --rid "$engine_rid" --configuration "$CONFIGURATION" --destination "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/FileToXEngine.app"
+  FileToXTests:
+    type: bundle.unit-test
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - Tests/Platform
+      - Tests/App
+    dependencies:
+      - target: FileToX
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/$(APP_DISPLAY_NAME).app/Contents/MacOS/$(APP_DISPLAY_NAME)
+schemes:
+  FileToX:
+    build:
+      targets:
+        FileToX: all
+        FileToXTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - FileToXTests
