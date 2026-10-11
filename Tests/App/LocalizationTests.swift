@@ -36,6 +36,12 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(Localization.text("FFmpeg: raw diagnostic", language: .japanese, bundle: bundle), "FFmpeg: raw diagnostic")
     }
 
+    func testRadialSingleFileTitleInEveryLanguage() {
+        for (language, expected) in [(AppLanguage.english, "1 file"), (.korean, "파일 1개"), (.japanese, "1個のファイル")] {
+            XCTAssertEqual(Localization.text("파일 1개", language: language), expected)
+        }
+    }
+
     @MainActor
     func testProgressFormattingEscapesLiteralPercentInEveryLanguage() {
         let previous = Localization.shared.language

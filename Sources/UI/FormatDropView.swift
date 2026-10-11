@@ -47,7 +47,7 @@ struct DonutView: View {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 DonutSlice(item: item, index: index, count: items.count, radius: radius, holeRatio: holeRatio,
                            opacity: opacity, accent: accent, highlighted: activeIndex == index,
-                           onHover: { onHover($0 ? index : nil) }, onInvoke: { onInvoke(index) }, onEdit: { onEdit(index) })
+                           onInvoke: { onInvoke(index) }, onEdit: { onEdit(index) })
             }
             Button(action: onCenter) {
                 VStack(spacing: 5) {
@@ -65,6 +65,14 @@ struct DonutView: View {
             .help(L("원형 툴바 닫기"))
         }
         .frame(width: radius * 2, height: radius * 2)
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let point):
+                onHover(DonutGeometry.segment(at: point, center: CGPoint(x: radius, y: radius),
+                                              innerRadius: radius * holeRatio, outerRadius: radius, count: items.count))
+            case .ended: onHover(nil)
+            }
+        }
         .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
     }
 }
@@ -78,7 +86,6 @@ private struct DonutSlice: View {
     let opacity: Double
     let accent: Color
     let highlighted: Bool
-    let onHover: (Bool) -> Void
     let onInvoke: () -> Void
     let onEdit: () -> Void
     private var shape: DonutWedge { DonutWedge(index: index, count: count, holeRatio: holeRatio) }
@@ -97,7 +104,7 @@ private struct DonutSlice: View {
                     }.frame(width: radius * 0.65).foregroundStyle(foreground)
                         .offset(x: sin(angle) * radius * (1 + holeRatio) / 2, y: -cos(angle) * radius * (1 + holeRatio) / 2)
                 }
-        }.buttonStyle(.plain).contentShape(shape).onHover(perform: onHover)
+        }.buttonStyle(.plain).contentShape(shape)
             .contextMenu { Button(L("프리셋 편집"), action: onEdit) }
             .help(item.reason ?? item.title).accessibilityLabel(item.title)
             .accessibilityValue(item.available ? item.caption : item.reason ?? L("변환할 수 없음"))
@@ -131,7 +138,7 @@ struct FormatDropView: View {
                         .padding(20)
                         .background(.regularMaterial, in: Circle())
                 } else {
-                    DonutView(items: items, title: L("파일 %@개", String(describing: (model.selectedFiles.count))), subtitle: subtitle,
+                    DonutView(items: items, title: model.selectedFiles.count == 1 ? L("파일 1개") : L("파일 %@개", String(model.selectedFiles.count)), subtitle: subtitle,
                               radius: model.radialOuterRadius, holeRatio: model.radialHoleRatio, opacity: model.radialOpacity, accent: model.accentColor,
                               activeIndex: activeIndex, onHover: { activeIndex = $0 }, onInvoke: invoke,
                               onEdit: { model.editPreset(items[$0].id) },

@@ -199,6 +199,7 @@
 "테마" = "Theme";
 "투명 영역 배경색" = "Background for transparency";
 "파일 %@개" = "%@ files";
+"파일 1개" = "1 file";
 "파일 %@개 · %@%" = "%@ files · %@%%";
 "파일 %@개 · 변환할 프리셋 또는 출력 형식을 선택하세요." = "%@ files · Choose a preset or output format.";
 "파일 또는 폴더 선택…" = "Choose files or folders…";
