@@ -231,3 +231,27 @@
 "engine.reason.not_installed" = "설치되지 않음";
 "engine.reason.error" = "확인 중 오류";
 "engine.reason.unsupported_platform" = "이 플랫폼에서는 사용할 수 없음";
+
+// First-run accessibility setup.
+"설정 방법 보기" = "설정 방법 보기";
+"permission.intro.title" = "Finder에서 바로 변환해 보세요";
+"permission.intro.message" = "Finder에서 Option(⌥) 키를 누르고 파일을 드래그하면 원형 변환 메뉴를 열 수 있어요. 키와 드래그 동작을 감지하는 데 손쉬운 사용 권한을 사용합니다.";
+"permission.optional" = "권한 설정은 나중에 해도 됩니다. 홈에서 파일을 선택하거나 놓아 변환할 수 있어요.";
+"permission.step.settings" = "시스템 설정에서 개인정보 보호 및 보안 → 손쉬운 사용을 엽니다.";
+"permission.step.enable" = "목록에서 %@를 켭니다.";
+"permission.step.return" = "%@로 돌아오면 허용 여부를 확인합니다.";
+"permission.later" = "나중에";
+"permission.settings.open" = "시스템 설정 열기";
+"permission.settings.reopen" = "시스템 설정 다시 열기";
+"permission.settings.failed" = "시스템 설정을 열지 못했어요. 개인정보 보호 및 보안 → 손쉬운 사용에서 %@를 켜주세요.";
+"permission.waiting.title" = "손쉬운 사용에서 %@를 켜주세요";
+"permission.waiting.message" = "시스템 설정에서 허용한 뒤 이 창으로 돌아오세요. 돌아오면 허용 여부를 다시 확인합니다.";
+"permission.waiting.status" = "아직 허용이 확인되지 않았어요";
+"permission.waiting.unconfirmed" = "아직 허용이 확인되지 않았어요. 현재 실행 중인 %@가 켜져 있는지 확인해 주세요.";
+"permission.check" = "허용 여부 확인";
+"permission.success.title" = "권한을 확인했어요";
+"permission.success.message" = "Finder에서 Option(⌥) 키를 누르고 파일을 드래그해 보세요. 원형 메뉴에서 원하는 형식에 놓으면 변환을 시작합니다.";
+"permission.start" = "시작하기";
+"permission.help.title" = "목록에 없거나 드래그가 반응하지 않나요?";
+"permission.help.add" = "목록에 없다면 더하기(+) 버튼으로 현재 실행 중인 %@를 추가해 주세요.";
+"permission.help.restart" = "권한이 허용돼 있는데도 드래그가 반응하지 않으면 앱을 종료한 뒤 다시 열어주세요.";

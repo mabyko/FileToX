@@ -31,6 +31,11 @@ targets:
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: NO
+      configs:
+        Debug:
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon-Dev
+        Release:
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Config/Info.plist
       properties:

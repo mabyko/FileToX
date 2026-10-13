@@ -65,6 +65,17 @@ struct ConverterView: View {
             .environment(\.locale, Locale(identifier: model.language.rawValue))
             .onAppear { model.refreshPermission() }
             .onChange(of: model.editingPresetID) { _, id in if id != nil { model.selectedPage = "presets" } }
+            .onChange(of: model.isResolving || model.isConverting || model.radialVisible) { _, busy in
+                if !busy { model.presentInitialPermissionOnboardingIfNeeded() }
+            }
+            .sheet(isPresented: Binding(get: { model.permissionOnboarding.step != nil }, set: { presented in
+                // A file-open callback can temporarily hide the first-run sheet without completing it.
+                if !presented, !model.permissionOnboarding.pendingInitialPresentation {
+                    model.completePermissionOnboarding()
+                }
+            })) {
+                PermissionOnboardingView(model: model)
+            }
     }
 
     private func row(_ page: (String, String, String)) -> some View {

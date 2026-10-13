@@ -231,3 +231,27 @@
 "engine.reason.not_installed" = "Not installed";
 "engine.reason.error" = "Error while checking";
 "engine.reason.unsupported_platform" = "Not available on this platform";
+
+// First-run accessibility setup.
+"설정 방법 보기" = "Show setup guide";
+"permission.intro.title" = "Convert right from Finder";
+"permission.intro.message" = "Hold Option (⌥) while dragging a file in Finder to open the radial conversion menu. Accessibility access is used to detect the key and drag gesture.";
+"permission.optional" = "You can set this up later. Select or drop files in Home to convert them.";
+"permission.step.settings" = "Open System Settings → Privacy & Security → Accessibility.";
+"permission.step.enable" = "Turn on %@ in the list.";
+"permission.step.return" = "Return to %@ to check access.";
+"permission.later" = "Later";
+"permission.settings.open" = "Open System Settings";
+"permission.settings.reopen" = "Reopen System Settings";
+"permission.settings.failed" = "Couldn’t open System Settings. Go to Privacy & Security → Accessibility and turn on %@.";
+"permission.waiting.title" = "Turn on %@ in Accessibility";
+"permission.waiting.message" = "Allow access in System Settings, then return to this window. We’ll check access when you return.";
+"permission.waiting.status" = "Access hasn’t been confirmed yet";
+"permission.waiting.unconfirmed" = "Access hasn’t been confirmed yet. Make sure the currently running %@ is turned on.";
+"permission.check" = "Check access";
+"permission.success.title" = "Access confirmed";
+"permission.success.message" = "Hold Option (⌥) and drag a file in Finder. Drop it on a format in the radial menu to start converting.";
+"permission.start" = "Get started";
+"permission.help.title" = "App missing or drag not responding?";
+"permission.help.add" = "If it’s missing from the list, use the plus (+) button to add the currently running %@.";
+"permission.help.restart" = "If access is allowed but dragging still doesn’t respond, quit and reopen the app.";

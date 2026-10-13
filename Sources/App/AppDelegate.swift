@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dragMonitor: GlobalDragMonitor?
     private var progressToast: ProgressToastController?
     private var presetWindow: NSWindow?
+    private var needsDragMonitorRestart = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard NSClassFromString("XCTestCase") == nil else { return }
@@ -24,11 +25,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.prepareForDrag()
             panel?.show(at: point)
         }
-        monitor.onEnd = { [weak self] in self?.panel?.scheduleDragEnd() }
+        monitor.onEnd = { [weak self] in
+            self?.panel?.scheduleDragEnd()
+            self?.restartDragMonitorIfNeeded()
+        }
         monitor.start()
         dragMonitor = monitor
+        model.onAccessibilityPermissionGranted = { [weak self] in
+            self?.needsDragMonitorRestart = true
+            self?.restartDragMonitorIfNeeded()
+        }
         showConverterWindow()
-        Task { await model.connect() }
+        Task {
+            await model.connect()
+            model.refreshPermission()
+            model.beginPermissionOnboarding()
+        }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -61,11 +73,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        model.permissionOnboarding.fileOpenStarted()
         showConverterWindow()
         Task {
             await model.connect()
             await model.resolve(urls)
+            model.permissionOnboarding.fileOpenFinished()
+            model.presentInitialPermissionOnboardingIfNeeded()
         }
+    }
+
+    private func restartDragMonitorIfNeeded() {
+        guard needsDragMonitorRestart, NSEvent.pressedMouseButtons == 0 else { return }
+        needsDragMonitorRestart = false
+        dragMonitor?.stop()
+        dragMonitor?.start()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

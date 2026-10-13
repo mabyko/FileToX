@@ -231,3 +231,27 @@
 "engine.reason.not_installed" = "インストールされていません";
 "engine.reason.error" = "確認中にエラーが発生しました";
 "engine.reason.unsupported_platform" = "このプラットフォームでは使用できません";
+
+// First-run accessibility setup.
+"설정 방법 보기" = "設定方法を見る";
+"permission.intro.title" = "Finderから直接変換";
+"permission.intro.message" = "FinderでOption（⌥）キーを押しながらファイルをドラッグすると、円形の変換メニューを開けます。キーとドラッグ操作の検出にアクセシビリティのアクセス権を使用します。";
+"permission.optional" = "アクセス権は後から設定できます。ホームでファイルを選択するか、ドロップして変換できます。";
+"permission.step.settings" = "システム設定 → プライバシーとセキュリティ → アクセシビリティを開きます。";
+"permission.step.enable" = "一覧で%@をオンにします。";
+"permission.step.return" = "%@に戻るとアクセス権を確認します。";
+"permission.later" = "後で";
+"permission.settings.open" = "システム設定を開く";
+"permission.settings.reopen" = "システム設定をもう一度開く";
+"permission.settings.failed" = "システム設定を開けませんでした。プライバシーとセキュリティ → アクセシビリティで%@をオンにしてください。";
+"permission.waiting.title" = "アクセシビリティで%@をオンにしてください";
+"permission.waiting.message" = "システム設定でアクセスを許可してから、このウインドウに戻ってください。戻るとアクセス権を再確認します。";
+"permission.waiting.status" = "アクセスの許可をまだ確認できていません";
+"permission.waiting.unconfirmed" = "アクセスの許可をまだ確認できていません。現在実行中の%@がオンになっているか確認してください。";
+"permission.check" = "アクセス権を確認";
+"permission.success.title" = "アクセス権を確認しました";
+"permission.success.message" = "FinderでOption（⌥）キーを押しながらファイルをドラッグしてみてください。円形メニューの形式にドロップすると変換が始まります。";
+"permission.start" = "はじめる";
+"permission.help.title" = "一覧にない、またはドラッグが反応しない場合";
+"permission.help.add" = "一覧にない場合は、追加（＋）ボタンで現在実行中の%@を追加してください。";
+"permission.help.restart" = "アクセスが許可されていてもドラッグが反応しない場合は、アプリを終了してもう一度開いてください。";

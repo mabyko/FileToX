@@ -23,6 +23,7 @@ final class AppModel {
     private(set) var isShuttingDown = false
     var statusMessage = L("변환 엔진을 연결하는 중…")
     var hasAccessibilityPermission = AXIsProcessTrusted()
+    var permissionOnboarding = PermissionOnboarding()
     var radialVisible = false
     var radialClickMode = false
     var radialJobID: String?
@@ -39,8 +40,13 @@ final class AppModel {
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var selectionGeneration = 0
     @ObservationIgnored private var completedRadialTask: Task<Void, Never>?
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored var onAccessibilityPermissionGranted: (() -> Void)?
 
-    init(host: EngineHost = EngineHost()) { self.host = host }
+    init(host: EngineHost = EngineHost(), defaults: UserDefaults = .standard) {
+        self.host = host
+        self.defaults = defaults
+    }
     var language: AppLanguage { Localization.shared.language }
 
     var activeJobs: [HostJob] {
@@ -377,10 +383,41 @@ final class AppModel {
     }
 
     func requestAccessibilityPermission() {
+        permissionOnboarding.settingsRequested()
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        hasAccessibilityPermission = AXIsProcessTrustedWithOptions(options)
+        _ = AXIsProcessTrustedWithOptions(options)
+        refreshPermission()
+        guard !hasAccessibilityPermission else { return }
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+        permissionOnboarding.settingsOpenFailed = !NSWorkspace.shared.open(url)
     }
-    func refreshPermission() { hasAccessibilityPermission = AXIsProcessTrusted() }
+
+    func refreshPermission() {
+        let previouslyGranted = hasAccessibilityPermission
+        hasAccessibilityPermission = AXIsProcessTrusted()
+        permissionOnboarding.updatePermission(hasAccessibilityPermission)
+        if !previouslyGranted, hasAccessibilityPermission { onAccessibilityPermissionGranted?() }
+    }
+
+    func beginPermissionOnboarding() {
+        permissionOnboarding.begin(hasCompleted: defaults.bool(forKey: "hasCompletedPermissionOnboarding"))
+        presentInitialPermissionOnboardingIfNeeded()
+    }
+
+    func presentInitialPermissionOnboardingIfNeeded() {
+        permissionOnboarding.presentIfNeeded(hasPermission: hasAccessibilityPermission,
+                                            isBusy: isResolving || isConverting || radialVisible)
+    }
+
+    func showPermissionOnboarding() {
+        refreshPermission()
+        permissionOnboarding.present(hasPermission: hasAccessibilityPermission)
+    }
+
+    func completePermissionOnboarding() {
+        permissionOnboarding.complete()
+        defaults.set(true, forKey: "hasCompletedPermissionOnboarding")
+    }
     private func report(_ error: Error) { statusMessage = L(error.localizedDescription) }
 
     static func stateTitle(_ state: String) -> String {
