@@ -32,3 +32,28 @@ extension AppModel {
         }
     }
 }
+
+/// Motion tokens adapted from transitions.dev (`--ease-smooth-out`, `--ease-bounce`, durations).
+enum Motion {
+    /// Opening dropdowns, panels, page swaps: 250ms smooth-out.
+    static let open = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.25)
+    /// Closing and text/icon swaps: 150ms, ~60% of open.
+    static let quick = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.15)
+    /// Small confirmations (selected wedge, check): 500ms with slight overshoot.
+    static let pop = Animation.timingCurve(0.34, 1.36, 0.64, 1, duration: 0.5)
+    static func when(_ enabled: Bool, _ animation: Animation) -> Animation? { enabled ? animation : nil }
+}
+
+extension AnyTransition {
+    /// Text-swap / icon-swap: fade with 2px blur and a 4px lift (transitions.dev #04, #09).
+    static var blurSwap: AnyTransition {
+        .modifier(active: BlurSwap(progress: 0), identity: BlurSwap(progress: 1))
+    }
+}
+
+private struct BlurSwap: ViewModifier {
+    let progress: Double
+    func body(content: Content) -> some View {
+        content.opacity(progress).blur(radius: (1 - progress) * 2).offset(y: (1 - progress) * 4)
+    }
+}

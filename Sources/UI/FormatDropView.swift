@@ -13,16 +13,22 @@ struct DonutWedge: Shape {
     let index: Int
     let count: Int
     let holeRatio: Double
+    /// Visual gap between wedges in points; hit testing still uses DonutGeometry's full segments.
+    var gap: Double = 0
 
     func path(in rect: CGRect) -> Path {
         let radius = min(rect.width, rect.height) / 2
+        let inner = radius * holeRatio
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let span = 2 * Double.pi / Double(max(count, 1))
         let start = Double(index) * span - span / 2 - .pi / 2
         let end = start + span
+        // Inset each arc by the same linear distance so wedge edges stay parallel.
+        let outerInset = count > 1 ? asin(min(gap / 2 / radius, 1)) : 0
+        let innerInset = count > 1 ? asin(min(gap / 2 / max(inner, 1), 1)) : 0
         var path = Path()
-        path.addArc(center: center, radius: radius, startAngle: .radians(start), endAngle: .radians(end), clockwise: false)
-        path.addArc(center: center, radius: radius * holeRatio, startAngle: .radians(end), endAngle: .radians(start), clockwise: true)
+        path.addArc(center: center, radius: radius, startAngle: .radians(start + outerInset), endAngle: .radians(end - outerInset), clockwise: false)
+        path.addArc(center: center, radius: inner, startAngle: .radians(end - innerInset), endAngle: .radians(start + innerInset), clockwise: true)
         path.closeSubpath()
         return path
     }
@@ -37,6 +43,7 @@ struct DonutView: View {
     var opacity: Double = 0.96
     var accent: Color = .fileeAccent
     var activeIndex: Int?
+    var animated = true
     var onHover: (Int?) -> Void = { _ in }
     var onInvoke: (Int) -> Void = { _ in }
     var onEdit: (Int) -> Void = { _ in }
@@ -46,19 +53,22 @@ struct DonutView: View {
         ZStack {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 DonutSlice(item: item, index: index, count: items.count, radius: radius, holeRatio: holeRatio,
-                           opacity: opacity, accent: accent, highlighted: activeIndex == index,
+                           opacity: opacity, accent: accent, highlighted: activeIndex == index, animated: animated,
                            onInvoke: { onInvoke(index) }, onEdit: { onEdit(index) })
             }
             Button(action: onCenter) {
-                VStack(spacing: 5) {
+                VStack(spacing: 4) {
                     Text(title).font(.system(size: 13, weight: .semibold))
-                    Text(subtitle).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(3)
+                    ZStack {
+                        Text(subtitle).id(subtitle).transition(.blurSwap)
+                    }.font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(3)
                 }
                 .multilineTextAlignment(.center)
-                .padding(8)
-                .frame(width: radius * holeRatio * 2, height: radius * holeRatio * 2)
-                .background(Color(nsColor: .controlBackgroundColor), in: Circle())
-                .overlay { Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1) }
+                .padding(10)
+                .frame(width: radius * holeRatio * 2 - 6, height: radius * holeRatio * 2 - 6)
+                .background(.regularMaterial, in: Circle())
+                .overlay { Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 1) }
+                .animation(Motion.when(animated, Motion.quick), value: subtitle)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(title), \(subtitle)")
@@ -73,7 +83,7 @@ struct DonutView: View {
             case .ended: onHover(nil)
             }
         }
-        .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
+        .shadow(color: .black.opacity(0.22), radius: 12, y: 4)
     }
 }
 
@@ -86,15 +96,16 @@ private struct DonutSlice: View {
     let opacity: Double
     let accent: Color
     let highlighted: Bool
+    let animated: Bool
     let onInvoke: () -> Void
     let onEdit: () -> Void
-    private var shape: DonutWedge { DonutWedge(index: index, count: count, holeRatio: holeRatio) }
+    private var shape: DonutWedge { DonutWedge(index: index, count: count, holeRatio: holeRatio, gap: 3) }
     private var angle: Double { Double(index) * 2 * .pi / Double(count) }
     private var foreground: Color { highlighted ? ThemeAccent.foreground(on: accent) : item.available ? .primary : .secondary }
     var body: some View {
         Button { if item.available { onInvoke() } } label: {
             shape.fill(highlighted ? accent : Color(nsColor: .controlBackgroundColor).opacity(opacity))
-                .overlay { shape.stroke(Color.primary.opacity(0.1), lineWidth: 1) }
+                .overlay { shape.stroke(highlighted ? Color.white.opacity(0.18) : Color.primary.opacity(0.1), lineWidth: 1) }
                 .overlay {
                     VStack(spacing: 3) {
                         Text(item.title).font(.system(size: 12, weight: .semibold)).lineLimit(2)
@@ -104,6 +115,10 @@ private struct DonutSlice: View {
                     }.frame(width: radius * 0.65).foregroundStyle(foreground)
                         .offset(x: sin(angle) * radius * (1 + holeRatio) / 2, y: -cos(angle) * radius * (1 + holeRatio) / 2)
                 }
+                .opacity(item.available ? 1 : 0.55)
+                // The highlighted wedge springs outward a few points (transitions.dev badge pop).
+                .scaleEffect(highlighted ? 1.035 : 1)
+                .animation(Motion.when(animated, highlighted ? Motion.pop : Motion.quick), value: highlighted)
         }.buttonStyle(.plain).contentShape(shape)
             .contextMenu { Button(L("프리셋 편집"), action: onEdit) }
             .help(item.reason ?? item.title).accessibilityLabel(item.title)
@@ -132,17 +147,19 @@ struct FormatDropView: View {
         ZStack {
             if model.radialVisible {
                 if let job = model.radialJob {
-                    radialProgress(job)
+                    radialProgress(job).transition(.blurSwap)
                 } else if model.isResolving || model.isStarting {
                     ProgressView(L("형식 확인 중…"))
                         .padding(20)
                         .background(.regularMaterial, in: Circle())
+                        .transition(.opacity)
                 } else {
                     DonutView(items: items, title: model.selectedFiles.count == 1 ? L("파일 1개") : L("파일 %@개", String(model.selectedFiles.count)), subtitle: subtitle,
                               radius: model.radialOuterRadius, holeRatio: model.radialHoleRatio, opacity: model.radialOpacity, accent: model.accentColor,
-                              activeIndex: activeIndex, onHover: { activeIndex = $0 }, onInvoke: invoke,
+                              activeIndex: activeIndex, animated: !model.reduceMotion, onHover: { activeIndex = $0 }, onInvoke: invoke,
                               onEdit: { model.editPreset(items[$0].id) },
                               onCenter: model.closeRadial)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
             }
             if !model.radialClickMode && model.radialJobID == nil {
@@ -151,6 +168,8 @@ struct FormatDropView: View {
         }
         .padding(21)
         .frame(width: model.radialOuterRadius * 2 + 42, height: model.radialOuterRadius * 2 + 42)
+        .animation(Motion.when(!model.reduceMotion, Motion.open), value: model.radialVisible)
+        .animation(Motion.when(!model.reduceMotion, Motion.open), value: model.radialJobID)
         .preferredColorScheme(model.themeColorScheme)
         .environment(\.locale, Locale(identifier: model.language.rawValue))
         .onExitCommand { model.closeRadial() }
@@ -175,8 +194,11 @@ struct FormatDropView: View {
                     if finished {
                         Image(systemName: job.state == "completed" ? "checkmark" : job.state == "cancelled" ? "xmark" : "exclamationmark")
                             .font(.title2.weight(.bold))
+                            .foregroundStyle(job.state == "completed" ? model.accentColor : job.state == "failed" ? Color.red : Color.secondary)
+                            .transition(.scale(scale: 0.6).combined(with: .opacity))
                     } else {
                         Text("\(Int(job.progress * 100))%").font(.headline.monospacedDigit())
+                            .contentTransition(.numericText(value: job.progress))
                     }
                     Text(model.cancellingJobIDs.contains(job.jobId) ? L("취소 중") : AppModel.stateTitle(job.state)).font(.system(size: 9))
                 }
@@ -195,7 +217,8 @@ struct FormatDropView: View {
                     .help(L("변환 취소"))
             }
         }
-        .animation(model.reduceMotion ? nil : .easeOut(duration: 0.28), value: job.progress)
+        .animation(Motion.when(!model.reduceMotion, .easeOut(duration: 0.28)), value: job.progress)
+        .animation(Motion.when(!model.reduceMotion, Motion.pop), value: finished)
         .accessibilityElement(children: .contain)
     }
 }
@@ -309,5 +332,6 @@ private final class RadialDropNSView: NSView {
 
 extension Color {
     static let fileeAccent = ThemeAccent.color(hex: nil)
-    static let fileePage = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(red: 0.106, green: 0.106, blue: 0.098, alpha: 1) : NSColor(red: 0.965, green: 0.961, blue: 0.945, alpha: 1) })
+    static let fileePage = Color(nsColor: .windowBackgroundColor)
+    static let fileeSurface = Color(nsColor: NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.045) : NSColor(white: 1, alpha: 0.75) })
 }
