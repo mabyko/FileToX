@@ -69,8 +69,9 @@ PY
     if [[ -d "$root/Vendor/Filee.patches" ]]; then
         for patch_file in "$root"/Vendor/Filee.patches/*.patch; do
             [[ -f "$patch_file" ]] || continue
-            git -C "$root/build/filee-src" apply --check "$patch_file"
-            git -C "$root/build/filee-src" apply "$patch_file"
+            # Inside this repo's work tree, git apply silently skips paths outside the enclosing repo; stop discovery at build/.
+            GIT_CEILING_DIRECTORIES="$root/build" git -C "$root/build/filee-src" apply --check "$patch_file"
+            GIT_CEILING_DIRECTORIES="$root/build" git -C "$root/build/filee-src" apply "$patch_file"
         done
     fi
     printf '%s\n' "$source_fingerprint" > "$source_stamp"

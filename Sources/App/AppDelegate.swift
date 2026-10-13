@@ -39,11 +39,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if converterWindow == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1080, height: 760),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered, defer: false
             )
             window.title = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "FileToX"
             window.contentView = NSHostingView(rootView: ConverterView(model: model))
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
             window.contentMinSize = NSSize(width: 820, height: 560)
             window.isReleasedWhenClosed = false
             window.center()

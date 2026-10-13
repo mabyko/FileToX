@@ -23,7 +23,7 @@ struct PresetsView: View {
                     ForEach(presets.filter { search.isEmpty || $0.libraryName.localizedCaseInsensitiveContains(search) }, id: \.identity) { preset in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(preset.libraryName).fontWeight(.semibold)
-                            Text(preset.field("targetFormat").string ?? "").font(.caption).foregroundStyle(.secondary)
+                            Text(preset.field("targetFormat").string.map { $0 == "*" ? L("같은 형식") : $0.uppercased() } ?? "").font(.caption).foregroundStyle(.secondary)
                         }.tag(preset.identity)
                     }
                 }
@@ -166,7 +166,7 @@ struct ToolbarProfilesView: View {
     private var presets: [JSONValue] { model.library?.presets ?? [] }
     private var ids: [String] { draft.field("presetIds").array?.compactMap(\.string) ?? [] }
     private var items: [RadialItem] {
-        ids.compactMap { id in presets.first { $0.identity == id }.map { RadialItem(id: id, title: $0.libraryName, caption: $0.field("targetFormat").string ?? "", available: true, reason: nil) } }
+        ids.compactMap { id in presets.first { $0.identity == id }.map { RadialItem(id: id, title: $0.libraryName, caption: $0.field("targetFormat").string.map { $0 == "*" ? L("같은 형식") : $0.uppercased() } ?? "", available: true, reason: nil) } }
     }
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
