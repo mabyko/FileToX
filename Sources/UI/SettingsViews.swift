@@ -91,7 +91,7 @@ struct SettingsJSONEditor: View {
             }
             Section {
                 LabeledContent {
-                    if !model.hasAccessibilityPermission { Button(L("권한 설정"), action: model.requestAccessibilityPermission) }
+                    Button(L("설정 방법 보기"), action: model.showPermissionOnboarding)
                 } label: {
                     Label(model.hasAccessibilityPermission ? L("손쉬운 사용 권한 허용됨") : L("드래그 호출이 반응하지 않으면 권한을 확인하세요."),
                           systemImage: model.hasAccessibilityPermission ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")

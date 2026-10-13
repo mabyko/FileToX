@@ -40,7 +40,7 @@ Captured from the English Release build on macOS.
 2. Pick a preset in the radial menu or select an output from **All output formats**.
 3. Find the result beside the source, or in your chosen output folder.
 
-For Finder Option-drag, allow Accessibility access through **Activation → Permission settings**. The app includes its conversion runtime; a separate .NET installation is not needed.
+On first launch, a setup guide explains Accessibility access for Finder Option-drag and checks access when you return from System Settings. Choose **Later** to keep converting through Home, or reopen the guide through **Activation → Show setup guide**. The app includes its conversion runtime; a separate .NET installation is not needed.
 
 This does not guarantee conversion between every registered format. The route planner determines available presets and targets from the inputs and engine status. The 58 read-only formats are excluded from output choices. Missing engines and unavailable macOS routes show a reason.
 

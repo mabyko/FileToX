@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FileToX 앱 아이콘과 첫 실행 권한 안내</title>
+<style>
+@layer fallback{:root{--background:#fff;--foreground:#202124;--muted-foreground:#626772;--card:#f6f7f9;--border:#dce0e6;--radius:16px;--font-sans:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;--blue:#3478f6}}
+*{box-sizing:border-box}html,body{margin:0;background:transparent;color:var(--foreground);font-family:var(--font-sans);font-size:14px;line-height:1.65}h2{font-size:19px;line-height:1.4;margin:0 0 9px;letter-spacing:-.03em}p{margin:0}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #7cabff;outline-offset:3px}a{color:var(--foreground);text-underline-offset:3px}.section{margin:0 0 28px}.hint{font-size:12px;color:var(--muted-foreground)}.desc{color:var(--muted-foreground);margin-bottom:14px;word-break:keep-all;overflow-wrap:anywhere}.icons{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}.icon-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 16px;text-align:center}.app-icon{display:block;width:96px;height:96px;margin:0 auto 12px;filter:drop-shadow(0 5px 7px #0002)}.icon-name{font-size:13px;font-weight:650}.small-icon{width:26px;height:26px}.glyph-line{display:flex;justify-content:center;align-items:center;gap:12px;height:96px;margin-bottom:12px}.glyph-line svg{width:23px;height:23px}.mono{color:var(--foreground)}.icon-card .hint{margin-top:3px}.preview-controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.preview-controls button{padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--foreground);font-size:12px}.preview-controls button[aria-pressed=true]{background:var(--card);border-color:#3478f6;color:var(--foreground);box-shadow:inset 0 0 0 1px #3478f6}.window{--surface:#29292c;--text:#f7f7fa;--secondary:#bbbcc5;--line:#47474c;--button:#414147;background:#1c1c1e;border:1px solid #3c3c42;border-radius:var(--radius);padding:16px 18px 24px;color:var(--text)}.window.light{--surface:#fff;--text:#1b1b20;--secondary:#595a65;--line:#dedee5;--button:#eaeaf0;background:#f0f0f4;border-color:#d4d4de}.titlebar{display:flex;align-items:center;gap:6px;margin-bottom:20px;font-size:11px;color:var(--secondary)}.dot{width:10px;height:10px;border-radius:50%;background:#fa625b}.dot:nth-child(2){background:#fbbb40}.dot:nth-child(3){background:#36c94b}.titlebar span:last-child{margin-left:9px}.sheet{max-width:500px;background:var(--surface);padding:26px 26px 22px;border:1px solid var(--line);border-radius:16px;margin:auto;box-shadow:0 12px 40px #0002}.sheet-head{display:flex;align-items:center;gap:14px;margin-bottom:17px}.sheet .app-icon{width:54px;height:54px;margin:0;flex-shrink:0}.sheet h3{font-size:21px;line-height:1.4;margin:0;letter-spacing:-.04em;word-break:keep-all}.sheet p{font-size:13px;color:var(--secondary);word-break:keep-all;overflow-wrap:anywhere}.sheet b{color:var(--text);font-weight:600}.steps{list-style:none;counter-reset:step;margin:20px 0 0;padding:0;display:grid;gap:12px}.steps li{counter-increment:step;display:flex;gap:10px;color:var(--secondary);font-size:13px;align-items:flex-start;word-break:keep-all}.steps li:before{content:counter(step);font-size:11px;flex:0 0 22px;height:22px;line-height:22px;border-radius:50%;background:var(--button);text-align:center;color:var(--text);font-weight:600}.optional{margin-top:20px;padding-top:15px;border-top:1px solid var(--line)}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}.actions button{border:0;background:var(--button);color:var(--text);border-radius:7px;padding:7px 15px;min-height:34px;font-size:13px;white-space:nowrap}.actions .primary{background:#2868da;color:#fff;box-shadow:inset 0 1px 0 #ffffff25}.link-button{display:inline-block;background:none;border:0;color:#80afff;text-decoration:underline;text-underline-offset:3px;font-size:12px;padding:0;margin-top:15px}.light .link-button{color:#225cc3}.status{display:flex;align-items:center;gap:8px;background:#ffffff07;border:1px solid var(--line);padding:10px 12px;border-radius:9px;margin-top:20px;font-size:12px;color:var(--secondary)}.status svg{width:18px;height:18px;flex-shrink:0}.status.success{color:var(--text)}.success-mark{width:54px;height:54px;border-radius:14px;background:#ffffff09;display:grid;place-items:center;flex-shrink:0}.success-mark svg{width:34px;height:34px;color:#66ce91}.light .success-mark svg{color:#237848}.light .success-mark{background:#eef7f0}.stage[hidden]{display:none}.simulator{margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted-foreground)}.simulator select{border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--foreground);font-size:12px;padding:4px 8px}.simulator button{background:none;color:var(--foreground);font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 8px}.timeline{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius);font-size:12px;margin-bottom:12px}.timeline span{word-break:keep-all}.arrow{color:var(--muted-foreground)}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:10px 0;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}th{width:31%;font-weight:600;padding-right:16px}td{color:var(--muted-foreground);word-break:keep-all}.footnote{margin-top:12px;font-size:12px;color:var(--muted-foreground);word-break:keep-all}.summary{font-size:15px;line-height:1.75;margin-bottom:24px;word-break:keep-all}.dismissed{font-size:14px;color:var(--secondary);text-align:center;padding:45px 10px}.dismissed b{display:block;color:var(--text);font-size:19px;margin-bottom:8px}
+.icon-card .hint{word-break:keep-all}
+.status.success svg{color:#66ce91}.light .status.success svg{color:#237848}
+@media(max-width:480px){.icons{gap:8px}.icon-card{padding:16px 8px}.app-icon{width:74px;height:74px}.glyph-line{height:74px;gap:8px}.icon-name{font-size:12px}.window{padding:16px}.sheet{padding:20px 16px}.sheet h3{font-size:18px}.sheet-head{gap:10px}.sheet .app-icon,.success-mark{width:44px;height:44px}.actions button{padding:7px 11px;font-size:12px}.timeline{gap:5px;font-size:11px;padding:12px}.hint{font-size:11px}}
+@media(prefers-reduced-motion:no-preference){button{transition:background .15s,border-color .15s}.sheet{animation:appear .18s ease-out}@keyframes appear{from{opacity:.6;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs>
+<linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#5ba8ff"/><stop offset="1" stop-color="#2355d8"/></linearGradient>
+<linearGradient id="pearl" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f5f6fa"/><stop offset="1" stop-color="#dfe4ed"/></linearGradient>
+<symbol id="app" viewBox="0 0 128 128"><rect x="4" y="4" width="120" height="120" rx="27" fill="url(#pearl)"/><rect x="5" y="5" width="118" height="118" rx="26" fill="none" stroke="#fff" stroke-opacity=".8"/><path d="M 47.185 21.184 A 46 46 0 0 1 80.815 21.184 L 70.861 45.214 A 20 20 0 0 0 57.139 45.214 Z" fill="#394150"/><path d="M 82.386 21.834 A 46 46 0 0 1 106.166 45.614 L 82.136 55.568 A 20 20 0 0 0 72.432 45.864 Z" fill="url(#blue)"/><path d="M 106.816 47.185 A 46 46 0 0 1 106.816 80.815 L 82.786 70.861 A 20 20 0 0 0 82.786 57.139 Z" fill="#394150"/><path d="M 106.166 82.386 A 46 46 0 0 1 82.386 106.166 L 72.432 82.136 A 20 20 0 0 0 82.136 72.432 Z" fill="#394150"/><path d="M 80.815 106.816 A 46 46 0 0 1 47.185 106.816 L 57.139 82.786 A 20 20 0 0 0 70.861 82.786 Z" fill="#394150"/><path d="M 45.614 106.166 A 46 46 0 0 1 21.834 82.386 L 45.864 72.432 A 20 20 0 0 0 55.568 82.136 Z" fill="#394150"/><path d="M 21.184 80.815 A 46 46 0 0 1 21.184 47.185 L 45.214 57.139 A 20 20 0 0 0 45.214 70.861 Z" fill="#394150"/><path d="M 21.834 45.614 A 46 46 0 0 1 45.614 21.834 L 55.568 45.864 A 20 20 0 0 0 45.864 55.568 Z" fill="#394150"/></symbol>
+<symbol id="dev" viewBox="0 0 128 128"><use href="#app"/><path d="M84 4H97Q124 4 124 31V44Z" fill="#ffa540"/><path d="M104 15L112 23" stroke="#713700" stroke-width="5" stroke-linecap="round"/></symbol>
+<symbol id="menu" viewBox="0 0 24 24"><path d="M 5.329 4.551 A 10 10 0 0 1 18.671 4.551 L 14.983 8.239 A 4.8 4.8 0 0 0 9.017 8.239 Z" fill="currentColor"/><path d="M 19.449 5.329 A 10 10 0 0 1 19.449 18.671 L 15.761 14.983 A 4.8 4.8 0 0 0 15.761 9.017 Z" fill="currentColor"/><path d="M 18.671 19.449 A 10 10 0 0 1 5.329 19.449 L 9.017 15.761 A 4.8 4.8 0 0 0 14.983 15.761 Z" fill="currentColor"/><path d="M 4.551 18.671 A 10 10 0 0 1 4.551 5.329 L 8.239 9.017 A 4.8 4.8 0 0 0 8.239 14.983 Z" fill="currentColor"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m7.8 12 2.8 2.8 5.8-5.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+</defs></svg>
+<p class="summary">첫 실행에 <strong>권한 안내 → 시스템 설정 → 허용 확인</strong>을 연결합니다. 안내를 건너뛰면 홈에서 바로 파일을 선택해 변환할 수 있습니다.</p>
+<section class="section" aria-labelledby="icons-heading">
+<h2 id="icons-heading">앱 아이콘 방향</h2>
+<p class="desc">Option 드래그로 뜨는 도넛을 단순화합니다. 8개 영역과 파란 선택 영역을 남긴 벡터 시안입니다.</p>
+<div class="icons">
+<div class="icon-card"><svg class="app-icon" role="img" aria-label="밝은 바탕에 8개 부채꼴과 파란 선택 영역을 배치한 도넛 앱 아이콘 시안"><use href="#app"/></svg><div class="icon-name">FileToX</div><p class="hint">Release · 기본 아이콘</p></div>
+<div class="icon-card"><svg class="app-icon" role="img" aria-label="같은 아이콘에 주황색 모서리 표시를 더한 개발 아이콘 시안"><use href="#dev"/></svg><div class="icon-name">FileToX Dev</div><p class="hint">Debug · 주황색 표시</p></div>
+<div class="icon-card"><div class="glyph-line mono" aria-hidden="true"><svg><use href="#menu"/></svg><svg style="width:17px;height:17px"><use href="#menu"/></svg></div><div class="icon-name">메뉴 막대</div><p class="hint">같은 모티프 · 단색</p></div>
+</div>
+</section>
+<section class="section" aria-labelledby="flow-heading">
+<h2 id="flow-heading">첫 실행 안내창</h2>
+<p class="desc">메인 창 위의 시트 한 곳에서 안내하고 확인합니다. 허용 뒤에는 같은 창이 완료 화면으로 바뀝니다.</p>
+<div class="preview-controls" aria-label="미리보기 화면 선택">
+<button type="button" data-state="intro" aria-pressed="true">1. 처음 안내</button><button type="button" data-state="waiting" aria-pressed="false">2. 설정 대기</button><button type="button" data-state="success" aria-pressed="false">3. 허용 확인</button>
+</div>
+<div class="window" id="window">
+<div class="titlebar" aria-hidden="true"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>FileToX · 홈</span></div>
+<div class="sheet" id="sheet" aria-label="첫 실행 권한 안내 미리보기">
+<div class="stage" data-stage="intro">
+<div class="sheet-head"><svg class="app-icon" aria-hidden="true"><use href="#app"/></svg><h3>Finder에서 바로<br>변환해 보세요</h3></div>
+<p>Finder에서 <b>Option(⌥)</b> 키를 누르고 파일을 드래그하면 원형 변환 메뉴를 열 수 있어요. 키와 드래그 동작을 감지하는 데 <b>손쉬운 사용 권한</b>을 사용합니다.</p>
+<ol class="steps"><li><span>시스템 설정에서 <b>개인정보 보호 및 보안 → 손쉬운 사용</b>을 엽니다.</span></li><li><span>목록에서 <b>FileToX</b>를 켭니다.</span></li><li><span>이 창으로 돌아오면 허용 여부를 확인합니다.</span></li></ol>
+<div class="optional"><p>권한 설정은 나중에 해도 됩니다.<br>홈에서 파일을 선택하거나 놓아 변환할 수 있어요.</p></div>
+<div class="actions"><button type="button" data-action="skip">나중에</button><button type="button" class="primary" data-action="open">시스템 설정 열기</button></div>
+</div>
+<div class="stage" data-stage="waiting" hidden>
+<div class="sheet-head"><svg class="app-icon" aria-hidden="true"><use href="#app"/></svg><h3>손쉬운 사용에서<br>FileToX를 켜주세요</h3></div>
+<p>시스템 설정에서 허용한 뒤 이 창으로 돌아오세요. 돌아오면 허용 여부를 다시 확인합니다.</p>
+<ol class="steps"><li><span><b>개인정보 보호 및 보안 → 손쉬운 사용</b></span></li><li><span><b>FileToX</b> 허용 켜기</span></li><li><span>FileToX로 돌아오기</span></li></ol>
+<div class="status" role="status"><svg aria-hidden="true"><use href="#clock"/></svg><span id="waiting-status">아직 허용이 확인되지 않았어요</span></div>
+<button type="button" class="link-button" data-action="reopen">시스템 설정 다시 열기</button>
+<div class="actions"><button type="button" data-action="skip">나중에</button><button type="button" class="primary" data-action="check">허용 여부 확인</button></div>
+</div>
+<div class="stage" data-stage="success" hidden>
+<div class="sheet-head"><div class="success-mark" aria-hidden="true"><svg><use href="#check"/></svg></div><h3>권한을 확인했어요</h3></div>
+<p>Finder에서 <b>Option(⌥)</b> 키를 누르고 파일을 드래그해 보세요. 원형 메뉴에서 원하는 형식에 놓으면 변환을 시작합니다.</p>
+<div class="status success"><svg aria-hidden="true"><use href="#check"/></svg><span>손쉬운 사용 권한 허용됨</span></div>
+<div class="actions"><button type="button" class="primary" data-action="finish">시작하기</button></div>
+</div>
+</div>
+<div id="home" class="dismissed" hidden><b>파일을 놓으면, 변환 시작.</b><span id="home-note">파일 또는 폴더를 선택하거나 이곳에 놓으세요.</span></div>
+</div>
+<div class="simulator"><label for="permission">조회 결과 시뮬레이션</label><select id="permission"><option value="false">미허용</option><option value="true">허용</option></select><button type="button" id="return">앱으로 돌아오기</button><button type="button" id="theme">밝게 보기</button></div>
+<p class="hint" style="margin-top:7px">위 버튼은 흐름만 시연합니다. 실제 시스템 설정이나 macOS 권한은 변경하지 않습니다.</p>
+</section>
+<section class="section" aria-labelledby="rules-heading">
+<h2 id="rules-heading">표시와 확인 규칙</h2>
+<div class="timeline" aria-label="첫 실행에서 안내하고 설정을 열고 돌아와 확인한 뒤 시작하는 흐름"><span>첫 실행</span><span class="arrow">→</span><span>설정 열기</span><span class="arrow">→</span><span>돌아와 확인</span><span class="arrow">→</span><span>시작하기</span></div>
+<table><tbody>
+<tr><th scope="row">나중에 선택</th><td>홈으로 이동. 재실행에는 자동으로 뜨지 않고 호출 키 설정에서 다시 열 수 있습니다.</td></tr>
+<tr><th scope="row">처음부터 허용됨</th><td>첫 안내에서 바로 완료 화면을 보여줍니다.</td></tr>
+<tr><th scope="row">허용 확인 실패</th><td>대기 화면에서 설정 방법을 다시 안내합니다. 반복 팝업은 띄우지 않습니다.</td></tr>
+<tr><th scope="row">허용 확인 성공</th><td>같은 시트를 완료 화면으로 바꿉니다. 실제 권한을 조회한 결과로만 판단합니다.</td></tr>
+<tr><th scope="row">파일 열기로 시작</th><td>받은 파일을 먼저 처리하고 최초 안내는 변환 흐름 뒤로 미룹니다.</td></tr>
+</tbody></table>
+<p class="footnote">시스템 권한 안내는 비동기로 실행됩니다. 설정을 연 직후의 반환값으로 허용·거절을 결정하지 않습니다. <a href="https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions" target="_blank" rel="noreferrer">Apple API 문서</a></p>
+</section>
+<script>
+let state='intro';const sheet=document.querySelector('#sheet'),home=document.querySelector('#home');
+function show(next){state=next;sheet.hidden=false;home.hidden=true;document.querySelectorAll('[data-stage]').forEach(el=>el.hidden=el.dataset.stage!==next);document.querySelectorAll('[data-state]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.state===next)));document.querySelector('#waiting-status').textContent='아직 허용이 확인되지 않았어요';}
+function check(){if(document.querySelector('#permission').value==='true'){show('success')}else{show('waiting');document.querySelector('#waiting-status').textContent='아직 허용이 확인되지 않았어요. 현재 실행 중인 FileToX가 켜져 있는지 확인해 주세요.'}}
+function dismiss(skipped){state='home';sheet.hidden=true;home.hidden=false;document.querySelectorAll('[data-state]').forEach(el=>el.setAttribute('aria-pressed','false'));document.querySelector('#home-note').textContent=skipped?'권한 설정은 호출 키 설정에서 다시 할 수 있어요.':'파일 또는 폴더를 선택하거나 이곳에 놓으세요.';}
+document.querySelectorAll('[data-state]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.state)));
+document.querySelectorAll('[data-action]').forEach(el=>el.addEventListener('click',()=>{switch(el.dataset.action){case'open':show('waiting');break;case'reopen':document.querySelector('#waiting-status').textContent='시스템 설정에서 FileToX를 켠 뒤 돌아오세요.';break;case'check':check();break;case'skip':dismiss(true);break;case'finish':dismiss(false);break;}}));
+document.querySelector('#return').addEventListener('click',()=>{if(state==='waiting')check()});
+document.querySelector('#theme').addEventListener('click',event=>{const light=document.querySelector('#window').classList.toggle('light');event.currentTarget.textContent=light?'어둡게 보기':'밝게 보기'});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&['intro','waiting'].includes(state))dismiss(true)});
+// Verify the preview's state transitions without requesting macOS permissions.
+show('waiting');document.querySelector('#permission').value='false';check();if(state!=='waiting')throw Error('미허용 확인 흐름 오류');document.querySelector('#permission').value='true';check();if(state!=='success')throw Error('허용 확인 흐름 오류');dismiss(true);if(!sheet.hidden||home.hidden)throw Error('건너뛰기 흐름 오류');document.querySelector('#permission').value='false';show('intro');console.log('권한 미허용·허용·건너뛰기 미리보기 흐름 확인 완료');
+</script>
+</body>
+</html>
