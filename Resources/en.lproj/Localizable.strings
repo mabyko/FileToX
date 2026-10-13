@@ -228,3 +228,6 @@
 "확장자를 알 수 없는 파일도 압축 합치기에 사용할 수 있습니다." = "Files with unknown extensions can also be combined into an archive.";
 "흑백으로" = "Grayscale";
 "설정" = "Settings";
+"engine.reason.not_installed" = "Not installed";
+"engine.reason.error" = "Error while checking";
+"engine.reason.unsupported_platform" = "Not available on this platform";

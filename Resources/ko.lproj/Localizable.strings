@@ -228,3 +228,6 @@
 "확장자를 알 수 없는 파일도 압축 합치기에 사용할 수 있습니다." = "확장자를 알 수 없는 파일도 압축 합치기에 사용할 수 있습니다.";
 "흑백으로" = "흑백으로";
 "설정" = "설정";
+"engine.reason.not_installed" = "설치되지 않음";
+"engine.reason.error" = "확인 중 오류";
+"engine.reason.unsupported_platform" = "이 플랫폼에서는 사용할 수 없음";

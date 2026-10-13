@@ -25,6 +25,16 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(Localization.text("정보", language: .japanese), "情報")
     }
 
+    func testEngineReasonKeysAreLocalizedInEveryLanguage() throws {
+        // The engine host reports unavailable engines with these keys; the UI must never show them raw.
+        for language in AppLanguage.allCases {
+            let localized = try table(language)
+            for key in ["engine.reason.not_installed", "engine.reason.error", "engine.reason.unsupported_platform"] {
+                XCTAssertNotNil(localized[key], "\(language.rawValue): \(key)")
+            }
+        }
+    }
+
     func testMissingTranslationFallsBackToEnglishAndUnknownTextIsPreserved() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("filetox-locale-\(UUID().uuidString).bundle")
         defer { try? FileManager.default.removeItem(at: root) }

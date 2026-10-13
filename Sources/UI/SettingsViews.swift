@@ -102,8 +102,14 @@ struct SettingsJSONEditor: View {
             Section {
                 ForEach(model.catalog?.engines ?? [], id: \.id) { engine in
                     LabeledContent {
-                        Text(engine.available ? L("사용 가능") : engine.detail ?? engine.reasonKey ?? L("설치되어 있지 않음"))
-                            .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.trailing).textSelection(.enabled)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(engine.available ? L("사용 가능") : reason(engine.reasonKey))
+                            // Detail is non-localized extra context (e.g. a program path), so it stays secondary.
+                            if !engine.available, let detail = engine.detail, !detail.isEmpty {
+                                Text(detail).font(.caption).foregroundStyle(.tertiary)
+                            }
+                        }
+                        .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.trailing).textSelection(.enabled)
                     } label: {
                         Label {
                             Text(engine.displayName).foregroundStyle(engine.available ? Color.primary : Color.secondary)
@@ -135,6 +141,12 @@ struct SettingsJSONEditor: View {
             }
         default: EmptyView()
         }
+    }
+
+    /// Engine reasons arrive as localization keys; unknown keys fall back to the generic text, never the raw key.
+    private func reason(_ key: String?) -> String {
+        guard let key, case let text = L(key), text != key else { return L("설치되어 있지 않음") }
+        return text
     }
 
     private func slider(_ title: String, _ value: Binding<Double>, _ range: ClosedRange<Double>, _ format: String, scale: Double = 1) -> some View {
