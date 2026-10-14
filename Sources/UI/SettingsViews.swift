@@ -16,20 +16,32 @@ struct SettingsJSONEditor: View {
     let section: String
     @State private var draft: JSONValue
     @State private var baseRevision: Int
+    @State private var shortcutDraft: DragShortcut
     init(model: AppModel, original: JSONValue, section: String) {
         self.model = model; self.section = section
         var settings = original
         if section == "general" { settings["language"] = .string(AppLanguage.supported(original["language"]?.string).rawValue) }
         _draft = State(initialValue: settings); _baseRevision = State(initialValue: model.library?.revision ?? 0)
+        _shortcutDraft = State(initialValue: model.dragShortcut)
     }
     var body: some View {
         VStack(spacing: 0) {
             Form { sections }.formStyle(.grouped).scrollContentBackground(.hidden).padding(.horizontal, -20)
             HStack {
                 Spacer()
-                Button(L("되돌리기")) { if let settings = model.library?.settings { draft = settings; baseRevision = model.library?.revision ?? 0 } }
-                Button(L("저장")) { Task { if await model.saveSettings(draft, baseRevision: baseRevision) { baseRevision = model.library?.revision ?? baseRevision } } }
-                    .buttonStyle(.borderedProminent).keyboardShortcut("s", modifiers: .command).disabled(!model.isConnected)
+                Button(L("되돌리기")) {
+                    if let settings = model.library?.settings { draft = settings; baseRevision = model.library?.revision ?? 0 }
+                    shortcutDraft = model.dragShortcut
+                }
+                Button(L("저장")) {
+                    Task {
+                        if await model.saveSettings(draft, baseRevision: baseRevision, dragShortcut: section == "triggers" ? shortcutDraft : nil) {
+                            baseRevision = model.library?.revision ?? baseRevision
+                        }
+                    }
+                }
+                    .buttonStyle(.borderedProminent).keyboardShortcut("s", modifiers: .command)
+                    .disabled(!model.isConnected || (section == "triggers" && !shortcutDraft.isValid))
             }.padding(.vertical, 12)
         }
     }
@@ -85,10 +97,11 @@ struct SettingsJSONEditor: View {
             }
         case "triggers":
             Section {
-                Toggle(L("Option + 드래그 호출 사용"), isOn: Binding(get: { draft.field("paused").bool != true }, set: { draft["paused"] = .bool(!$0) }))
+                Toggle(L("shortcut.enable"), isOn: Binding(get: { draft.field("paused").bool != true }, set: { draft["paused"] = .bool(!$0) }))
             } footer: {
-                Text(L("Finder에서 파일을 드래그하기 전이나 드래그 도중 Option 키를 누르세요.")).font(.callout).foregroundStyle(.secondary)
+                Text(L("shortcut.drag.help", shortcutDraft.displayName)).font(.callout).foregroundStyle(.secondary)
             }
+            DragShortcutEditor(shortcut: $shortcutDraft)
             Section {
                 LabeledContent {
                     Button(L("설정 방법 보기"), action: model.showPermissionOnboarding)
@@ -161,4 +174,74 @@ struct SettingsJSONEditor: View {
     private func text(_ keys: String...) -> Binding<String> { Binding(get: { value(keys).string ?? "" }, set: { draft.set(.string($0), at: keys) }) }
     private func bool(_ keys: String..., fallback: Bool = false) -> Binding<Bool> { Binding(get: { value(keys).bool ?? fallback }, set: { draft.set(.bool($0), at: keys) }) }
     private func number(_ keys: String..., fallback: Double) -> Binding<Double> { Binding(get: { value(keys).double ?? fallback }, set: { draft.set(.number($0), at: keys) }) }
+}
+
+private struct DragShortcutEditor: View {
+    @Binding var shortcut: DragShortcut
+    @State private var systemHotKeys: [DragShortcut.SystemHotKey]?
+
+    var body: some View {
+        Section {
+            LabeledContent(L("shortcut.current")) {
+                Text(shortcut.isValid ? shortcut.displayName : L("shortcut.required"))
+                    .font(.body.monospaced().weight(.semibold))
+            }
+            HStack {
+                modifier("Control ⌃", .control)
+                modifier("Option ⌥", .option)
+                modifier("Shift ⇧", .shift)
+                modifier("Command ⌘", .command)
+            }.toggleStyle(.checkbox)
+            Picker(L("shortcut.extra.key"), selection: Binding(get: { shortcut.keyCode.map(Int.init) ?? -1 }, set: {
+                shortcut.keyCode = $0 == -1 ? nil : UInt16($0)
+            })) {
+                Text(L("shortcut.key.none")).tag(-1)
+                ForEach(DragShortcut.keys) { key in
+                    Text(key.name == "Space" ? L("shortcut.key.space") : key.name).tag(Int(key.code))
+                }
+            }
+            Button(L("shortcut.reset")) { shortcut = .standard }
+            if !shortcut.isValid { warning("shortcut.required") }
+            if shortcut.modifiers.contains(.control) { warning("shortcut.control.warning") }
+            if shortcut.modifiers.contains(.option) {
+                warning(shortcut.modifiers.contains(.command) ? "shortcut.alias.warning" : "shortcut.copy.warning")
+            } else if shortcut.modifiers.contains(.command) { warning("shortcut.move.warning") }
+            if let systemHotKeys {
+                if shortcut.conflicts(with: systemHotKeys) {
+                    warning("shortcut.system.warning")
+                    Button(L("shortcut.system.settings")) {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
+                    }.buttonStyle(.link)
+                }
+            } else { warning("shortcut.system.unavailable") }
+        } header: {
+            Text(L("shortcut.title"))
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L("shortcut.scope"))
+                Text(L("shortcut.layout.help"))
+                if let key = DragShortcut.keys.first(where: { $0.code == shortcut.keyCode }), key.name.hasPrefix("F"), key.name.count > 1 {
+                    Text(L("shortcut.function.help"))
+                }
+            }.font(.callout).foregroundStyle(.secondary)
+        }
+        .onAppear { systemHotKeys = DragShortcut.systemHotKeys() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            systemHotKeys = DragShortcut.systemHotKeys()
+        }
+    }
+
+    private func modifier(_ title: String, _ flag: NSEvent.ModifierFlags) -> some View {
+        Toggle(title, isOn: Binding(get: { shortcut.modifiers.contains(flag) }, set: { enabled in
+            if enabled { shortcut.modifiers.insert(flag) } else { shortcut.modifiers.remove(flag) }
+        }))
+    }
+
+    private func warning(_ key: String) -> some View {
+        Label {
+            Text(L(key)).foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+        }.font(.callout).fixedSize(horizontal: false, vertical: true)
+    }
 }

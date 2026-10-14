@@ -64,11 +64,11 @@ struct HomeView: View {
                 .accessibilityHidden(true)
             Text(L("여기에 파일을 놓으세요")).font(.title3.weight(.semibold))
             HStack(spacing: 6) {
-                Text("⌥").font(.system(size: 12, weight: .semibold, design: .rounded))
+                Text(model.dragShortcut.displayName).font(.system(size: 12, weight: .semibold, design: .rounded))
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
                     .accessibilityHidden(true)
-                Text(L("Finder에서 Option 키를 누른 채 파일을 드래그하면 커서 위치에 원형 툴바가 열립니다."))
+                Text(L("shortcut.home.help", model.dragShortcut.displayName))
             }.font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 24)
         }
         .frame(maxWidth: .infinity, minHeight: 210)

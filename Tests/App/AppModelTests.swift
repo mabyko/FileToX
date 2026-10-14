@@ -4,6 +4,39 @@ import XCTest
 
 final class AppModelTests: XCTestCase {
     @MainActor
+    func testShortcutSavesWithSettingsAndFailedSavePreservesPreviousShortcut() async throws {
+        let fixture = try makeFixture()
+        let suite = "filetox-shortcut-model-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: fixture.root)
+        }
+        let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
+        let model = AppModel(host: host, defaults: defaults)
+        let shortcut = DragShortcut(modifiers: [.control, .shift], keyCode: 40)
+        XCTAssertEqual(model.dragShortcut, .standard)
+        await model.connect()
+        let settings = try XCTUnwrap(model.library?.settings)
+        let saved = await model.saveSettings(settings, dragShortcut: shortcut)
+        XCTAssertTrue(saved)
+        XCTAssertEqual(model.dragShortcut, shortcut)
+        XCTAssertEqual(AppModel(defaults: defaults).dragShortcut, shortcut)
+        XCTAssertNil(model.library?.settings["dragShortcut"], "Platform settings must not enter the strict engine schema")
+        let failed = await model.saveSettings(settings, baseRevision: -1, dragShortcut: .standard)
+        XCTAssertFalse(failed)
+        XCTAssertEqual(model.dragShortcut, shortcut)
+        XCTAssertEqual(DragShortcut.load(from: defaults), shortcut)
+        let invalid = await model.saveSettings(settings, dragShortcut: DragShortcut(modifiers: []))
+        XCTAssertFalse(invalid)
+        XCTAssertEqual(model.dragShortcut, shortcut)
+        let generalSave = await model.saveSettings(settings)
+        XCTAssertTrue(generalSave)
+        XCTAssertEqual(model.dragShortcut, shortcut)
+        await host.shutdown()
+    }
+
+    @MainActor
     func testSelectionRejectsRemoteURLsAndPreservesOrderWithoutDuplicates() {
         let model = AppModel()
         let first = URL(fileURLWithPath: "/tmp/첫 사진.png")
@@ -222,6 +255,9 @@ final class AppModelTests: XCTestCase {
             elif m=="library.get":threading.Timer(.1,response,args=(r,{"revision":revision,"settings":settings,"presets":[],"profiles":[]})).start()
             elif m=="history.get":response(r,{"entries":[]})
             elif m=="settings.save":
+                if r["params"]["baseRevision"]!=revision:
+                    send({"v":1,"id":r["id"],"error":{"code":"revision_conflict","message":"Settings changed"}})
+                    continue
                 configured=True
                 settings=r["params"]["settings"]
                 revision+=1

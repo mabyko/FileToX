@@ -96,9 +96,9 @@ struct PermissionOnboardingView: View {
 
     private var message: String {
         switch step {
-        case .intro: L("permission.intro.message")
+        case .intro: L("permission.intro.message", model.dragShortcut.displayName)
         case .waiting: L("permission.waiting.message")
-        case .success: L("permission.success.message")
+        case .success: L("permission.success.message", model.dragShortcut.displayName)
         }
     }
 

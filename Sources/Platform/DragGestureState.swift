@@ -12,18 +12,18 @@ struct DragGestureState {
         origin = point
     }
 
-    mutating func mouseDragged(to point: CGPoint, optionPressed: Bool) -> Bool {
+    mutating func mouseDragged(to point: CGPoint, shortcutPressed: Bool) -> Bool {
         if let origin {
             hasDragged = hasDragged || abs(point.x - origin.x) > 4 || abs(point.y - origin.y) > 4
         } else {
             hasDragged = true
         }
-        return triggerIfNeeded(optionPressed: optionPressed)
+        return triggerIfNeeded(shortcutPressed: shortcutPressed)
     }
 
-    mutating func flagsChanged(optionPressed: Bool, leftButtonPressed: Bool) -> Bool {
+    mutating func flagsChanged(shortcutPressed: Bool, leftButtonPressed: Bool) -> Bool {
         guard leftButtonPressed else { return false }
-        return triggerIfNeeded(optionPressed: optionPressed)
+        return triggerIfNeeded(shortcutPressed: shortcutPressed)
     }
 
     mutating func cancel() -> Bool {
@@ -33,6 +33,9 @@ struct DragGestureState {
         return wasTriggered
     }
 
+    // A shortcut released before Finder publishes the file payload can be pressed again.
+    mutating func retryTrigger() { didTrigger = false }
+
     @discardableResult
     mutating func finish() -> Bool {
         let wasTriggered = didTrigger
@@ -40,8 +43,8 @@ struct DragGestureState {
         return wasTriggered
     }
 
-    private mutating func triggerIfNeeded(optionPressed: Bool) -> Bool {
-        guard hasDragged, optionPressed, !didTrigger, !cancelled else { return false }
+    private mutating func triggerIfNeeded(shortcutPressed: Bool) -> Bool {
+        guard hasDragged, shortcutPressed, !didTrigger, !cancelled else { return false }
         didTrigger = true
         return true
     }

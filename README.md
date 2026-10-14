@@ -12,11 +12,11 @@ Built with SwiftUI and AppKit for macOS 15 or later. English is the default lang
 
 [Watch the 20-second video](docs/media/filetox-demo.mp4) · Finder Option-drag, English captions, no audio.
 
-With FileToX running in the menu bar, hold Option (⌥) and drag a file in Finder. Drop it on a format in the radial menu; the main app window can stay closed.
+With FileToX running in the menu bar, drag a file in Finder, then hold Control (⌃). Drop it on a format in the radial menu; the main app window can stay closed. Under **Settings → Activation**, choose Control, Option, Shift and Command in any combination, optionally with a letter, number, function or arrow key (or Space), then click **Save**. The shortcut persists on this Mac. Warnings identify enabled macOS system shortcuts and Finder drag gestures; shortcuts registered by other apps are outside this check.
 
 ## Features
 
-- Open a radial conversion menu with Option-drag in Finder, or choose files and folders in the app.
+- Open a radial conversion menu by dragging in Finder and holding the configured shortcut (Control by default), or choose files and folders in the app.
 - Convert images, documents, video, audio and archives through a catalog of 171 formats and 23 engines.
 - Create presets, arrange your radial toolbar and choose where converted files are saved.
 - Follow progress, cancel a job, retry failures and revisit recent conversions.
@@ -40,7 +40,7 @@ Captured from the English Release build on macOS.
 2. Pick a preset in the radial menu or select an output from **All output formats**.
 3. Find the result beside the source, or in your chosen output folder.
 
-On first launch, a setup guide explains Accessibility access for Finder Option-drag and checks access when you return from System Settings. Choose **Later** to keep converting through Home, or reopen the guide through **Activation → Show setup guide**. The app includes its conversion runtime; a separate .NET installation is not needed.
+On first launch, a setup guide explains Accessibility access for Finder drag activation and checks access when you return from System Settings. Choose **Later** to keep converting through Home, or reopen the guide through **Activation → Show setup guide**. The app includes its conversion runtime; a separate .NET installation is not needed.
 
 This does not guarantee conversion between every registered format. The route planner determines available presets and targets from the inputs and engine status. The 58 read-only formats are excluded from output choices. Missing engines and unavailable macOS routes show a reason.
 
