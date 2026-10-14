@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onLongJob = { [weak self] in self?.progressToast?.show() }
         model.onEditPreset = { [weak self] id in self?.showPresetEditor(id) }
         let monitor = GlobalDragMonitor()
+        monitor.shortcut = { [weak self] in self?.model.dragShortcut ?? .standard }
         monitor.onTrigger = { [weak self] point in
             guard let self, model.isDragEnabled else { return }
             model.prepareForDrag()

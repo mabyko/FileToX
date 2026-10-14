@@ -24,7 +24,9 @@
 		6E2241EA4B35177E74C4A1B8 /* PermissionOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E6F4C3144BB8C623CD01C3A /* PermissionOnboardingTests.swift */; };
 		6E87681B7ACABBD12121726E /* ThemeStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5491B40A401B0338C68583B7 /* ThemeStyles.swift */; };
 		6F491A91B498429E54614168 /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F40FD1DDFDF2D79C0B8CDD7A /* LocalizationTests.swift */; };
+		7C3D56CC20C1A58649C18A81 /* DragShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 932C381495FAD7A14A07BEB3 /* DragShortcut.swift */; };
 		80E34157EFDA6FC28E0774D7 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27703BDBD6007D47A5B3E7A /* AppModel.swift */; };
+		8AF4D55140A78FF51C8A72B0 /* DragShortcutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEE1EE7D38D149F6CDF5362 /* DragShortcutTests.swift */; };
 		8B4D159EBC14A51CAD526680 /* ConversionPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1615C83046F2EAA78AFBADC7 /* ConversionPanelController.swift */; };
 		95A39665ACDD52FC8BCBD8EA /* GlobalDragMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEC1220C6DD1FF5419BADC88 /* GlobalDragMonitor.swift */; };
 		9819DC0C47B60DC656B6166A /* PanelPlacement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98120A61BE14A99C3C58C1CA /* PanelPlacement.swift */; };
@@ -61,6 +63,7 @@
 		22A4946E966B339A39402356 /* DragPasteboardGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragPasteboardGateTests.swift; sourceTree = "<group>"; };
 		26C922EA85E01886765D28B7 /* DragGestureState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragGestureState.swift; sourceTree = "<group>"; };
 		2783EDF420B714A2F709AFF3 /* LibraryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViews.swift; sourceTree = "<group>"; };
+		2BEE1EE7D38D149F6CDF5362 /* DragShortcutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragShortcutTests.swift; sourceTree = "<group>"; };
 		335E08963FBF4F1E58FF3ACC /* SettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViews.swift; sourceTree = "<group>"; };
 		3468B291C6CDBD7EF122DA54 /* DonutGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DonutGeometryTests.swift; sourceTree = "<group>"; };
 		3A6BCBF25DD8B066659EFC4B /* DonutGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DonutGeometry.swift; sourceTree = "<group>"; };
@@ -80,6 +83,7 @@
 		87DCE6071D74B1A106F3CDDB /* ConverterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConverterView.swift; sourceTree = "<group>"; };
 		8AECAB50498DE186D3A3868D /* FileToX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FileToX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		90AB179F6E7C561D7812ED19 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		932C381495FAD7A14A07BEB3 /* DragShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragShortcut.swift; sourceTree = "<group>"; };
 		98120A61BE14A99C3C58C1CA /* PanelPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelPlacement.swift; sourceTree = "<group>"; };
 		9899FAF433476CA2C6DC2464 /* DragPasteboardGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragPasteboardGate.swift; sourceTree = "<group>"; };
 		9AF6BF1608F3BE41E48AD4DE /* PermissionOnboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionOnboarding.swift; sourceTree = "<group>"; };
@@ -134,6 +138,7 @@
 				3A6BCBF25DD8B066659EFC4B /* DonutGeometry.swift */,
 				26C922EA85E01886765D28B7 /* DragGestureState.swift */,
 				9899FAF433476CA2C6DC2464 /* DragPasteboardGate.swift */,
+				932C381495FAD7A14A07BEB3 /* DragShortcut.swift */,
 				CEC1220C6DD1FF5419BADC88 /* GlobalDragMonitor.swift */,
 				98120A61BE14A99C3C58C1CA /* PanelPlacement.swift */,
 				829E8ACBD1B81DBF342F3D81 /* ProgressToastController.swift */,
@@ -147,6 +152,7 @@
 				3468B291C6CDBD7EF122DA54 /* DonutGeometryTests.swift */,
 				3BBF46979C614FAD7447CB37 /* DragGestureStateTests.swift */,
 				22A4946E966B339A39402356 /* DragPasteboardGateTests.swift */,
+				2BEE1EE7D38D149F6CDF5362 /* DragShortcutTests.swift */,
 				5B7C338D26B27FB21E225848 /* PanelPlacementTests.swift */,
 			);
 			name = Platform;
@@ -356,6 +362,7 @@
 				6B075805A08870CD8C2412EB /* DonutGeometry.swift in Sources */,
 				E002255AE64D28659EB3FB22 /* DragGestureState.swift in Sources */,
 				1B4306C8AEF852DAE5296136 /* DragPasteboardGate.swift in Sources */,
+				7C3D56CC20C1A58649C18A81 /* DragShortcut.swift in Sources */,
 				43F2B146333970AC6F3F6996 /* EngineHost.swift in Sources */,
 				1703DD5964460742CAB018CB /* FileToXApp.swift in Sources */,
 				6A9B81FB43110633C77DDD62 /* FormatCatalog.swift in Sources */,
@@ -382,6 +389,7 @@
 				40E3A69857FA05E1C4CA1480 /* DonutGeometryTests.swift in Sources */,
 				F3DCDB6603BDFC03C8470112 /* DragGestureStateTests.swift in Sources */,
 				A24BC3DAE55786FBE1B3D4BE /* DragPasteboardGateTests.swift in Sources */,
+				8AF4D55140A78FF51C8A72B0 /* DragShortcutTests.swift in Sources */,
 				BBA278CE3DE81ADBAF6419A3 /* FileDropTests.swift in Sources */,
 				CE8B67AA1545769C0951362B /* FormatCatalogResourceTests.swift in Sources */,
 				6F491A91B498429E54614168 /* LocalizationTests.swift in Sources */,

@@ -13,8 +13,8 @@ struct DragPasteboardGate {
         initialChangeCount = nil
     }
 
-    func accepts(changeCount: Int, hasFileURLs: Bool, leftButtonPressed: Bool, optionPressed: Bool, generation: Int) -> Bool {
+    func accepts(changeCount: Int, hasFileURLs: Bool, leftButtonPressed: Bool, shortcutPressed: Bool, generation: Int) -> Bool {
         generation == self.generation && initialChangeCount != nil &&
-            changeCount != initialChangeCount && hasFileURLs && leftButtonPressed && optionPressed
+            changeCount != initialChangeCount && hasFileURLs && leftButtonPressed && shortcutPressed
     }
 }

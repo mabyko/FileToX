@@ -32,6 +32,7 @@ final class AppModel {
     private(set) var radialOpacity = 0.96
     var selectedPage = "home"
     var editingPresetID: String?
+    private(set) var dragShortcut: DragShortcut
     @ObservationIgnored var onShowRadial: ((NSPoint, Bool) -> Void)?
     @ObservationIgnored var onCloseRadial: (() -> Void)?
     @ObservationIgnored var onLongJob: (() -> Void)?
@@ -46,6 +47,7 @@ final class AppModel {
     init(host: EngineHost = EngineHost(), defaults: UserDefaults = .standard) {
         self.host = host
         self.defaults = defaults
+        dragShortcut = DragShortcut.load(from: defaults)
     }
     var language: AppLanguage { Localization.shared.language }
 
@@ -345,12 +347,17 @@ final class AppModel {
     }
 
     @discardableResult
-    func saveSettings(_ settings: JSONValue, baseRevision: Int? = nil) async -> Bool {
+    func saveSettings(_ settings: JSONValue, baseRevision: Int? = nil, dragShortcut: DragShortcut? = nil) async -> Bool {
+        if let dragShortcut, !dragShortcut.isValid { return false }
         guard let current = library else { return false }
         do {
             let previousLanguage = language
             let previousLanguageIdentifier = current.settings["language"]?.string
             library = try await host.saveSettings(baseRevision: baseRevision ?? current.revision, settings: settings)
+            if let dragShortcut {
+                dragShortcut.save(to: defaults)
+                self.dragShortcut = dragShortcut
+            }
             statusMessage = L("설정을 저장했습니다.")
             do { catalog = try await host.catalog() }
             catch { statusMessage = L("설정은 저장했지만 엔진 상태를 갱신하지 못했습니다. %@", L(error.localizedDescription)) }
