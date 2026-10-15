@@ -258,9 +258,16 @@
 "shortcut.key.none" = "없음 (보조 키만 사용)";
 "shortcut.key.space" = "스페이스";
 "shortcut.reset" = "Control로 초기화";
-"shortcut.drag.help" = "Finder에서 파일을 드래그하며 %@ 키를 누르세요. 메뉴가 열릴 때까지 선택한 키를 모두 누르고 있어야 합니다.";
-"shortcut.home.help" = "Finder에서 파일을 드래그한 뒤 %@ 키를 누르면 커서 위치에 원형 툴바가 열립니다.";
+"shortcut.drag.help" = "선택한 순서에 맞춰 Finder에서 파일을 드래그하고 %@ 키를 누르세요. 메뉴가 열릴 때까지 선택한 키를 모두 누르고 있어야 합니다.";
+"shortcut.activation.title" = "키를 누르는 순서";
+"shortcut.activation.beforeDrag" = "키를 누른 채 드래그";
+"shortcut.activation.duringDrag" = "드래그를 시작한 뒤 키 누르기";
+"shortcut.activation.either" = "두 방식 모두 사용 (기본값)";
+"shortcut.activation.beforeDrag.help" = "%@ 키를 누른 채 Finder에서 파일을 드래그하면 메뉴가 열립니다.";
+"shortcut.activation.duringDrag.help" = "Finder에서 파일을 먼저 드래그한 뒤 %@ 키를 누르면 메뉴가 열립니다.";
+"shortcut.activation.either.help" = "Finder에서 파일을 드래그하기 전이나 드래그 중에 %@ 키를 누르면 메뉴가 열립니다.";
 "shortcut.control.warning" = "macOS에서 Control + 클릭은 우클릭 메뉴를 엽니다. 파일을 먼저 드래그한 뒤 Control을 누르세요.";
+"shortcut.control.before.warning" = "macOS에서 Control + 클릭은 우클릭 메뉴를 열어 드래그를 방해할 수 있습니다. 다른 키를 선택하거나 드래그 후 키를 누를 수 있는 순서를 선택하세요.";
 "shortcut.copy.warning" = "Option + 드래그는 Finder의 파일 복사 동작과 겹칩니다.";
 "shortcut.move.warning" = "Command + 드래그는 Finder에서 다른 볼륨으로 파일을 이동하는 동작과 겹칩니다.";
 "shortcut.alias.warning" = "Option + Command + 드래그는 Finder의 별칭 만들기 동작과 겹칩니다.";
@@ -270,5 +277,5 @@
 "shortcut.scope" = "활성화된 macOS 시스템 단축키와 Finder 드래그 동작을 확인합니다. 다른 앱이 등록한 단축키는 포함되지 않습니다. 호출 키는 이 Mac에 저장됩니다.";
 "shortcut.layout.help" = "추가 문자 키는 US 키보드의 키 위치를 기준으로 합니다. 선택한 보조 키 조합과 정확히 일치할 때 메뉴가 열립니다.";
 "shortcut.function.help" = "키보드 설정에 따라 F 키를 누를 때 Fn/지구본 키도 함께 눌러야 합니다.";
-"permission.intro.message" = "Finder에서 파일을 드래그한 뒤 %@ 키를 누르면 원형 변환 메뉴를 열 수 있어요. 키와 드래그 동작을 감지하는 데 손쉬운 사용 권한을 사용합니다.";
-"permission.success.message" = "Finder에서 파일을 드래그한 뒤 %@ 키를 눌러 보세요. 원형 메뉴에서 원하는 형식에 놓으면 변환을 시작합니다.";
+"permission.intro.message" = "%@ 키와 드래그 동작을 감지하는 데 손쉬운 사용 권한을 사용합니다.";
+"permission.success.message" = "%@ 원형 메뉴에서 원하는 형식에 놓으면 변환을 시작합니다.";

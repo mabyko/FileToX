@@ -96,9 +96,9 @@ struct PermissionOnboardingView: View {
 
     private var message: String {
         switch step {
-        case .intro: L("permission.intro.message", model.dragShortcut.displayName)
+        case .intro: L("permission.intro.message", L("shortcut.activation.\(model.dragShortcut.activationMode.rawValue).help", model.dragShortcut.displayName))
         case .waiting: L("permission.waiting.message")
-        case .success: L("permission.success.message", model.dragShortcut.displayName)
+        case .success: L("permission.success.message", L("shortcut.activation.\(model.dragShortcut.activationMode.rawValue).help", model.dragShortcut.displayName))
         }
     }
 

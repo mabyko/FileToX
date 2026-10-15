@@ -14,7 +14,7 @@ final class AppModelTests: XCTestCase {
         }
         let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
         let model = AppModel(host: host, defaults: defaults)
-        let shortcut = DragShortcut(modifiers: [.control, .shift], keyCode: 40)
+        let shortcut = DragShortcut(modifiers: [.control, .shift], keyCode: 40, activationMode: .duringDrag)
         XCTAssertEqual(model.dragShortcut, .standard)
         await model.connect()
         let settings = try XCTUnwrap(model.library?.settings)

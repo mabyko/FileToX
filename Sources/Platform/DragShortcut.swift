@@ -8,14 +8,33 @@ struct DragShortcut: Codable, Equatable {
 
     var modifierBits: UInt
     var keyCode: UInt16?
+    var activationMode: ActivationMode
+
+    enum ActivationMode: String, Codable, CaseIterable, Identifiable {
+        case beforeDrag, duringDrag, either
+        var id: String { rawValue }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case modifierBits, keyCode, activationMode
+    }
+
     var modifiers: NSEvent.ModifierFlags {
         get { NSEvent.ModifierFlags(rawValue: modifierBits) }
         set { modifierBits = newValue.intersection(Self.modifierMask).rawValue }
     }
 
-    init(modifiers: NSEvent.ModifierFlags, keyCode: UInt16? = nil) {
+    init(modifiers: NSEvent.ModifierFlags, keyCode: UInt16? = nil, activationMode: ActivationMode = .either) {
         modifierBits = modifiers.intersection(Self.modifierMask).rawValue
         self.keyCode = keyCode
+        self.activationMode = activationMode
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        modifierBits = try values.decode(UInt.self, forKey: .modifierBits)
+        keyCode = try values.decodeIfPresent(UInt16.self, forKey: .keyCode)
+        activationMode = try values.decodeIfPresent(ActivationMode.self, forKey: .activationMode) ?? .either
     }
 
     var isValid: Bool {

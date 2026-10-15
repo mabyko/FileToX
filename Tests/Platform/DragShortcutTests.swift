@@ -7,6 +7,7 @@ final class DragShortcutTests: XCTestCase {
     func testDefaultIsControlAndMatchingRequiresExactModifierCombination() {
         let shortcut = DragShortcut.standard
         XCTAssertEqual(shortcut.displayName, "⌃")
+        XCTAssertEqual(shortcut.activationMode, .either)
         XCTAssertTrue(shortcut.matches(modifiers: [.control, .capsLock, .function]))
         XCTAssertFalse(shortcut.matches(modifiers: .option))
         XCTAssertFalse(shortcut.matches(modifiers: [.control, .shift]))
@@ -32,6 +33,42 @@ final class DragShortcutTests: XCTestCase {
         XCTAssertTrue(gesture.flagsChanged(shortcutPressed: shortcut.matches(modifiers: [.control, .shift], keyPressed: true), leftButtonPressed: true))
         XCTAssertTrue(gate.accepts(changeCount: 2, hasFileURLs: true, leftButtonPressed: true,
                                    shortcutPressed: true, generation: gate.generation))
+    }
+
+    func testAdditionalKeyCompletesShortcutAfterDragStartsOnlyInAllowedModes() {
+        for mode in DragShortcut.ActivationMode.allCases {
+            let shortcut = DragShortcut(modifiers: [.control, .shift], keyCode: 40, activationMode: mode)
+            var gesture = DragGestureState()
+            gesture.mouseDown(at: .zero)
+            XCTAssertFalse(gesture.mouseDragged(to: CGPoint(x: 10, y: 0),
+                                                shortcutPressed: shortcut.matches(modifiers: [.control, .shift]), activationMode: mode))
+            XCTAssertEqual(gesture.flagsChanged(shortcutPressed: shortcut.matches(modifiers: [.control, .shift], keyPressed: true),
+                                                leftButtonPressed: true, activationMode: mode), mode != .beforeDrag)
+        }
+    }
+
+    func testLegacyShortcutPreservesKeysAndDefaultsToEitherOrder() throws {
+        let name = "filetox-legacy-shortcut-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let modifiers: NSEvent.ModifierFlags = [.option, .shift]
+        let legacyData = try JSONSerialization.data(withJSONObject: ["modifierBits": modifiers.rawValue, "keyCode": 40])
+        defaults.set(legacyData, forKey: DragShortcut.defaultsKey)
+        let loaded = DragShortcut.load(from: defaults)
+        XCTAssertEqual(loaded.modifiers, modifiers)
+        XCTAssertEqual(loaded.keyCode, 40)
+        XCTAssertEqual(loaded.activationMode, .either)
+    }
+
+    func testEachActivationModeSurvivesSavingAndReloading() throws {
+        let name = "filetox-activation-mode-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        for mode in DragShortcut.ActivationMode.allCases {
+            let shortcut = DragShortcut(modifiers: .shift, activationMode: mode)
+            shortcut.save(to: defaults)
+            XCTAssertEqual(DragShortcut.load(from: defaults), shortcut)
+        }
     }
 
     func testEmptyModifiersAndUnsupportedKeysAreInvalid() {
