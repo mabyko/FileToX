@@ -103,6 +103,18 @@ struct SettingsJSONEditor: View {
             }
             DragShortcutEditor(shortcut: $shortcutDraft)
             Section {
+                Picker(L("shortcut.activation.title"), selection: $shortcutDraft.activationMode) {
+                    ForEach(DragShortcut.ActivationMode.allCases) { mode in
+                        Text(L("shortcut.activation.\(mode.rawValue)")).tag(mode)
+                    }
+                }.pickerStyle(.radioGroup).labelsHidden()
+            } header: {
+                Text(L("shortcut.activation.title"))
+            } footer: {
+                Text(L("shortcut.activation.\(shortcutDraft.activationMode.rawValue).help", shortcutDraft.displayName))
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section {
                 LabeledContent {
                     Button(L("설정 방법 보기"), action: model.showPermissionOnboarding)
                 } label: {
@@ -200,9 +212,11 @@ private struct DragShortcutEditor: View {
                     Text(key.name == "Space" ? L("shortcut.key.space") : key.name).tag(Int(key.code))
                 }
             }
-            Button(L("shortcut.reset")) { shortcut = .standard }
+            Button(L("shortcut.reset")) { shortcut = DragShortcut(modifiers: .control, activationMode: shortcut.activationMode) }
             if !shortcut.isValid { warning("shortcut.required") }
-            if shortcut.modifiers.contains(.control) { warning("shortcut.control.warning") }
+            if shortcut.modifiers.contains(.control) {
+                warning(shortcut.activationMode == .beforeDrag ? "shortcut.control.before.warning" : "shortcut.control.warning")
+            }
             if shortcut.modifiers.contains(.option) {
                 warning(shortcut.modifiers.contains(.command) ? "shortcut.alias.warning" : "shortcut.copy.warning")
             } else if shortcut.modifiers.contains(.command) { warning("shortcut.move.warning") }

@@ -258,9 +258,16 @@
 "shortcut.key.none" = "なし（修飾キーのみ）";
 "shortcut.key.space" = "スペース";
 "shortcut.reset" = "Controlに戻す";
-"shortcut.drag.help" = "Finderでファイルをドラッグしながら%@キーを押してください。メニューが開くまで選択したキーをすべて押し続けます。";
-"shortcut.home.help" = "Finderでファイルをドラッグしてから%@キーを押すと、カーソル位置に円形ツールバーが開きます。";
+"shortcut.drag.help" = "選択した順序でFinderのファイルのドラッグと%@キーの操作を行ってください。メニューが開くまで選択したキーをすべて押し続けます。";
+"shortcut.activation.title" = "キーを押すタイミング";
+"shortcut.activation.beforeDrag" = "キーを押したままドラッグ";
+"shortcut.activation.duringDrag" = "ドラッグを始めてからキーを押す";
+"shortcut.activation.either" = "どちらの順序でも使用（デフォルト）";
+"shortcut.activation.beforeDrag.help" = "%@キーを押したままFinderでファイルをドラッグすると、メニューが開きます。";
+"shortcut.activation.duringDrag.help" = "Finderでファイルをドラッグし始めてから%@キーを押すと、メニューが開きます。";
+"shortcut.activation.either.help" = "Finderでファイルをドラッグする前、またはドラッグ中に%@キーを押すと、メニューが開きます。";
 "shortcut.control.warning" = "macOSではControl＋クリックでショートカットメニューが開きます。先にドラッグを始めてからControlを押してください。";
+"shortcut.control.before.warning" = "macOSではControl＋クリックでショートカットメニューが開き、ドラッグを妨げることがあります。別のキーを選ぶか、ドラッグ開始後にキーを押せる順序を選んでください。";
 "shortcut.copy.warning" = "Option＋ドラッグはFinderのファイルコピー操作と重なります。";
 "shortcut.move.warning" = "Command＋ドラッグはFinderで別のボリュームにファイルを移動する操作と重なります。";
 "shortcut.alias.warning" = "Option＋Command＋ドラッグはFinderのエイリアス作成操作と重なります。";
@@ -270,5 +277,5 @@
 "shortcut.scope" = "有効なmacOSシステムショートカットとFinderのドラッグ操作を確認します。他のアプリが登録したショートカットは含まれません。呼び出しキーはこのMacに保存されます。";
 "shortcut.layout.help" = "追加の文字キーはUSキーボードのキー位置を基準にします。選択した修飾キーの組み合わせと一致する場合にメニューが開きます。";
 "shortcut.function.help" = "キーボード設定によっては、Fキーと一緒にFn／地球儀キーを押す必要があります。";
-"permission.intro.message" = "Finderでファイルをドラッグしてから%@キーを押すと、円形の変換メニューを開けます。キーとドラッグ操作の検出にアクセシビリティのアクセス権を使用します。";
-"permission.success.message" = "Finderでファイルをドラッグしてから%@キーを押してください。円形メニューの形式にドロップすると変換が始まります。";
+"permission.intro.message" = "%@ キーとドラッグ操作の検出にアクセシビリティのアクセス権を使用します。";
+"permission.success.message" = "%@ 円形メニューの形式にドロップすると変換が始まります。";

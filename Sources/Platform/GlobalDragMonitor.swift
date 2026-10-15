@@ -70,11 +70,12 @@ final class GlobalDragMonitor {
             pasteboardGate.begin(changeCount: NSPasteboard(name: .drag).changeCount)
             gesture.mouseDown(at: point)
         case .leftMouseDragged:
-            triggered = gesture.mouseDragged(to: point, shortcutPressed: shortcutPressed)
+            triggered = gesture.mouseDragged(to: point, shortcutPressed: shortcutPressed, activationMode: configuredShortcut.activationMode)
         case .flagsChanged:
             let leftButtonPressed = NSEvent.pressedMouseButtons & 1 != 0
             if !leftButtonPressed { endDrag() }
-            triggered = gesture.flagsChanged(shortcutPressed: shortcutPressed, leftButtonPressed: leftButtonPressed)
+            triggered = gesture.flagsChanged(shortcutPressed: shortcutPressed, leftButtonPressed: leftButtonPressed,
+                                             activationMode: configuredShortcut.activationMode)
         case .leftMouseUp:
             endDrag()
         case .keyDown where event.keyCode == 53:
@@ -85,7 +86,8 @@ final class GlobalDragMonitor {
             releaseTimer = nil
         case .keyDown, .keyUp:
             guard configuredShortcut.keyCode == event.keyCode else { return }
-            triggered = gesture.flagsChanged(shortcutPressed: shortcutPressed, leftButtonPressed: NSEvent.pressedMouseButtons & 1 != 0)
+            triggered = gesture.flagsChanged(shortcutPressed: shortcutPressed, leftButtonPressed: NSEvent.pressedMouseButtons & 1 != 0,
+                                             activationMode: configuredShortcut.activationMode)
         default:
             break
         }

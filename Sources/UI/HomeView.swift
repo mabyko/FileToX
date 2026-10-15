@@ -68,7 +68,7 @@ struct HomeView: View {
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
                     .accessibilityHidden(true)
-                Text(L("shortcut.home.help", model.dragShortcut.displayName))
+                Text(L("shortcut.activation.\(model.dragShortcut.activationMode.rawValue).help", model.dragShortcut.displayName))
             }.font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 24)
         }
         .frame(maxWidth: .infinity, minHeight: 210)

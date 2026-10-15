@@ -258,9 +258,16 @@
 "shortcut.key.none" = "None (modifier keys only)";
 "shortcut.key.space" = "Space";
 "shortcut.reset" = "Reset to Control";
-"shortcut.drag.help" = "Hold %@ while dragging files in Finder. Keep all selected keys held until the menu opens.";
-"shortcut.home.help" = "Drag a file in Finder, then hold %@ to open the radial toolbar at the cursor.";
+"shortcut.drag.help" = "Use %@ and drag files in Finder in the selected order. Keep all selected keys held until the menu opens.";
+"shortcut.activation.title" = "When to press the shortcut";
+"shortcut.activation.beforeDrag" = "Hold the shortcut, then drag";
+"shortcut.activation.duringDrag" = "Start dragging, then press the shortcut";
+"shortcut.activation.either" = "Either order (default)";
+"shortcut.activation.beforeDrag.help" = "Hold %@, then start dragging a file in Finder to open the menu.";
+"shortcut.activation.duringDrag.help" = "Start dragging a file in Finder, then hold %@ to open the menu.";
+"shortcut.activation.either.help" = "To open the menu, hold %@ before or after you start dragging a file in Finder.";
 "shortcut.control.warning" = "Control-click opens a shortcut menu in macOS. Start dragging first, then hold Control.";
+"shortcut.control.before.warning" = "Control-click opens a shortcut menu in macOS and can prevent dragging. Choose another key or an order that lets you press the shortcut after dragging starts.";
 "shortcut.copy.warning" = "Option-drag also copies files in Finder.";
 "shortcut.move.warning" = "Command-drag also moves files between volumes in Finder.";
 "shortcut.alias.warning" = "Option-Command-drag also creates aliases in Finder.";
@@ -270,5 +277,5 @@
 "shortcut.scope" = "Checks enabled macOS system shortcuts and Finder drag gestures. Shortcuts registered by other apps are not included. This shortcut is saved on this Mac.";
 "shortcut.layout.help" = "Additional letter keys use US keyboard positions. Only the selected modifier combination activates the menu.";
 "shortcut.function.help" = "Depending on your keyboard settings, hold Fn/Globe as well to use an F-key.";
-"permission.intro.message" = "Drag a file in Finder, then hold %@ to open the radial conversion menu. Accessibility access is used to detect the key and drag gesture.";
-"permission.success.message" = "Drag a file in Finder, then hold %@. Drop it on a format in the radial menu to start converting.";
+"permission.intro.message" = "%@ Accessibility access is used to detect the key and drag gesture.";
+"permission.success.message" = "%@ Drop the file on a format in the radial menu to start converting.";
