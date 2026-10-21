@@ -55,13 +55,9 @@ final class GlobalDragMonitor {
     private func handle(_ event: NSEvent) {
         let point = NSEvent.mouseLocation
         let configured = shortcuts()
-        let pressed = RadialMenuKind.allCases.first { kind in
-            guard let shortcut = configured[kind] else { return false }
-            let keyPressed = shortcut.keyCode.map { code in
-                (event.type == .keyDown || event.type == .keyUp) && event.keyCode == code
-                    ? event.type == .keyDown : CGEventSource.keyState(.combinedSessionState, key: code)
-            } ?? false
-            return shortcut.matches(modifiers: event.modifierFlags, keyPressed: keyPressed)
+        let pressed = DragMenuGestureState.matchingMenu(shortcuts: configured, modifiers: event.modifierFlags) { code in
+            (event.type == .keyDown || event.type == .keyUp) && event.keyCode == code
+                ? event.type == .keyDown : CGEventSource.keyState(.combinedSessionState, key: code)
         }
         if pressed != gesture.activeMenu, pendingTrigger != nil {
             cancelPendingTrigger()

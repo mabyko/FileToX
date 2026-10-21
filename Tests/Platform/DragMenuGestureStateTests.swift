@@ -5,6 +5,32 @@ import XCTest
 final class DragMenuGestureStateTests: XCTestCase {
     private let shortcuts: [RadialMenuKind: DragShortcut] = [.convert: .standard, .tools: .toolsStandard]
 
+    func testExtraKeyShortcutTakesPriorityForOpeningAndSwitchingEitherMenu() {
+        for keyedMenu in RadialMenuKind.allCases {
+            let modifierMenu: RadialMenuKind = keyedMenu == .convert ? .tools : .convert
+            let configured: [RadialMenuKind: DragShortcut] = [
+                modifierMenu: .standard, keyedMenu: DragShortcut(modifiers: .control, keyCode: 40)
+            ]
+            let modifiersOnly = DragMenuGestureState.matchingMenu(shortcuts: configured, modifiers: .control) { _ in false }
+            let extraKey = DragMenuGestureState.matchingMenu(shortcuts: configured, modifiers: .control) { $0 == 40 }
+            XCTAssertEqual(modifiersOnly, modifierMenu)
+            XCTAssertEqual(extraKey, keyedMenu)
+            var state = DragMenuGestureState()
+            state.mouseDown(at: .zero)
+            XCTAssertEqual(state.update(point: CGPoint(x: 10, y: 0), pressed: extraKey,
+                                        leftButtonPressed: true, shortcuts: configured), keyedMenu)
+            XCTAssertEqual(state.update(pressed: modifiersOnly, leftButtonPressed: true, shortcuts: configured), modifierMenu)
+            XCTAssertEqual(state.update(pressed: extraKey, leftButtonPressed: true, shortcuts: configured), keyedMenu)
+        }
+    }
+
+    func testMenuMatchingKeepsExactModifiersAndHandlesNoMatch() {
+        XCTAssertEqual(DragMenuGestureState.matchingMenu(shortcuts: shortcuts, modifiers: .control) { _ in false }, .convert)
+        XCTAssertEqual(DragMenuGestureState.matchingMenu(shortcuts: shortcuts, modifiers: [.control, .shift]) { _ in false }, .tools)
+        XCTAssertNil(DragMenuGestureState.matchingMenu(shortcuts: shortcuts, modifiers: .option) { _ in true })
+        XCTAssertNil(DragMenuGestureState.matchingMenu(shortcuts: [:], modifiers: .control) { _ in true })
+    }
+
     func testSwitchingWithShiftKeepsMenuAfterKeyReleaseAndCanSwitchBack() {
         var state = DragMenuGestureState()
         state.mouseDown(at: .zero)

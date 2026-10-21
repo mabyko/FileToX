@@ -12,6 +12,16 @@ struct DragMenuGestureState {
     private(set) var activeMenu: RadialMenuKind?
     private var cancelled = false
 
+    static func matchingMenu(shortcuts: [RadialMenuKind: DragShortcut], modifiers: NSEvent.ModifierFlags,
+                             keyPressed: (UInt16) -> Bool) -> RadialMenuKind? {
+        let matching = RadialMenuKind.allCases.filter { kind in
+            guard let shortcut = shortcuts[kind] else { return false }
+            return shortcut.matches(modifiers: modifiers, keyPressed: shortcut.keyCode.map(keyPressed) ?? false)
+        }
+        // An extra held key takes precedence over a modifier-only shortcut.
+        return matching.first { shortcuts[$0]?.keyCode != nil } ?? matching.first
+    }
+
     mutating func mouseDown(at point: CGPoint) {
         self = Self()
         for kind in RadialMenuKind.allCases {
