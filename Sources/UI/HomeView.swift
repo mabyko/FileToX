@@ -5,13 +5,15 @@ struct HomeView: View {
     @State private var isTargeted = false
     @State private var targetSearch = ""
     @State private var showAllTargets = false
+    @State private var selectedEntryID: String?
 
     private var motion: Bool { !model.reduceMotion }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                dropZone
+                if model.selectedFiles.isEmpty { dropZone }
+                else { selectedFiles.transition(.blurSwap) }
                 HStack(spacing: 10) {
                     Button(action: model.chooseFiles) { Label(L("파일 또는 폴더 선택…"), systemImage: "folder") }
                         .buttonStyle(.borderedProminent).controlSize(.large).keyboardShortcut("o", modifiers: .command)
@@ -21,7 +23,7 @@ struct HomeView: View {
                             .labelStyle(TrailingIconLabel(rotation: showAllTargets ? 180 : 0))
                     }.controlSize(.large)
                 }
-                if !model.selectedFiles.isEmpty { selectedFiles.transition(.blurSwap) }
+                if !model.selectedFiles.isEmpty { conversionChoices }
                 if showAllTargets { targetList.transition(.blurSwap) }
                 ForEach(model.activeJobs, id: \.jobId) { job in JobCard(model: model, job: job).transition(.blurSwap) }
                 HStack(alignment: .firstTextBaseline) {
@@ -49,6 +51,8 @@ struct HomeView: View {
                 .animation(Motion.when(motion, Motion.open), value: model.selectedFiles)
                 .animation(Motion.when(motion, Motion.open), value: model.activeJobs.map(\.jobId))
         }
+        .onChange(of: model.selectedFiles) { _, _ in selectedEntryID = nil }
+        .onChange(of: model.radialMenu) { _, _ in selectedEntryID = nil; showAllTargets = false }
     }
 
     private var dropZone: some View {
@@ -79,22 +83,30 @@ struct HomeView: View {
         }
         .scaleEffect(isTargeted ? 1.01 : 1)
         .animation(Motion.when(motion, isTargeted ? Motion.pop : Motion.quick), value: isTargeted)
-        .overlay { FileDropTarget(isTargeted: $isTargeted, isEnabled: model.isConnected) { urls in Task { await model.resolve(urls) } } }
+        .overlay { FileDropTarget(isTargeted: $isTargeted, isEnabled: model.isConnected) { urls in Task { await model.resolve(urls, showRadial: false) } } }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L("변환할 파일 드롭 영역"))
     }
 
     private var selectedFiles: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L("선택한 파일 %@개", String(describing: (model.selectedFiles.count)))).font(.callout.weight(.semibold))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(model.selectedFiles, id: \.self) { url in
-                        Label(url.lastPathComponent, systemImage: url.hasDirectoryPath ? "folder" : "doc")
-                            .font(.caption).lineLimit(1)
-                            .padding(.horizontal, 9).padding(.vertical, 5)
-                            .background(Color.primary.opacity(0.06), in: Capsule())
-                            .help(url.path)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(L("선택한 파일 %@개", String(describing: (model.selectedFiles.count)))).font(.headline)
+                Spacer()
+                Button(L("home.clearSelection")) { model.selectFiles([]) }.buttonStyle(.borderless)
+                    .disabled(model.isResolving || model.isStarting)
+            }
+            ForEach(Array(model.selectedFiles.prefix(5)), id: \.self) { url in
+                Label {
+                    Text(url.lastPathComponent).lineLimit(2).truncationMode(.middle).textSelection(.enabled)
+                } icon: {
+                    Image(systemName: url.hasDirectoryPath ? "folder" : "doc").foregroundStyle(model.accentColor)
+                }.font(.callout).help(url.path)
+            }
+            if model.selectedFiles.count > 5 {
+                DisclosureGroup(L("home.moreFiles", String(model.selectedFiles.count - 5))) {
+                    ForEach(Array(model.selectedFiles.dropFirst(5)), id: \.self) { url in
+                        Text(url.lastPathComponent).font(.callout).textSelection(.enabled).help(url.path)
                     }
                 }
             }
@@ -106,6 +118,78 @@ struct HomeView: View {
                     }
                 }.font(.callout)
             }
+        }.fileeCard()
+    }
+
+    private var chosenEntry: RadialMenuEntry? {
+        model.radialEntries.first { $0.id == selectedEntryID && $0.available } ?? model.radialEntries.first { $0.available }
+    }
+
+    private var conversionChoices: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker(L("menu.choose"), selection: $model.radialMenu) {
+                ForEach(RadialMenuKind.allCases) { Text($0.title).tag($0) }
+            }.pickerStyle(.segmented).frame(maxWidth: 340)
+            if model.isResolving {
+                ProgressView(L("형식 확인 중…")).padding(.vertical, 12)
+            } else if model.radialEntries.isEmpty {
+                Text(L("menu.empty")).foregroundStyle(.secondary)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 148), spacing: 8)], spacing: 8) {
+                    ForEach(model.radialEntries) { entry in
+                        Button { selectedEntryID = entry.id } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Label(entry.title, systemImage: entry.symbol ?? "arrow.triangle.2.circlepath")
+                                    .font(.callout.weight(.semibold)).lineLimit(2)
+                                if !entry.available || entry.caption.caseInsensitiveCompare(entry.title) != .orderedSame {
+                                    Text(entry.available ? entry.caption : entry.reason ?? L("사용할 수 없음"))
+                                        .font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                                }
+                            }.frame(maxWidth: .infinity, minHeight: 48, alignment: .leading).padding(10)
+                                .background(chosenEntry?.id == entry.id ? model.accentColor.opacity(0.1) : Color.fileeSurface,
+                                            in: RoundedRectangle(cornerRadius: 9))
+                                .overlay { RoundedRectangle(cornerRadius: 9).strokeBorder(chosenEntry?.id == entry.id ? model.accentColor : Color.primary.opacity(0.1), lineWidth: 1) }
+                        }.buttonStyle(.plain).disabled(!entry.available || model.isStarting)
+                            .help(entry.reason ?? entry.title).accessibilityAddTraits(chosenEntry?.id == entry.id ? .isSelected : [])
+                    }
+                }
+            }
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 3) {
+                    if chosenEntry?.symbol != nil {
+                        Text(L("menu.fileAction.description")).font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Label(outputSummary, systemImage: "folder").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text(L("home.sourceProtected")).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    guard let entry = chosenEntry else { return }
+                    Task { await model.invokeRadialEntry(entry) }
+                } label: {
+                    Text(chosenEntry.map { L("menu.invoke", $0.title) } ?? L("menu.choose"))
+                }.buttonStyle(.borderedProminent).controlSize(.large)
+                    .disabled(chosenEntry == nil || model.isResolving || model.isStarting || !model.isConnected)
+            }
+            Button(L("home.openRadial")) {
+                Task { await model.resolve(model.selectedFiles, clickMode: true) }
+            }.buttonStyle(.borderless).disabled(model.isResolving || model.isStarting || !model.isConnected)
+        }
+    }
+
+    private var outputSummary: String {
+        let preset: JSONValue?
+        if let entry = chosenEntry, case .preset(let slice) = entry {
+            preset = model.library?.presets.first { $0.identity == slice.presetId }
+        } else { preset = nil }
+        let output = preset?["output"]
+        let rule = output?["location"]?.string == "default" || output?["location"] == nil
+            ? model.library?.settings["defaultOutput"] : output
+        switch rule?["location"]?.string {
+        case "customFolder": return rule?["customFolder"]?.string ?? L("지정 폴더")
+        case "subfolder": return L("하위 폴더") + " · " + (rule?["subfolderName"]?.string ?? "")
+        default: return L("원본 폴더")
         }
     }
 

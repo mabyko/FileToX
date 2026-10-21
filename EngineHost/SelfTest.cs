@@ -214,6 +214,15 @@ internal static class SelfTest
                 library = await host.CallAsync("settings.save", new JsonObject { ["baseRevision"] = library["revision"]!.GetValue<int>(), ["settings"] = settings });
                 var selection = await host.CallAsync("selection.resolve", new JsonObject { ["paths"] = new JsonArray(png) });
                 Check(selection["slices"]!.AsArray().Any(s => s!["displayName"]?.GetValue<string>() == "サイズを半分に"), "live language save updates Japanese slices without restart");
+                var tools = selection["tools"]!.AsArray();
+                Check(tools.Any(s => s!["presetId"]?.GetValue<string>() == "half-size") &&
+                      tools.Any(s => s!["presetId"]?.GetValue<string>() == "grayscale"), "image tools include resize and grayscale");
+                Check(tools.Count <= 12 && !tools.Any(s => s!["presetId"]?.GetValue<string>() == "mp4-720"), "image tools are bounded and exclude media-only tools");
+                var presetOptions = selection["presetOptions"]!.AsArray();
+                Check(presetOptions.Count == library["presets"]!.AsArray().Count &&
+                      presetOptions.Any(s => s!["presetId"]?.GetValue<string>() == "to-mp4"), "all presets carry availability for custom tool menus");
+                Check(tools.First(s => s!["presetId"]?.GetValue<string>() == "half-size")!["reasonKey"] is not null,
+                    "unavailable tools retain engine reasons");
                 var presets = library["presets"]!.DeepClone();
                 presets.AsArray().First(p => p!["id"]!.GetValue<string>() == "half-size")!["name"] = "My preset 이름 テスト";
                 var profiles = library["profiles"]!.DeepClone();
@@ -297,6 +306,8 @@ internal static class SelfTest
             Check(!png["available"]!.GetValue<bool>() && png["reasonKey"] is not null, "target png has a reason");
             var zip = selection["slices"]!.AsArray().FirstOrDefault(t => t!["presetId"]!.GetValue<string>() == "zip-all");
             Check(zip is null || zip["runnableCount"]!.GetValue<int>() == 0, "zip-all counts nothing without an archive engine");
+            Check(selection["tools"]!.AsArray().Any(t => t!["presetId"]?.GetValue<string>() == "zip-all"),
+                "mixed and unknown files still offer archive tools");
 
             // Library round trip and revisions.
             var library = await host.CallAsync("library.get", new JsonObject());

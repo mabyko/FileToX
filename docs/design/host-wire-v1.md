@@ -4,7 +4,8 @@
 
 - `hello`: `{protocol:1,hostVersion,fileeCommit,rid,dataDir}`.
 - `catalog.get` → `{formats:[{id,displayName,category,extensions,writable,isVirtual}],engines:[{id,displayName,available,reasonKey?,detail?,version?}]}`.
-- `selection.resolve {paths:[String]}` → `{profileId:String?,formats:[String],unknown:[String],rejected:[{path,reason}],slices:[Slice],targets:[Target]}`. 일치하는 툴바 프로필이 없으면 `profileId=null`, `slices=[]`이며 전체 출력 형식은 그대로 반환한다.
+- `selection.resolve {paths:[String]}` → `{profileId:String?,formats:[String],unknown:[String],rejected:[{path,reason}],slices:[Slice],tools:[Slice],presetOptions:[Slice],targets:[Target]}`. 일치하는 툴바 프로필이 없으면 `profileId=null`, `slices=[]`이며 전체 출력 형식은 그대로 반환한다.
+- `tools`는 입력 종류와 옵션에 맞는 도구 프리셋(최대 12개), `presetOptions`는 모든 저장된 프리셋의 실행 가능 여부다. 기존 `slices`는 파일 종류별 사용자 프로필 순서를 유지한다. Swift는 두 새 배열이 없는 이전 응답도 읽을 수 있다. 클립보드·Finder 작업은 host 프리셋이 아니며 Swift에서 수행한다.
 - Slice = `{presetId,displayName,targetFormat,available,reasonKey?,reasonText?,runnableCount,needsPackage?,canDownload:Bool,guidanceKey?}`.
 - Target = `{formatId,available,reasonKey?,reasonText?,runnableCount}`. 전체 writable 형식과 folder·*에 대해 host의 planner와 옵션으로 판단한다.
 - `job.start {paths:[String],presetId?:String,targetFormat?:String,preset?:Object}` → `{jobId}`. 셋 중 하나만 허용. targetFormat은 기본 옵션으로 프리셋을 만들며 이름 충돌 정책은 Rename을 기본으로 한다. presetId는 저장된 라이브러리의 프리셋이다.

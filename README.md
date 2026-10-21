@@ -14,9 +14,15 @@ Built with SwiftUI and AppKit for macOS 15 or later. English is the default lang
 
 With FileToX running in the menu bar, drag a file in Finder, then hold Control (⌃). Drop it on a format in the radial menu; the main app window can stay closed. Under **Settings → Activation**, choose Control, Option, Shift and Command in any combination, optionally with a letter, number, function or arrow key (or Space), then click **Save**. Below the shortcut editor, choose whether to hold the keys before dragging, press them after dragging starts, or allow either order (the default). In the after-dragging mode, keys already held at the start must be released and pressed again. The shortcut and activation order persist on this Mac; existing shortcuts keep allowing either order. Warnings identify enabled macOS system shortcuts and Finder drag gestures; shortcuts registered by other apps are outside this check.
 
+The radial menu has two modes: **Control (⌃)** opens **Convert formats**, and **Control+Shift (⌃⇧)** opens **File tools**. You can release the keys after the menu opens and press the other combination to switch during the same drag. Activation order applies to opening a menu. Configure each shortcut separately under **Activation**; duplicate key combinations cannot be saved. Existing primary shortcuts are preserved. If an existing primary uses Control+Shift, the new secondary defaults to Control+Option+Shift instead.
+
+Under **Radial toolbar → File tools**, automatic mode selects relevant tools such as resizing, grayscale, PDF splitting/merging and archive packing, followed by **Show in Finder**, **Copy files** and **Copy paths**. Turn automatic mode off to arrange any saved preset and these file actions together, up to 12 items. Copy files places file URLs on the clipboard for pasting in Finder. File tools use the same conversion engine checks and source protection as other presets. File actions do not run a conversion.
+
+Home keeps file selection, preset selection and execution in the main window. Choose **Open radial menu…** to use the popup. In the popup's click mode, arrow keys select an item, Enter runs it, **M** switches modes, and Escape closes it. The conversion menu continues to use your existing file-type profiles.
+
 ## Features
 
-- Open a radial conversion menu by dragging in Finder and holding the configured shortcut (Control by default), or choose files and folders in the app.
+- Open a radial conversion menu by dragging in Finder and holding the configured shortcut (Control by default), or choose files and folders in the app and run them from Home.
 - Convert images, documents, video, audio and archives through a catalog of 171 formats and 23 engines.
 - Create presets, arrange your radial toolbar and choose where converted files are saved.
 - Follow progress, cancel a job, retry failures and revisit recent conversions.
@@ -32,12 +38,12 @@ With FileToX running in the menu bar, drag a file in Finder, then hold Control (
 <tr><td width="40%" align="center"><img src="docs/images/filetox-radial.png" width="340" alt="Radial conversion menu"></td><td width="60%"><img src="docs/images/filetox-theme.png" width="620" alt="Theme and accent color"></td></tr>
 </table>
 
-Captured from the English Release build on macOS.
+Home and both radial menus are captured from native SwiftUI views using an isolated engine data folder. The theme screenshot is from the earlier English Release build. [File tools menu](docs/images/filetox-tools.png).
 
 ## Getting started
 
 1. Drop a file onto Home, or choose files and folders.
-2. Pick a preset in the radial menu or select an output from **All output formats**.
+2. Pick a preset or file tool on Home and click its Run button, open the radial menu, or select an output from **All output formats**.
 3. Find the result beside the source, or in your chosen output folder.
 
 On first launch, a setup guide explains Accessibility access for Finder drag activation and checks access when you return from System Settings. Choose **Later** to keep converting through Home, or reopen the guide through **Activation → Show setup guide**. The app includes its conversion runtime; a separate .NET installation is not needed.

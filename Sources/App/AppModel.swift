@@ -33,6 +33,10 @@ final class AppModel {
     var selectedPage = "home"
     var editingPresetID: String?
     private(set) var dragShortcut: DragShortcut
+    private(set) var toolsDragShortcut: DragShortcut
+    var radialMenu: RadialMenuKind = .convert
+    private(set) var toolsMenuItems: [String]?
+    private static let toolsMenuDefaultsKey = "toolsMenuItems"
     @ObservationIgnored var onShowRadial: ((NSPoint, Bool) -> Void)?
     @ObservationIgnored var onCloseRadial: (() -> Void)?
     @ObservationIgnored var onLongJob: (() -> Void)?
@@ -47,7 +51,12 @@ final class AppModel {
     init(host: EngineHost = EngineHost(), defaults: UserDefaults = .standard) {
         self.host = host
         self.defaults = defaults
-        dragShortcut = DragShortcut.load(from: defaults)
+        let primary = DragShortcut.load(from: defaults)
+        dragShortcut = primary
+        toolsDragShortcut = DragShortcut.loadTools(from: defaults, primary: primary)
+        if let ids = defaults.stringArray(forKey: Self.toolsMenuDefaultsKey) {
+            toolsMenuItems = Array(NSOrderedSet(array: ids).array.compactMap { $0 as? String }.prefix(12))
+        }
     }
     var language: AppLanguage { Localization.shared.language }
 
@@ -61,6 +70,19 @@ final class AppModel {
     var sliceOpacity: Double { min(max(library?.settings["donut"]?["opacity"]?.double ?? 0.96, 0.5), 1) }
     var reduceMotion: Bool { library?.settings["theme"]?["reduceMotion"]?.bool ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     var isDragEnabled: Bool { isConnected && library?.settings["paused"]?.bool != true }
+    var radialEntries: [RadialMenuEntry] {
+        guard let selection else { return [] }
+        if radialMenu == .convert { return selection.slices.map(RadialMenuEntry.preset) }
+        guard let toolsMenuItems else {
+            return Array((selection.tools ?? []).prefix(9)).map(RadialMenuEntry.preset) + FileMenuAction.allCases.map(RadialMenuEntry.action)
+        }
+        let presets = selection.presetOptions ?? selection.slices + (selection.tools ?? [])
+        return toolsMenuItems.compactMap { id in
+            if let action = FileMenuAction.allCases.first(where: { $0.id == id }) { return .action(action) }
+            return presets.first(where: { "preset:" + $0.presetId == id }).map(RadialMenuEntry.preset)
+        }
+    }
+    var dragShortcuts: [RadialMenuKind: DragShortcut] { [.convert: dragShortcut, .tools: toolsDragShortcut] }
 
     static func isFinished(_ state: String) -> Bool {
         ["completed", "completedwitherrors", "failed", "cancelled", "interrupted"].contains(state.lowercased())
@@ -118,7 +140,7 @@ final class AppModel {
         panel.title = L("파일 또는 폴더 선택…")
         panel.prompt = L("Select")
         if panel.runModal() == .OK {
-            Task { await resolve(panel.urls, clickMode: true) }
+            Task { await resolve(panel.urls, clickMode: true, showRadial: false) }
         }
     }
 
@@ -128,7 +150,7 @@ final class AppModel {
         radialOpacity = sliceOpacity
     }
 
-    func prepareForDrag() {
+    func prepareForDrag(menu: RadialMenuKind = .convert) {
         if let job = radialJob, !Self.isFinished(job.state) { onLongJob?() }
         captureRadialAppearance()
         completedRadialTask?.cancel()
@@ -136,9 +158,53 @@ final class AppModel {
         radialJobID = nil
         radialClickMode = false
         radialVisible = false
+        radialMenu = menu
+    }
+
+    func switchRadialMenu(_ menu: RadialMenuKind) {
+        guard !isStarting, !radialVisible || radialJobID == nil else { return }
+        radialMenu = menu
+    }
+
+    @discardableResult
+    func saveToolsMenu(_ ids: [String]?) -> Bool {
+        if let ids {
+            let known = Set((library?.presets ?? []).map { "preset:" + $0.identity } + FileMenuAction.allCases.map(\.id))
+            guard !ids.isEmpty, ids.count <= 12, Set(ids).count == ids.count, ids.allSatisfy(known.contains) else { return false }
+            defaults.set(ids, forKey: Self.toolsMenuDefaultsKey)
+        } else { defaults.removeObject(forKey: Self.toolsMenuDefaultsKey) }
+        toolsMenuItems = ids
+        return true
+    }
+
+    func invokeRadialEntry(_ entry: RadialMenuEntry, pasteboard: NSPasteboard = .general) async {
+        guard !isResolving, !isStarting,
+              radialEntries.contains(where: { $0.id == entry.id && $0.available }) else { return }
+        switch entry {
+        case .preset(let slice): await start(presetID: slice.presetId)
+        case .action(let action):
+            guard !selectedFiles.isEmpty, selectedFiles.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
+                statusMessage = L("action.missing"); return
+            }
+            switch action {
+            case .reveal: reveal(selectedFiles.map(\.path))
+            case .copyFiles:
+                pasteboard.clearContents()
+                guard pasteboard.writeObjects(selectedFiles.map { $0 as NSURL }) else { statusMessage = L("action.failed"); return }
+                statusMessage = L("action.copiedFiles")
+            case .copyPaths:
+                pasteboard.clearContents()
+                guard pasteboard.setString(selectedFiles.map(\.path).joined(separator: "\n"), forType: .string) else {
+                    statusMessage = L("action.failed"); return
+                }
+                statusMessage = L("action.copiedPaths")
+            }
+            closeRadial()
+        }
     }
 
     func resolve(_ urls: [URL], clickMode: Bool = true, showRadial: Bool = true) async {
+        if clickMode, !showRadial { closeRadial() }
         let local = urls.filter { $0.isFileURL && ($0.host == nil || $0.host == "" || $0.host == "localhost") }
         if selectedFiles == local && (selection != nil || isResolving) {
             if clickMode, !isResolving {
@@ -147,7 +213,7 @@ final class AppModel {
                 radialJobID = nil
                 captureRadialAppearance()
                 radialClickMode = true
-                radialVisible = true
+                radialVisible = showRadial
                 if showRadial { onShowRadial?(NSEvent.mouseLocation, true) }
             }
             return
@@ -159,7 +225,7 @@ final class AppModel {
         radialJobID = nil
         if clickMode { captureRadialAppearance() }
         radialClickMode = clickMode
-        radialVisible = true
+        radialVisible = showRadial || !clickMode
         if showRadial { onShowRadial?(NSEvent.mouseLocation, clickMode) }
         let generation = selectionGeneration
         let paths = selectedFiles.map(\.path)
@@ -178,7 +244,8 @@ final class AppModel {
     }
 
     func start(presetID: String) async {
-        guard selection?.slices.contains(where: { $0.presetId == presetID && $0.available }) == true else { return }
+        let candidates = (selection?.slices ?? []) + (selection?.tools ?? []) + (selection?.presetOptions ?? [])
+        guard candidates.contains(where: { $0.presetId == presetID && $0.available }) else { return }
         await startJob(presetID: presetID)
     }
 
@@ -192,14 +259,15 @@ final class AppModel {
         let sources = paths ?? selectedFiles.map(\.path)
         guard !sources.isEmpty else { return }
         isStarting = true
+        let showsRadial = radialVisible
         defer { isStarting = false }
         do {
             radialJobID = try await host.startJob(paths: sources, presetId: presetID, targetFormat: targetFormat, preset: preset)
             if let id = radialJobID, !jobs.contains(where: { $0.jobId == id }) { pendingJobIDs.insert(id) }
-            radialVisible = true
+            radialVisible = showsRadial
             statusMessage = L("변환 중…")
             if let job = radialJob, Self.isFinished(job.state) { scheduleRadialClose(job) }
-            else { scheduleHandOff() }
+            else if showsRadial { scheduleHandOff() }
         } catch { report(error) }
     }
 
@@ -347,8 +415,13 @@ final class AppModel {
     }
 
     @discardableResult
-    func saveSettings(_ settings: JSONValue, baseRevision: Int? = nil, dragShortcut: DragShortcut? = nil) async -> Bool {
+    func saveSettings(_ settings: JSONValue, baseRevision: Int? = nil, dragShortcut: DragShortcut? = nil,
+                      toolsDragShortcut: DragShortcut? = nil) async -> Bool {
         if let dragShortcut, !dragShortcut.isValid { return false }
+        if let toolsDragShortcut, !toolsDragShortcut.isValid { return false }
+        let primary = dragShortcut ?? self.dragShortcut
+        let secondary = toolsDragShortcut ?? self.toolsDragShortcut
+        guard !primary.usesSameKeys(as: secondary) else { return false }
         guard let current = library else { return false }
         do {
             let previousLanguage = language
@@ -357,6 +430,10 @@ final class AppModel {
             if let dragShortcut {
                 dragShortcut.save(to: defaults)
                 self.dragShortcut = dragShortcut
+            }
+            if let toolsDragShortcut {
+                toolsDragShortcut.save(to: defaults, key: DragShortcut.toolsDefaultsKey)
+                self.toolsDragShortcut = toolsDragShortcut
             }
             statusMessage = L("설정을 저장했습니다.")
             do { catalog = try await host.catalog() }

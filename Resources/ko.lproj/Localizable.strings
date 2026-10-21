@@ -279,3 +279,33 @@
 "shortcut.function.help" = "키보드 설정에 따라 F 키를 누를 때 Fn/지구본 키도 함께 눌러야 합니다.";
 "permission.intro.message" = "%@ 키와 드래그 동작을 감지하는 데 손쉬운 사용 권한을 사용합니다.";
 "permission.success.message" = "%@ 원형 메뉴에서 원하는 형식에 놓으면 변환을 시작합니다.";
+
+// Two menus and inline conversion.
+"shortcut.resetMenu" = "이 메뉴의 기본 호출 키로 되돌리기";
+"menu.convert" = "형식 변환";
+"menu.tools" = "파일 도구";
+"menu.choose" = "메뉴 선택";
+"menu.fileAction" = "파일 작업";
+"menu.invoke" = "%@ 실행";
+"menu.drop" = "놓아서 %@ 실행";
+"menu.empty" = "이 파일에 사용할 항목이 없습니다.";
+"menu.tools.automatic" = "파일 종류에 맞는 도구 자동 선택";
+"menu.tools.description" = "자동 모드는 파일에 맞는 도구와 파일 작업을 보여줍니다. 끄면 파일 작업과 저장된 프리셋을 최대 12개까지 섞어 배치할 수 있습니다. 형식 변환 메뉴는 기존 프로필을 사용합니다.";
+"menu.items" = "메뉴 항목";
+"menu.missingPreset" = "삭제된 프리셋 · 항목을 제거하세요.";
+"menu.saveFailed" = "저장하지 못했습니다. 삭제된 프리셋이나 중복 항목을 확인하세요.";
+"menu.fileAction.description" = "선택한 원본 파일에 적용합니다.";
+"menu.keyboard.help" = "방향키: 선택 · Enter: 실행 · M: 메뉴 전환 · Esc: 닫기";
+"shortcut.menus.help" = "Finder에서 드래그하며 메뉴 호출 키를 누르세요. 키를 놓아도 메뉴가 유지되며 다른 호출 키로 메뉴를 전환할 수 있습니다. 호출 순서는 메뉴를 처음 열 때 적용됩니다.";
+"shortcut.duplicate" = "두 메뉴의 호출 키는 서로 달라야 합니다.";
+"action.reveal" = "Finder에서 보기";
+"action.copyFiles" = "파일 복사";
+"action.copyPaths" = "경로 복사";
+"action.missing" = "원본 파일을 찾을 수 없습니다. 다시 선택하세요.";
+"action.failed" = "클립보드에 복사하지 못했습니다. 다시 시도하세요.";
+"action.copiedFiles" = "파일을 복사했습니다. Finder에서 붙여넣으세요.";
+"action.copiedPaths" = "파일 경로를 복사했습니다.";
+"home.clearSelection" = "선택 해제";
+"home.moreFiles" = "파일 %@개 더 보기";
+"home.sourceProtected" = "원본 파일을 보존합니다.";
+"home.openRadial" = "원형 메뉴로 선택…";
