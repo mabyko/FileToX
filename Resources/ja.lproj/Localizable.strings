@@ -279,3 +279,33 @@
 "shortcut.function.help" = "キーボード設定によっては、Fキーと一緒にFn／地球儀キーを押す必要があります。";
 "permission.intro.message" = "%@ キーとドラッグ操作の検出にアクセシビリティのアクセス権を使用します。";
 "permission.success.message" = "%@ 円形メニューの形式にドロップすると変換が始まります。";
+
+// Two menus and inline conversion.
+"shortcut.resetMenu" = "このメニューの呼び出しキーを初期値に戻す";
+"menu.convert" = "形式変換";
+"menu.tools" = "ファイルツール";
+"menu.choose" = "メニューを選択";
+"menu.fileAction" = "ファイル操作";
+"menu.invoke" = "%@を実行";
+"menu.drop" = "ドロップして%@を実行";
+"menu.empty" = "このファイルに使える項目はありません";
+"menu.tools.automatic" = "ファイルの種類に合うツールを自動選択";
+"menu.tools.description" = "自動モードは適切なツールとファイル操作を表示します。オフにするとファイル操作と保存済みプリセットを最大12個まで組み合わせられます。形式変換には既存のプロファイルを使います。";
+"menu.items" = "メニュー項目";
+"menu.missingPreset" = "削除済みプリセット — この項目を削除してください";
+"menu.saveFailed" = "保存できませんでした。削除済みプリセットや重複項目を確認してください。";
+"menu.fileAction.description" = "選択した元のファイルに適用します";
+"menu.keyboard.help" = "矢印: 選択 · Enter: 実行 · M: メニュー切替 · Esc: 閉じる";
+"shortcut.menus.help" = "Finderでドラッグ中にメニューのキーを押します。キーを離してもメニューは開いたまま、別のキーで切り替えられます。呼び出し順序は最初に開く時に適用されます。";
+"shortcut.duplicate" = "2つのメニューには異なるキーの組み合わせを指定してください。";
+"action.reveal" = "Finderに表示";
+"action.copyFiles" = "ファイルをコピー";
+"action.copyPaths" = "パスをコピー";
+"action.missing" = "元のファイルが見つかりません。もう一度選択してください。";
+"action.failed" = "クリップボードにコピーできませんでした。もう一度お試しください。";
+"action.copiedFiles" = "ファイルをコピーしました。Finderにペーストしてください。";
+"action.copiedPaths" = "ファイルのパスをコピーしました。";
+"home.clearSelection" = "選択を解除";
+"home.moreFiles" = "他%@個のファイル";
+"home.sourceProtected" = "元のファイルを保持します";
+"home.openRadial" = "円形メニューで選択…";

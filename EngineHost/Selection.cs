@@ -49,6 +49,18 @@ internal sealed class Selection(ConverterCatalog catalog, IReadOnlyList<ToolbarP
             slices.Add(slice);
         }
 
+        var tools = new JsonArray();
+        var presetOptions = new JsonArray();
+        foreach (var preset in presets.Values)
+        {
+            var tool = Check(preset, inputs, planner);
+            tool["presetId"] = preset.Id;
+            tool["displayName"] = loc.DisplayName(preset);
+            tool["targetFormat"] = preset.TargetFormat;
+            presetOptions.Add(tool);
+            if (IsToolFor(preset, inputs) && tools.Count < 12) tools.Add(tool.DeepClone());
+        }
+
         var targets = new JsonArray();
         foreach (var format in FormatRegistry.Known.Where(f => f.Writable).Select(f => f.Id).Append(BuiltInData.SameAsSource))
         {
@@ -67,8 +79,30 @@ internal sealed class Selection(ConverterCatalog catalog, IReadOnlyList<ToolbarP
             ["unknown"] = new JsonArray(inputs.Where(i => i.Format is null).Select(i => (JsonNode)JsonValue.Create(i.Path)).ToArray()),
             ["rejected"] = rejected,
             ["slices"] = slices,
+            ["tools"] = tools,
+            ["presetOptions"] = presetOptions,
             ["targets"] = targets,
         };
+    }
+
+    private static bool IsToolFor(Preset preset, IReadOnlyList<Input> inputs)
+    {
+        if (inputs.Count == 0) return false;
+        var target = FormatRegistry.FindById(preset.TargetFormat)?.Category;
+        if (preset.Archive.CombineIntoOne && target == FormatCategory.Archive) return true;
+        bool Has(params FormatCategory[] categories) => inputs.Any(i => i.Format is { } f && categories.Contains(f.Category));
+        if (preset.TargetFormat == FormatRegistry.Folder) return Has(FormatCategory.Archive);
+        if (target == FormatCategory.Pdf && (preset.Pdf.MergeIntoSingle || preset.Pdf.SplitPages))
+            return preset.Pdf.SplitPages ? Has(FormatCategory.Pdf) : Has(FormatCategory.Pdf, FormatCategory.Image, FormatCategory.Document,
+                FormatCategory.Text, FormatCategory.Hwp, FormatCategory.Presentation, FormatCategory.Spreadsheet);
+        if ((preset.TargetFormat == BuiltInData.SameAsSource || target == FormatCategory.Image) &&
+            Has(FormatCategory.Image, FormatCategory.Vector, FormatCategory.Pdf))
+            return preset.TargetFormat == BuiltInData.SameAsSource || preset.Image.Resize != ResizeMode.None ||
+                preset.Image.Grayscale || preset.Image.Dpi is not null || !preset.Image.KeepMetadata || preset.Image.MultiPageTiff ||
+                (preset.Image.Quality < 90 && !preset.Id.StartsWith("to-", StringComparison.Ordinal));
+        return (target is FormatCategory.Video or FormatCategory.Audio) && Has(FormatCategory.Video, FormatCategory.Audio) &&
+            (preset.Media.MaxHeight > 0 || preset.Media.AudioBitrateKbps > 0 || preset.Media.RemoveAudio ||
+             preset.Media.AudioChannels > 0 || preset.Media.AudioSampleRate > 0 || preset.Media.Quality != MediaQuality.Balanced);
     }
 
     /// <summary>Availability of <paramref name="preset"/> for the inputs.</summary>

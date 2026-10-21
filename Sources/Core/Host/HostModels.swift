@@ -70,6 +70,8 @@ struct HostSelection: Codable, Sendable {
     let unknown: [String]
     let rejected: [HostRejectedInput]
     let slices: [HostSlice]
+    let tools: [HostSlice]?
+    let presetOptions: [HostSlice]?
     let targets: [HostTarget]
 }
 

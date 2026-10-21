@@ -5,6 +5,8 @@ struct DragShortcut: Codable, Equatable {
     static let defaultsKey = "dragShortcut"
     static let modifierMask: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
     static let standard = DragShortcut(modifiers: .control)
+    static let toolsStandard = DragShortcut(modifiers: [.control, .shift])
+    static let toolsDefaultsKey = "toolsDragShortcut"
 
     var modifierBits: UInt
     var keyCode: UInt16?
@@ -52,15 +54,26 @@ struct DragShortcut: Codable, Equatable {
         isValid && pressed.intersection(Self.modifierMask) == modifiers && (keyCode == nil || keyPressed)
     }
 
-    static func load(from defaults: UserDefaults) -> DragShortcut {
-        guard let data = defaults.data(forKey: defaultsKey),
-              let shortcut = try? JSONDecoder().decode(Self.self, from: data), shortcut.isValid else { return .standard }
+    func usesSameKeys(as other: DragShortcut) -> Bool {
+        modifiers == other.modifiers && keyCode == other.keyCode
+    }
+
+    static func load(from defaults: UserDefaults, key: String = defaultsKey, fallback: DragShortcut = .standard) -> DragShortcut {
+        guard let data = defaults.data(forKey: key),
+              let shortcut = try? JSONDecoder().decode(Self.self, from: data), shortcut.isValid else { return fallback }
         return shortcut
     }
 
-    func save(to defaults: UserDefaults) {
+    static func loadTools(from defaults: UserDefaults, primary: DragShortcut) -> DragShortcut {
+        let saved = load(from: defaults, key: toolsDefaultsKey, fallback: .toolsStandard)
+        if !saved.usesSameKeys(as: primary) { return saved }
+        return [toolsStandard, DragShortcut(modifiers: [.control, .option, .shift]),
+                DragShortcut(modifiers: [.control, .command, .shift])].first { !$0.usesSameKeys(as: primary) }!
+    }
+
+    func save(to defaults: UserDefaults, key: String = Self.defaultsKey) {
         guard isValid, let data = try? JSONEncoder().encode(self) else { return }
-        defaults.set(data, forKey: Self.defaultsKey)
+        defaults.set(data, forKey: key)
     }
 
     struct Key: Identifiable {

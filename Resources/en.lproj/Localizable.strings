@@ -279,3 +279,33 @@
 "shortcut.function.help" = "Depending on your keyboard settings, hold Fn/Globe as well to use an F-key.";
 "permission.intro.message" = "%@ Accessibility access is used to detect the key and drag gesture.";
 "permission.success.message" = "%@ Drop the file on a format in the radial menu to start converting.";
+
+// Two menus and inline conversion.
+"shortcut.resetMenu" = "Reset this menu shortcut";
+"menu.convert" = "Convert formats";
+"menu.tools" = "File tools";
+"menu.choose" = "Choose a menu";
+"menu.fileAction" = "File action";
+"menu.invoke" = "Run %@";
+"menu.drop" = "Drop to run %@";
+"menu.empty" = "No items for these files";
+"menu.tools.automatic" = "Choose tools automatically for each file type";
+"menu.tools.description" = "Automatic mode shows relevant tools and file actions. Turn it off to mix file actions and any saved presets, up to 12 items. Convert formats keeps your existing profiles.";
+"menu.items" = "Menu items";
+"menu.missingPreset" = "Removed preset — remove this item";
+"menu.saveFailed" = "Could not save. Check for removed presets or duplicate items.";
+"menu.fileAction.description" = "Acts on the selected source files";
+"menu.keyboard.help" = "Arrow keys: choose · Enter: run · M: switch menu · Esc: close";
+"shortcut.menus.help" = "Drag in Finder, then press a menu shortcut. Release the keys to keep the menu open, or press the other shortcut to switch menus. Activation order applies when first opening a menu.";
+"shortcut.duplicate" = "The two menus need different key combinations.";
+"action.reveal" = "Show in Finder";
+"action.copyFiles" = "Copy files";
+"action.copyPaths" = "Copy paths";
+"action.missing" = "The source file is no longer available. Select it again.";
+"action.failed" = "Could not write to the clipboard. Try again.";
+"action.copiedFiles" = "Files copied. Paste them in Finder.";
+"action.copiedPaths" = "File paths copied.";
+"home.clearSelection" = "Clear selection";
+"home.moreFiles" = "%@ more files";
+"home.sourceProtected" = "Source files stay protected";
+"home.openRadial" = "Open radial menu…";

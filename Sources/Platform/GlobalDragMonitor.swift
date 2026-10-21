@@ -2,18 +2,20 @@ import AppKit
 
 @MainActor
 final class GlobalDragMonitor {
-    var onTrigger: ((NSPoint) -> Void)?
+    var onTrigger: ((NSPoint, RadialMenuKind) -> Void)?
+    var onSwitch: ((RadialMenuKind) -> Void)?
     var onEnd: (() -> Void)?
-    var shortcut: () -> DragShortcut = { .standard }
+    var shortcuts: () -> [RadialMenuKind: DragShortcut] = { [.convert: .standard, .tools: .toolsStandard] }
 
     var isMonitoring: Bool { globalMonitor != nil && localMonitor != nil }
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var releaseTimer: Timer?
-    private var gesture = DragGestureState()
+    private var gesture = DragMenuGestureState()
     private var pasteboardGate = DragPasteboardGate()
     private var pendingTrigger: Task<Void, Never>?
+    private var presented = false
 
     func start() {
         guard globalMonitor == nil, localMonitor == nil else { return }
@@ -52,30 +54,31 @@ final class GlobalDragMonitor {
 
     private func handle(_ event: NSEvent) {
         let point = NSEvent.mouseLocation
-        let configuredShortcut = shortcut()
-        let keyPressed: Bool
-        if let code = configuredShortcut.keyCode {
-            keyPressed = (event.type == .keyDown || event.type == .keyUp) && event.keyCode == code
-                ? event.type == .keyDown : CGEventSource.keyState(.combinedSessionState, key: code)
-        } else { keyPressed = false }
-        let shortcutPressed = configuredShortcut.matches(modifiers: event.modifierFlags, keyPressed: keyPressed)
-        if !shortcutPressed, pendingTrigger != nil {
+        let configured = shortcuts()
+        let pressed = RadialMenuKind.allCases.first { kind in
+            guard let shortcut = configured[kind] else { return false }
+            let keyPressed = shortcut.keyCode.map { code in
+                (event.type == .keyDown || event.type == .keyUp) && event.keyCode == code
+                    ? event.type == .keyDown : CGEventSource.keyState(.combinedSessionState, key: code)
+            } ?? false
+            return shortcut.matches(modifiers: event.modifierFlags, keyPressed: keyPressed)
+        }
+        if pressed != gesture.activeMenu, pendingTrigger != nil {
             cancelPendingTrigger()
             gesture.retryTrigger()
         }
-        var triggered = false
+        var triggered: RadialMenuKind?
         switch event.type {
         case .leftMouseDown:
             endDrag()
             pasteboardGate.begin(changeCount: NSPasteboard(name: .drag).changeCount)
             gesture.mouseDown(at: point)
         case .leftMouseDragged:
-            triggered = gesture.mouseDragged(to: point, shortcutPressed: shortcutPressed, activationMode: configuredShortcut.activationMode)
+            triggered = gesture.update(point: point, pressed: pressed, leftButtonPressed: true, shortcuts: configured)
         case .flagsChanged:
             let leftButtonPressed = NSEvent.pressedMouseButtons & 1 != 0
             if !leftButtonPressed { endDrag() }
-            triggered = gesture.flagsChanged(shortcutPressed: shortcutPressed, leftButtonPressed: leftButtonPressed,
-                                             activationMode: configuredShortcut.activationMode)
+            triggered = gesture.update(pressed: pressed, leftButtonPressed: leftButtonPressed, shortcuts: configured)
         case .leftMouseUp:
             endDrag()
         case .keyDown where event.keyCode == 53:
@@ -85,26 +88,26 @@ final class GlobalDragMonitor {
             releaseTimer?.invalidate()
             releaseTimer = nil
         case .keyDown, .keyUp:
-            guard configuredShortcut.keyCode == event.keyCode else { return }
-            triggered = gesture.flagsChanged(shortcutPressed: shortcutPressed, leftButtonPressed: NSEvent.pressedMouseButtons & 1 != 0,
-                                             activationMode: configuredShortcut.activationMode)
+            guard configured.values.contains(where: { $0.keyCode == event.keyCode }) else { return }
+            triggered = gesture.update(pressed: pressed, leftButtonPressed: NSEvent.pressedMouseButtons & 1 != 0, shortcuts: configured)
         default:
             break
         }
-        if triggered {
+        if let triggered {
+            if presented { onSwitch?(triggered); return }
             watchForRelease()
-            waitForFileDrag(at: point)
+            waitForFileDrag(at: point, menu: triggered)
         }
     }
 
-    private func waitForFileDrag(at point: NSPoint) {
+    private func waitForFileDrag(at point: NSPoint, menu: RadialMenuKind) {
         pendingTrigger?.cancel()
         let generation = pasteboardGate.generation
         pendingTrigger = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
                 let leftButtonPressed = NSEvent.pressedMouseButtons & 1 != 0
-                let configuredShortcut = shortcut()
+                guard let configuredShortcut = shortcuts()[menu] else { cancelPendingTrigger(); gesture.retryTrigger(); return }
                 let keyPressed = configuredShortcut.keyCode.map { CGEventSource.keyState(.combinedSessionState, key: $0) } ?? false
                 let shortcutPressed = configuredShortcut.matches(modifiers: NSEvent.modifierFlags, keyPressed: keyPressed)
                 guard leftButtonPressed else { endDrag(); return }
@@ -117,7 +120,8 @@ final class GlobalDragMonitor {
                 if pasteboardGate.accepts(changeCount: pasteboard.changeCount, hasFileURLs: hasFiles,
                                           leftButtonPressed: leftButtonPressed, shortcutPressed: shortcutPressed, generation: generation) {
                     pendingTrigger = nil
-                    onTrigger?(point)
+                    presented = true
+                    onTrigger?(point, menu)
                     return
                 }
                 do { try await Task.sleep(for: .milliseconds(20)) }
@@ -149,6 +153,7 @@ final class GlobalDragMonitor {
         releaseTimer?.invalidate()
         releaseTimer = nil
         if gesture.finish() { onEnd?() }
+        presented = false
     }
 
     isolated deinit {

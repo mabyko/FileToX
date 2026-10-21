@@ -17,12 +17,19 @@ struct SettingsJSONEditor: View {
     @State private var draft: JSONValue
     @State private var baseRevision: Int
     @State private var shortcutDraft: DragShortcut
+    @State private var toolsShortcutDraft: DragShortcut
+    @State private var shortcutMenu: RadialMenuKind = .convert
+    private var shortcutBinding: Binding<DragShortcut> { shortcutMenu == .convert ? $shortcutDraft : $toolsShortcutDraft }
+    private var shortcutsValid: Bool {
+        shortcutDraft.isValid && toolsShortcutDraft.isValid && !shortcutDraft.usesSameKeys(as: toolsShortcutDraft)
+    }
     init(model: AppModel, original: JSONValue, section: String) {
         self.model = model; self.section = section
         var settings = original
         if section == "general" { settings["language"] = .string(AppLanguage.supported(original["language"]?.string).rawValue) }
         _draft = State(initialValue: settings); _baseRevision = State(initialValue: model.library?.revision ?? 0)
         _shortcutDraft = State(initialValue: model.dragShortcut)
+        _toolsShortcutDraft = State(initialValue: model.toolsDragShortcut)
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -32,16 +39,19 @@ struct SettingsJSONEditor: View {
                 Button(L("되돌리기")) {
                     if let settings = model.library?.settings { draft = settings; baseRevision = model.library?.revision ?? 0 }
                     shortcutDraft = model.dragShortcut
+                    toolsShortcutDraft = model.toolsDragShortcut
                 }
                 Button(L("저장")) {
                     Task {
-                        if await model.saveSettings(draft, baseRevision: baseRevision, dragShortcut: section == "triggers" ? shortcutDraft : nil) {
+                        if await model.saveSettings(draft, baseRevision: baseRevision,
+                                                    dragShortcut: section == "triggers" ? shortcutDraft : nil,
+                                                    toolsDragShortcut: section == "triggers" ? toolsShortcutDraft : nil) {
                             baseRevision = model.library?.revision ?? baseRevision
                         }
                     }
                 }
                     .buttonStyle(.borderedProminent).keyboardShortcut("s", modifiers: .command)
-                    .disabled(!model.isConnected || (section == "triggers" && !shortcutDraft.isValid))
+                    .disabled(!model.isConnected || (section == "triggers" && !shortcutsValid))
             }.padding(.vertical, 12)
         }
     }
@@ -98,12 +108,22 @@ struct SettingsJSONEditor: View {
         case "triggers":
             Section {
                 Toggle(L("shortcut.enable"), isOn: Binding(get: { draft.field("paused").bool != true }, set: { draft["paused"] = .bool(!$0) }))
+                LabeledContent(RadialMenuKind.convert.title, value: shortcutDraft.displayName)
+                LabeledContent(RadialMenuKind.tools.title, value: toolsShortcutDraft.displayName)
             } footer: {
-                Text(L("shortcut.drag.help", shortcutDraft.displayName)).font(.callout).foregroundStyle(.secondary)
+                Text(L("shortcut.menus.help")).font(.callout).foregroundStyle(.secondary)
             }
-            DragShortcutEditor(shortcut: $shortcutDraft)
             Section {
-                Picker(L("shortcut.activation.title"), selection: $shortcutDraft.activationMode) {
+                Picker(L("menu.choose"), selection: $shortcutMenu) {
+                    ForEach(RadialMenuKind.allCases) { Text($0.title).tag($0) }
+                }.pickerStyle(.segmented)
+                if shortcutDraft.usesSameKeys(as: toolsShortcutDraft) {
+                    Label(L("shortcut.duplicate"), systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                }
+            }
+            DragShortcutEditor(shortcut: shortcutBinding, defaultShortcut: shortcutMenu == .convert ? .standard : .toolsStandard)
+            Section {
+                Picker(L("shortcut.activation.title"), selection: shortcutBinding.activationMode) {
                     ForEach(DragShortcut.ActivationMode.allCases) { mode in
                         Text(L("shortcut.activation.\(mode.rawValue)")).tag(mode)
                     }
@@ -111,7 +131,7 @@ struct SettingsJSONEditor: View {
             } header: {
                 Text(L("shortcut.activation.title"))
             } footer: {
-                Text(L("shortcut.activation.\(shortcutDraft.activationMode.rawValue).help", shortcutDraft.displayName))
+                Text(L("shortcut.activation.\(shortcutBinding.wrappedValue.activationMode.rawValue).help", shortcutBinding.wrappedValue.displayName))
                     .font(.callout).foregroundStyle(.secondary)
             }
             Section {
@@ -190,6 +210,7 @@ struct SettingsJSONEditor: View {
 
 private struct DragShortcutEditor: View {
     @Binding var shortcut: DragShortcut
+    let defaultShortcut: DragShortcut
     @State private var systemHotKeys: [DragShortcut.SystemHotKey]?
 
     var body: some View {
@@ -212,7 +233,9 @@ private struct DragShortcutEditor: View {
                     Text(key.name == "Space" ? L("shortcut.key.space") : key.name).tag(Int(key.code))
                 }
             }
-            Button(L("shortcut.reset")) { shortcut = DragShortcut(modifiers: .control, activationMode: shortcut.activationMode) }
+            Button(L("shortcut.resetMenu")) {
+                shortcut = DragShortcut(modifiers: defaultShortcut.modifiers, activationMode: shortcut.activationMode)
+            }
             if !shortcut.isValid { warning("shortcut.required") }
             if shortcut.modifiers.contains(.control) {
                 warning(shortcut.activationMode == .beforeDrag ? "shortcut.control.before.warning" : "shortcut.control.warning")

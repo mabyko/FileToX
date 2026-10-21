@@ -7,6 +7,8 @@ struct RadialItem: Identifiable {
     let caption: String
     let available: Bool
     let reason: String?
+    var systemImage: String? = nil
+    var editable = true
 }
 
 struct DonutWedge: Shape {
@@ -108,6 +110,7 @@ private struct DonutSlice: View {
                 .overlay { shape.stroke(highlighted ? Color.white.opacity(0.18) : Color.primary.opacity(0.1), lineWidth: 1) }
                 .overlay {
                     VStack(spacing: 3) {
+                        if let symbol = item.systemImage { Image(systemName: symbol).font(.system(size: 15)).accessibilityHidden(true) }
                         Text(item.title).font(.system(size: 12, weight: .semibold)).lineLimit(2)
                         if !item.caption.isEmpty && item.caption.caseInsensitiveCompare(item.title) != .orderedSame {
                             Text(item.caption).font(.system(size: 10)).lineLimit(1)
@@ -120,25 +123,28 @@ private struct DonutSlice: View {
                 .scaleEffect(highlighted ? 1.035 : 1)
                 .animation(Motion.when(animated, highlighted ? Motion.pop : Motion.quick), value: highlighted)
         }.buttonStyle(.plain).contentShape(shape)
-            .contextMenu { Button(L("프리셋 편집"), action: onEdit) }
+            .contextMenu { if item.editable { Button(L("프리셋 편집"), action: onEdit) } }
             .help(item.reason ?? item.title).accessibilityLabel(item.title)
             .accessibilityValue(item.available ? item.caption : item.reason ?? L("변환할 수 없음"))
+            .accessibilityAddTraits(highlighted ? .isSelected : [])
     }
 }
 
 struct FormatDropView: View {
     @Bindable var model: AppModel
     @State private var activeIndex: Int?
+    @FocusState private var keyboardFocused: Bool
 
     private var items: [RadialItem] {
-        (model.selection?.slices ?? []).map {
-            RadialItem(id: $0.presetId, title: $0.displayName, caption: $0.targetFormat == "*" ? L("같은 형식") : $0.targetFormat.uppercased(), available: $0.available, reason: $0.reasonText)
+        model.radialEntries.map {
+            RadialItem(id: $0.id, title: $0.title, caption: $0.caption, available: $0.available,
+                       reason: $0.reason, systemImage: $0.symbol, editable: $0.symbol == nil)
         }
     }
     private var subtitle: String {
         if let index = activeIndex, items.indices.contains(index) {
             let item = items[index]
-            return item.available ? L(model.radialClickMode ? "Convert to %@" : "Drop to %@", item.title) : item.reason ?? L("Unavailable")
+            return item.available ? L(model.radialClickMode ? "menu.invoke" : "menu.drop", item.title) : item.reason ?? L("Unavailable")
         }
         return model.radialClickMode ? L("중앙을 누르면 닫기") : L("파일을 놓으세요")
     }
@@ -154,10 +160,13 @@ struct FormatDropView: View {
                         .background(.regularMaterial, in: Circle())
                         .transition(.opacity)
                 } else {
-                    DonutView(items: items, title: model.selectedFiles.count == 1 ? L("파일 1개") : L("파일 %@개", String(model.selectedFiles.count)), subtitle: subtitle,
+                    DonutView(items: items, title: model.radialMenu.title, subtitle: items.isEmpty ? L("menu.empty") : subtitle,
                               radius: model.radialOuterRadius, holeRatio: model.radialHoleRatio, opacity: model.radialOpacity, accent: model.accentColor,
                               activeIndex: activeIndex, animated: !model.reduceMotion, onHover: { activeIndex = $0 }, onInvoke: invoke,
-                              onEdit: { model.editPreset(items[$0].id) },
+                              onEdit: { index in
+                                  guard model.radialEntries.indices.contains(index), case .preset(let slice) = model.radialEntries[index] else { return }
+                                  model.editPreset(slice.presetId)
+                              },
                               onCenter: model.closeRadial)
                     .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
@@ -173,11 +182,48 @@ struct FormatDropView: View {
         .preferredColorScheme(model.themeColorScheme)
         .environment(\.locale, Locale(identifier: model.language.rawValue))
         .onExitCommand { model.closeRadial() }
+        .focusable(model.radialClickMode)
+        .focused($keyboardFocused)
+        .onMoveCommand { direction in
+            guard model.radialClickMode, !items.isEmpty, !model.isResolving, !model.isStarting, model.radialJobID == nil else { return }
+            let forward = direction == .right || direction == .down
+            activeIndex = ((activeIndex ?? (forward ? -1 : 0)) + (forward ? 1 : items.count - 1)) % items.count
+        }
+        .onKeyPress(.return) {
+            guard model.radialClickMode, let activeIndex else { return .ignored }
+            invoke(activeIndex)
+            return .handled
+        }
+        .onKeyPress("m") {
+            guard model.radialClickMode, !model.isStarting, model.radialJobID == nil else { return .ignored }
+            model.switchRadialMenu(model.radialMenu == .convert ? .tools : .convert)
+            return .handled
+        }
+        .onChange(of: model.radialVisible) { _, visible in keyboardFocused = visible && model.radialClickMode }
+        .onChange(of: model.radialMenu) { _, _ in activeIndex = nil }
+        .onChange(of: items.map(\.id)) { _, _ in activeIndex = nil }
+        .onChange(of: model.radialClickMode) { _, clickMode in keyboardFocused = clickMode && model.radialVisible }
+        .onAppear { keyboardFocused = model.radialClickMode && model.radialVisible }
+        .overlay(alignment: .bottom) {
+            if model.radialClickMode, model.radialJobID == nil, !model.isResolving {
+                HStack(spacing: 10) {
+                    Button {
+                        model.switchRadialMenu(model.radialMenu == .convert ? .tools : .convert)
+                        keyboardFocused = true
+                    } label: {
+                        Text((model.radialMenu == .convert ? RadialMenuKind.tools : .convert).title + " · M")
+                    }.buttonStyle(.borderless)
+                    Text("↑↓ · Enter · Esc").foregroundStyle(.secondary)
+                }.font(.system(size: 10)).padding(.bottom, 2).help(L("menu.keyboard.help"))
+            }
+        }
     }
 
     private func invoke(_ index: Int) {
         guard items.indices.contains(index), items[index].available else { return }
-        Task { await model.start(presetID: items[index].id) }
+        guard model.radialEntries.indices.contains(index) else { return }
+        let entry = model.radialEntries[index]
+        Task { await model.invokeRadialEntry(entry) }
     }
 
     private func radialProgress(_ job: HostJob) -> some View {
@@ -301,8 +347,9 @@ private final class RadialDropNSView: NSView {
     override func draggingExited(_ sender: (any NSDraggingInfo)?) { onHover?(nil) }
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool { acceptedIndex(sender) != nil }
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard let model, let index = acceptedIndex(sender), let slice = model.selection?.slices[index] else { return false }
-        Task { await model.start(presetID: slice.presetId) }
+        guard let model, let index = acceptedIndex(sender), model.radialEntries.indices.contains(index) else { return false }
+        let entry = model.radialEntries[index]
+        Task { await model.invokeRadialEntry(entry) }
         onHover?(nil)
         return true
     }
@@ -316,16 +363,17 @@ private final class RadialDropNSView: NSView {
         return acceptedIndex(sender) == nil ? [] : .copy
     }
     private func acceptedIndex(_ sender: any NSDraggingInfo) -> Int? {
-        guard let index = hoveredIndex(sender), model?.selection?.slices[index].available == true else { return nil }
+        guard let model, let index = hoveredIndex(sender), model.radialEntries.indices.contains(index),
+              model.radialEntries[index].available else { return nil }
         return index
     }
     private func hoveredIndex(_ sender: any NSDraggingInfo) -> Int? {
-        guard let model, !model.isResolving, !model.isStarting, let selection = model.selection else { return nil }
+        guard let model, !model.isResolving, !model.isStarting, model.selection != nil else { return nil }
         let urls = FileDropNSView.fileURLs(from: sender.draggingPasteboard, sourceOperationMask: sender.draggingSourceOperationMask)
         guard !urls.isEmpty, urls == model.selectedFiles else { return nil }
         let point = convert(sender.draggingLocation, from: nil)
         guard let index = DonutGeometry.segment(at: point, center: CGPoint(x: bounds.midX, y: bounds.midY),
-            innerRadius: model.radialOuterRadius * model.radialHoleRatio, outerRadius: model.radialOuterRadius, count: selection.slices.count) else { return nil }
+            innerRadius: model.radialOuterRadius * model.radialHoleRatio, outerRadius: model.radialOuterRadius, count: model.radialEntries.count) else { return nil }
         return index
     }
 }

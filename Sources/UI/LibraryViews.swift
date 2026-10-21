@@ -156,6 +156,7 @@ struct PresetDraftEditor: View {
 
 struct ToolbarProfilesView: View {
     let model: AppModel
+    @State private var menu: RadialMenuKind = .convert
     @State private var selectedID: String?
     @State private var draft: JSONValue = .object([:])
     @State private var search = ""
@@ -169,6 +170,18 @@ struct ToolbarProfilesView: View {
         ids.compactMap { id in presets.first { $0.identity == id }.map { RadialItem(id: id, title: $0.libraryName, caption: $0.field("targetFormat").string.map { $0 == "*" ? L("같은 형식") : $0.uppercased() } ?? "", available: true, reason: nil) } }
     }
     var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker(L("menu.choose"), selection: $menu) {
+                ForEach(RadialMenuKind.allCases) { Text($0.title).tag($0) }
+            }.pickerStyle(.segmented).frame(maxWidth: 340)
+            if menu == .tools {
+                ToolsMenuEditor(model: model)
+            } else {
+                profilesEditor
+            }
+        }
+    }
+    private var profilesEditor: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 10) {
                 Text(L("1. 프로필 선택")).font(.caption).foregroundStyle(.secondary)
@@ -220,6 +233,64 @@ struct ToolbarProfilesView: View {
     }
     private func load() { if let profile = profiles.first(where: { $0.identity == selectedID }) { draft = profile; baseRevision = model.library?.revision ?? 0 } }
     private func move(_ index: Int, _ offset: Int) { var next = ids; next.swapAt(index, index + offset); draft["presetIds"] = .array(next.map(JSONValue.string)) }
+}
+
+private struct ToolsMenuEditor: View {
+    let model: AppModel
+    @State private var automatic = true
+    @State private var ids: [String] = []
+    @State private var search = ""
+    @State private var saveFailed = false
+
+    private var choices: [(id: String, name: String)] {
+        FileMenuAction.allCases.map { (id: $0.id, name: $0.title) } +
+        (model.library?.presets ?? []).map { (id: "preset:" + $0.identity, name: $0.libraryName) }
+    }
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Toggle(L("menu.tools.automatic"), isOn: $automatic)
+                Text(L("menu.tools.description")).font(.callout).foregroundStyle(.secondary)
+                if !automatic {
+                    HStack {
+                        Text(L("menu.items")).font(.headline)
+                        Spacer()
+                        Text("\(ids.count) / 12").monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    ForEach(Array(ids.enumerated()), id: \.element) { index, id in
+                        HStack {
+                            Text(choices.first { $0.id == id }?.name ?? L("menu.missingPreset"))
+                            Spacer()
+                            Button { ids.swapAt(index, index - 1) } label: { Image(systemName: "arrow.up") }
+                                .disabled(index == 0).help(L("앞으로 이동")).accessibilityLabel(L("앞으로 이동"))
+                            Button { ids.swapAt(index, index + 1) } label: { Image(systemName: "arrow.down") }
+                                .disabled(index == ids.count - 1).help(L("뒤로 이동")).accessibilityLabel(L("뒤로 이동"))
+                            Button { ids.remove(at: index) } label: { Image(systemName: "minus.circle") }
+                                .help(L("도넛에서 제거")).accessibilityLabel(L("도넛에서 제거"))
+                        }.padding(.vertical, 3)
+                    }
+                    Divider()
+                    TextField(L("검색"), text: $search).textFieldStyle(.roundedBorder)
+                    ForEach(choices.filter { !ids.contains($0.id) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)) }, id: \.id) { item in
+                        Button { ids.append(item.id) } label: { Label(item.name, systemImage: "plus.circle") }
+                            .buttonStyle(.borderless).disabled(ids.count >= 12)
+                    }
+                }
+                HStack {
+                    Button(L("되돌리기"), action: load)
+                    Spacer()
+                    Button(L("저장")) { saveFailed = !model.saveToolsMenu(automatic ? nil : ids) }
+                        .buttonStyle(.borderedProminent).disabled(!automatic && ids.isEmpty)
+                }
+                if saveFailed { Text(L("menu.saveFailed")).foregroundStyle(.red) }
+            }.fileeCard().padding(.bottom, 20)
+        }.onAppear(perform: load)
+    }
+    private func load() {
+        automatic = model.toolsMenuItems == nil
+        ids = model.toolsMenuItems ?? FileMenuAction.allCases.map(\.id)
+        saveFailed = false
+    }
 }
 
 extension JSONValue {

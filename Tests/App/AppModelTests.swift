@@ -1,8 +1,96 @@
-import Foundation
+import AppKit
 import XCTest
 @testable import FileToX
 
 final class AppModelTests: XCTestCase {
+    @MainActor
+    func testFileActionsCopyURLsAndPathsWithoutChangingSourcesAndRejectMissingFiles() async throws {
+        let fixture = try makeFixture()
+        let suite = "filetox-actions-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer {
+            pasteboard.releaseGlobally()
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: fixture.root)
+        }
+        let source = fixture.root.appendingPathComponent("사진 original.txt")
+        try "source data".write(to: source, atomically: true, encoding: .utf8)
+        let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
+        let model = AppModel(host: host, defaults: defaults)
+        await model.connect()
+        await model.resolve([source], showRadial: false)
+        model.switchRadialMenu(.tools)
+        await model.invokeRadialEntry(.action(.copyFiles), pasteboard: pasteboard)
+        let copied = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        XCTAssertEqual(copied?.map(\.path), [source.path])
+        await model.invokeRadialEntry(.action(.copyPaths), pasteboard: pasteboard)
+        XCTAssertEqual(pasteboard.string(forType: .string), source.path)
+        XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "source data")
+        try FileManager.default.removeItem(at: source)
+        await model.invokeRadialEntry(.action(.copyPaths), pasteboard: pasteboard)
+        XCTAssertEqual(pasteboard.string(forType: .string), source.path, "Missing sources must not clear the clipboard")
+        XCTAssertEqual(model.statusMessage, L("action.missing"))
+        await host.shutdown()
+    }
+
+    @MainActor
+    func testTwoShortcutSettingsRejectDuplicateKeysAndPreserveBothOnFailedSave() async throws {
+        let fixture = try makeFixture()
+        let suite = "filetox-two-menu-model-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: fixture.root) }
+        let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
+        let model = AppModel(host: host, defaults: defaults)
+        await model.connect()
+        let settings = try XCTUnwrap(model.library?.settings)
+        let primary = DragShortcut(modifiers: .option)
+        let secondary = DragShortcut(modifiers: [.control, .shift], keyCode: 40)
+        let saved = await model.saveSettings(settings, dragShortcut: primary, toolsDragShortcut: secondary)
+        XCTAssertTrue(saved)
+        let duplicate = await model.saveSettings(settings, dragShortcut: secondary)
+        XCTAssertFalse(duplicate)
+        var sameKeys = secondary
+        sameKeys.activationMode = .beforeDrag
+        let duplicateOrder = await model.saveSettings(settings, dragShortcut: sameKeys)
+        XCTAssertFalse(duplicateOrder)
+        let failed = await model.saveSettings(settings, baseRevision: -1, dragShortcut: .standard, toolsDragShortcut: .toolsStandard)
+        XCTAssertFalse(failed)
+        let reloaded = AppModel(defaults: defaults)
+        XCTAssertEqual(reloaded.dragShortcut, primary)
+        XCTAssertEqual(reloaded.toolsDragShortcut, secondary)
+        await host.shutdown()
+    }
+
+    @MainActor
+    func testToolsMenuCombinesActionsAndAnyPresetAndPersistsTheirOrder() async throws {
+        let fixture = try makeFixture()
+        let suite = "filetox-tools-items-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: fixture.root) }
+        let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
+        let model = AppModel(host: host, defaults: defaults)
+        await model.connect()
+        await model.resolve([URL(fileURLWithPath: "/tmp/tools.png")], showRadial: false)
+        XCTAssertFalse(model.radialVisible, "Home selection should stay in the main window")
+        model.switchRadialMenu(.tools)
+        XCTAssertTrue(model.radialEntries.contains { $0.id == FileMenuAction.copyPaths.id })
+        let ids = ["preset:custom", FileMenuAction.copyFiles.id, "preset:unavailable"]
+        XCTAssertTrue(model.saveToolsMenu(ids))
+        XCTAssertEqual(model.radialEntries.map(\.id), ids)
+        XCTAssertFalse(try XCTUnwrap(model.radialEntries.last).available)
+        XCTAssertEqual(AppModel(defaults: defaults).toolsMenuItems, ids)
+        XCTAssertFalse(model.saveToolsMenu(["preset:missing"]))
+        XCTAssertFalse(model.saveToolsMenu([ids[0], ids[0]]))
+        XCTAssertFalse(model.saveToolsMenu([]))
+        XCTAssertEqual(model.toolsMenuItems, ids)
+        model.switchRadialMenu(.convert)
+        XCTAssertEqual(model.radialEntries.map(\.id), ["preset:zip-all"])
+        XCTAssertTrue(model.saveToolsMenu(nil))
+        XCTAssertNil(AppModel(defaults: defaults).toolsMenuItems)
+        await host.shutdown()
+    }
+
     @MainActor
     func testShortcutSavesWithSettingsAndFailedSavePreservesPreviousShortcut() async throws {
         let fixture = try makeFixture()
@@ -252,7 +340,7 @@ final class AppModelTests: XCTestCase {
         for line in sys.stdin:
             r=json.loads(line);m=r["method"]
             if m=="catalog.get":response(r,{"formats":[],"engines":[{"id":"ffmpeg","displayName":"FFmpeg","available":configured}]})
-            elif m=="library.get":threading.Timer(.1,response,args=(r,{"revision":revision,"settings":settings,"presets":[],"profiles":[]})).start()
+            elif m=="library.get":threading.Timer(.1,response,args=(r,{"revision":revision,"settings":settings,"presets":[{"id":"zip-all","name":"ZIP"},{"id":"custom","name":"Custom"},{"id":"unavailable","name":"Unavailable"}],"profiles":[]})).start()
             elif m=="history.get":response(r,{"entries":[]})
             elif m=="settings.save":
                 if r["params"]["baseRevision"]!=revision:
@@ -266,6 +354,8 @@ final class AppModelTests: XCTestCase {
                 p=r["params"]["paths"]
                 displayName={"en":"Combine ZIP","ko":"ZIP 압축","ja":"ZIPにまとめる"}.get(settings.get("language","en"),"Combine ZIP")
                 result={"profileId":"mixed","formats":[],"unknown":p,"rejected":[],"slices":[{"presetId":"zip-all","displayName":displayName,"targetFormat":"zip","available":True,"runnableCount":1,"canDownload":False}],"targets":[]}
+                result["tools"]=result["slices"]
+                result["presetOptions"]=result["slices"]+[{"presetId":"custom","displayName":"Custom","targetFormat":"png","available":True,"runnableCount":1,"canDownload":False},{"presetId":"unavailable","displayName":"Unavailable","targetFormat":"pdf","available":False,"reasonText":"Engine missing","runnableCount":0,"canDownload":False}]
                 if "slow" in p[0]:threading.Timer(.2,response,args=(r,result)).start()
                 else:response(r,result)
             elif m=="job.start":

@@ -4,6 +4,22 @@ import XCTest
 @testable import FileToX
 
 final class DragShortcutTests: XCTestCase {
+    func testToolsShortcutMigratesWithoutReplacingTheExistingPrimary() throws {
+        let name = "filetox-two-shortcuts-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        XCTAssertEqual(DragShortcut.loadTools(from: defaults, primary: .standard), .toolsStandard)
+        let oldPrimary = DragShortcut(modifiers: [.control, .shift], activationMode: .duringDrag)
+        oldPrimary.save(to: defaults)
+        let secondary = DragShortcut.loadTools(from: defaults, primary: oldPrimary)
+        XCTAssertFalse(secondary.usesSameKeys(as: oldPrimary))
+        XCTAssertEqual(DragShortcut.load(from: defaults), oldPrimary)
+        secondary.save(to: defaults, key: DragShortcut.toolsDefaultsKey)
+        XCTAssertEqual(DragShortcut.loadTools(from: defaults, primary: oldPrimary), secondary)
+        XCTAssertFalse(DragShortcut.standard.matches(modifiers: [.control, .shift]))
+        XCTAssertTrue(DragShortcut.toolsStandard.matches(modifiers: [.control, .shift]))
+    }
+
     func testDefaultIsControlAndMatchingRequiresExactModifierCombination() {
         let shortcut = DragShortcut.standard
         XCTAssertEqual(shortcut.displayName, "⌃")
