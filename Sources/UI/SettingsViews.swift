@@ -7,6 +7,11 @@ struct SettingsView: View {
     var body: some View {
         if let settings = model.library?.settings {
             SettingsJSONEditor(model: model, original: settings, section: section).id(section)
+        } else if section == "general" || section == "triggers" {
+            Form {
+                if section == "general" { ApplicationSettingsSections(preferences: model.applicationPreferences) }
+                else { ExcludedApplicationsSection(preferences: model.applicationPreferences) }
+            }.formStyle(.grouped).scrollContentBackground(.hidden).padding(.horizontal, -20)
         }
     }
 }
@@ -59,6 +64,7 @@ struct SettingsJSONEditor: View {
     @ViewBuilder private var sections: some View {
         switch section {
         case "general":
+            ApplicationSettingsSections(preferences: model.applicationPreferences)
             Section {
                 Picker(L("Language"), selection: Binding(get: { AppLanguage.supported(draft["language"]?.string).rawValue }, set: { draft["language"] = .string($0) })) {
                     ForEach(AppLanguage.allCases) { language in Text(language.nativeName).tag(language.rawValue) }
@@ -106,6 +112,7 @@ struct SettingsJSONEditor: View {
                 slider(L("불투명도"), number("donut", "opacity", fallback: 0.96), 0.5...1, "%.0f%%", scale: 100)
             }
         case "triggers":
+            ExcludedApplicationsSection(preferences: model.applicationPreferences)
             Section {
                 Toggle(L("shortcut.enable"), isOn: Binding(get: { draft.field("paused").bool != true }, set: { draft["paused"] = .bool(!$0) }))
                 LabeledContent(RadialMenuKind.convert.title, value: shortcutDraft.displayName)

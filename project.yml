@@ -6,7 +6,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: 0.1.0
+    MARKETING_VERSION: 0.0.1
     CURRENT_PROJECT_VERSION: 1
     DEVELOPMENT_LANGUAGE: en
 targets:
@@ -40,6 +40,8 @@ targets:
       path: Config/Info.plist
       properties:
         CFBundleDisplayName: $(APP_DISPLAY_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations: [en, ko, ja]
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)

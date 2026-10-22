@@ -309,3 +309,31 @@
 "home.moreFiles" = "他%@個のファイル";
 "home.sourceProtected" = "元のファイルを保持します";
 "home.openRadial" = "円形メニューで選択…";
+
+// Startup, visibility, notifications and excluded applications
+"settings.open" = "設定…";
+"settings.application" = "起動と表示";
+"settings.launchAtLogin" = "ログイン時に自動起動";
+"settings.showMenuBar" = "メニューバーにアイコンを表示";
+"settings.openWindowAtLogin" = "ログイン時にメインウインドウを開く";
+"settings.application.help" = "変更はすぐに適用されます。アイコンを非表示にしてもドラッグ呼び出しは動作します。設定を開くにはFileToXを再度起動してください。手動起動時は常にメインウインドウを開きます。";
+"settings.login.approval" = "自動起動するにはシステム設定でFileToXを許可してください。";
+"settings.login.open" = "ログイン項目の設定を開く…";
+"settings.login.error" = "自動起動の設定を変更できませんでした：%@";
+"notifications.section" = "変換の通知";
+"notifications.success" = "変換完了時に通知";
+"notifications.failure" = "変換失敗時に通知";
+"notifications.help" = "変更はすぐに適用されます。通知をクリックするとFinderで結果を表示し、結果がない場合はFileToXを開きます。一部失敗は失敗通知として扱い、キャンセルした処理は通知しません。";
+"notifications.denied" = "macOSで通知がブロックされています。システム設定でFileToXの通知を許可してください。";
+"notifications.openSettings" = "通知設定を開く…";
+"notifications.permission.error" = "通知の許可を要求できませんでした：%@";
+"notifications.delivery.error" = "変換は終了しましたが、通知を送信できませんでした：%@";
+"notifications.completed.title" = "変換完了";
+"notifications.failed.title" = "変換結果をご確認ください";
+"settings.excluded.title" = "ドラッグ呼び出しの除外アプリ";
+"settings.excluded.empty" = "除外したアプリはありません。";
+"settings.excluded.add" = "アプリを追加…";
+"settings.excluded.remove" = "%@の除外を解除";
+"settings.excluded.invalid" = "有効なバンドル識別子を持つアプリを選択してください。";
+"settings.excluded.help" = "変更はすぐに適用されます。これらのアプリで開始したドラッグでは円形メニューを表示しません。FileToX内でファイルを選択して変換する機能は引き続き利用できます。";
+"app.version" = "バージョン %@（%@）";

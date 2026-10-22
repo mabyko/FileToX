@@ -309,3 +309,31 @@
 "home.moreFiles" = "%@ more files";
 "home.sourceProtected" = "Source files stay protected";
 "home.openRadial" = "Open radial menu…";
+
+// Startup, visibility, notifications and excluded applications
+"settings.open" = "Settings…";
+"settings.application" = "Startup and visibility";
+"settings.launchAtLogin" = "Launch at login";
+"settings.showMenuBar" = "Show menu bar icon";
+"settings.openWindowAtLogin" = "Open main window at login";
+"settings.application.help" = "Changes apply immediately. Hiding the icon keeps drag activation running. Open FileToX again to access settings. Manual launches always open the main window.";
+"settings.login.approval" = "Allow FileToX in System Settings to enable launch at login.";
+"settings.login.open" = "Open Login Items settings…";
+"settings.login.error" = "Could not update launch at login: %@";
+"notifications.section" = "Conversion notifications";
+"notifications.success" = "Notify when conversion completes";
+"notifications.failure" = "Notify when conversion fails";
+"notifications.help" = "Changes apply immediately. Clicking a notification reveals available results in Finder, or opens FileToX if there are no results. Partial failures use the failure setting; cancelled jobs do not notify.";
+"notifications.denied" = "Notifications are blocked in macOS. Allow FileToX in System Settings.";
+"notifications.openSettings" = "Open notification settings…";
+"notifications.permission.error" = "Could not request notification access: %@";
+"notifications.delivery.error" = "Conversion finished, but the notification could not be delivered: %@";
+"notifications.completed.title" = "Conversion complete";
+"notifications.failed.title" = "Conversion needs attention";
+"settings.excluded.title" = "Exclude apps from drag activation";
+"settings.excluded.empty" = "No excluded apps.";
+"settings.excluded.add" = "Add app…";
+"settings.excluded.remove" = "Remove %@ from exclusions";
+"settings.excluded.invalid" = "Choose an application with a valid bundle identifier.";
+"settings.excluded.help" = "Changes apply immediately. The radial menu stays hidden for drags started in these apps. File selection and conversion inside FileToX remain available.";
+"app.version" = "Version %@ (%@)";

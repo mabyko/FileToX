@@ -9,10 +9,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dragMonitor: GlobalDragMonitor?
     private var progressToast: ProgressToastController?
     private var presetWindow: NSWindow?
+    private let notifications = ConversionNotifications()
     private var needsDragMonitorRestart = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard NSClassFromString("XCTestCase") == nil else { return }
+        notifications.start()
+        notifications.onOpen = { [weak self] paths in
+            guard let self else { return }
+            showConverterWindow()
+            if paths.isEmpty { model.selectedPage = "home" }
+            else { model.reveal(paths) }
+        }
+        notifications.onError = { [weak self] error in
+            self?.model.statusMessage = L("notifications.delivery.error", error)
+        }
+        model.onJobFinished = { [weak self] job in
+            Task { [weak self] in
+                guard let self else { return }
+                await notifications.send(job, preferences: model.applicationPreferences)
+            }
+        }
         panel = ConversionPanelController(model: model)
         model.onShowRadial = { [weak self] point, clickMode in self?.panel?.show(at: point, clickMode: clickMode) }
         model.onCloseRadial = { [weak self] in self?.panel?.hide() }
@@ -20,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onLongJob = { [weak self] in self?.progressToast?.show() }
         model.onEditPreset = { [weak self] id in self?.showPresetEditor(id) }
         let monitor = GlobalDragMonitor()
+        monitor.isApplicationExcluded = { [weak self] in self?.model.applicationPreferences.excludes($0) ?? false }
         monitor.shortcuts = { [weak self] in self?.model.dragShortcuts ?? [.convert: .standard, .tools: .toolsStandard] }
         monitor.onTrigger = { [weak self] point, menu in
             guard let self, model.isDragEnabled else { return }
@@ -37,7 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.needsDragMonitorRestart = true
             self?.restartDragMonitorIfNeeded()
         }
-        showConverterWindow()
+        if ApplicationLaunch.shouldOpenWindow(event: NSAppleEventManager.shared().currentAppleEvent,
+                                               openWindowAtLogin: model.applicationPreferences.openWindowAtLogin) {
+            showConverterWindow()
+        }
         Task {
             await model.connect()
             model.refreshPermission()
@@ -47,6 +68,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         model.refreshPermission()
+        model.applicationPreferences.refreshLoginStatus()
+        Task { await model.applicationPreferences.refreshNotificationStatus() }
+    }
+
+    func showSettings() {
+        model.selectedPage = "general"
+        showConverterWindow()
     }
 
     func showConverterWindow() {
@@ -135,7 +163,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.activate(ignoringOtherApps: true)
         NSApplication.shared.orderFrontStandardAboutPanel(options: [
             .applicationName: "FileToX",
-            .applicationVersion: "0.1.0",
             .credits: NSAttributedString(string: L("about.description") + "\n\n" + license)
         ])
     }

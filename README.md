@@ -48,6 +48,8 @@ Home and both radial menus are captured from native SwiftUI views using an isola
 
 On first launch, a setup guide explains Accessibility access for Finder drag activation and checks access when you return from System Settings. Choose **Later** to keep converting through Home, or reopen the guide through **Activation → Show setup guide**. The app includes its conversion runtime; a separate .NET installation is not needed.
 
+Under **Settings → General**, configure launch at login, menu bar visibility, whether login launches open the main window, and separate completion/failure notifications. These options apply immediately; automatic startup and notifications are off by default, and the menu bar icon is on. Hiding the icon keeps drag activation running; open FileToX again to reach its settings. Manual launches always open the main window. Notification clicks reveal available outputs in Finder, or open FileToX when there are no outputs. Partial failures follow the failure notification option; cancelled jobs do not notify. **Settings → Activation → Exclude apps from drag activation** lets you add or remove apps immediately; drags started in those apps do not open the radial menu. Login approval and notification permissions are managed by macOS, with links to System Settings when access is blocked.
+
 This does not guarantee conversion between every registered format. The route planner determines available presets and targets from the inputs and engine status. The 58 read-only formats are excluded from output choices. Missing engines and unavailable macOS routes show a reason.
 
 The default bundle includes built-in libraries, rhwp and 7-Zip. FFmpeg, Ghostscript, Pandoc, LibreOffice and Calibre use system installations or copies selected under **Conversion engines → External engine executables**. Copies fetched by the development download tool are not automatically added to user settings.
@@ -60,6 +62,8 @@ Outputs are written to a hidden staging folder beside the source, then published
 ## Build and run
 
 Use Xcode 27 / Swift 6.4 and XcodeGen 2.46 or later. Builds require .NET SDK 10.0.401, pinned in `Config/EngineHost.global.json`. Use the SDK in `~/.dotnet` or set `DOTNET_ROOT` to its installation directory. See [Microsoft's official download](https://dotnet.microsoft.com/download/dotnet/10.0) for installation.
+
+The current app version is **0.0.1 (build 1)**, an internal development version with no published release. `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml` are the app version source of truth; generated Info.plist values and both About views use those values. Increment the build number for a new build of the same version, and reset it to 1 when changing the version. Run `xcodegen generate` after editing the version. Git tags (`v0.0.1`) and GitHub Releases are created separately when publication is intended. The embedded engine host has its own version.
 
 ```sh
 xcodegen generate
@@ -102,7 +106,7 @@ On Apple silicon, 32 Xcode tests, 12 Swift Package tests, 22 built-in engine che
 
 Upstream Core tests passed 154 with 2 skipped; patched Core passed 164 with 2 skipped. Both upstream and patched Engines tests passed 445 and failed 3; these 3 failures come from missing FFmpeg encoders on this machine. The 4 added real-engine tests pass when Pandoc and LibreOffice are available.
 
-Not every format pair or codec has been tested. Ghostscript is absent on this machine, and its FFmpeg lacks some encoders. Automatic watch folders, in-app engine downloads and login items are not connected yet. External exFAT and SMB volumes, Intel, distribution notarization and TCC relaunch checks remain unverified.
+Not every format pair or codec has been tested. Ghostscript is absent on this machine, and its FFmpeg lacks some encoders. Automatic watch folders and in-app engine downloads are not connected yet. Login registration and notification delivery across a real logout/login remain unverified. External exFAT and SMB volumes, Intel, distribution notarization and TCC relaunch checks remain unverified.
 
 ## Source and design
 
