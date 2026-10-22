@@ -5,6 +5,7 @@ import Observation
 @MainActor @Observable
 final class AppModel {
     let host: EngineHost
+    let applicationPreferences: ApplicationPreferences
     private(set) var catalog: HostCatalog?
     private(set) var library: HostLibrary? {
         didSet { Localization.shared.language = AppLanguage.supported(library?.settings["language"]?.string) }
@@ -41,6 +42,8 @@ final class AppModel {
     @ObservationIgnored var onCloseRadial: (() -> Void)?
     @ObservationIgnored var onLongJob: (() -> Void)?
     @ObservationIgnored var onEditPreset: ((String) -> Void)?
+    @ObservationIgnored var onJobFinished: ((HostJob) -> Void)?
+    @ObservationIgnored private var deliveredJobIDs: Set<String> = []
     @ObservationIgnored private var radialHandOffTask: Task<Void, Never>?
     @ObservationIgnored private var eventTask: Task<Void, Never>?
     @ObservationIgnored private var selectionGeneration = 0
@@ -51,6 +54,7 @@ final class AppModel {
     init(host: EngineHost = EngineHost(), defaults: UserDefaults = .standard) {
         self.host = host
         self.defaults = defaults
+        applicationPreferences = ApplicationPreferences(defaults: defaults)
         let primary = DragShortcut.load(from: defaults)
         dragShortcut = primary
         toolsDragShortcut = DragShortcut.loadTools(from: defaults, primary: primary)
@@ -302,6 +306,7 @@ final class AppModel {
             if !isConnected && !isConnecting { Task { await connect() } }
         case .updated(let job): record(job)
         case .finished(let job):
+            let firstDelivery = deliveredJobIDs.insert(job.jobId).inserted
             record(job)
             cancellingJobIDs.remove(job.jobId)
             if let history = job.historyEntry {
@@ -311,6 +316,8 @@ final class AppModel {
             }
             statusMessage = "\(job.preset?.libraryName ?? job.presetName) · \(Self.stateTitle(job.state))"
             if radialJobID == job.jobId { scheduleRadialClose(job) }
+            if firstDelivery { onJobFinished?(job) }
+            deliveredJobIDs.formIntersection(jobs.map(\.jobId))
         case .fatal(let message), .interrupted(let message):
             interruptedJobIDs.formUnion(activeJobs.map(\.jobId))
             cancellingJobIDs = []

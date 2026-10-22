@@ -309,3 +309,31 @@
 "home.moreFiles" = "파일 %@개 더 보기";
 "home.sourceProtected" = "원본 파일을 보존합니다.";
 "home.openRadial" = "원형 메뉴로 선택…";
+
+// Startup, visibility, notifications and excluded applications
+"settings.open" = "설정…";
+"settings.application" = "실행 및 표시";
+"settings.launchAtLogin" = "로그인 시 자동 실행";
+"settings.showMenuBar" = "메뉴 막대에 아이콘 표시";
+"settings.openWindowAtLogin" = "로그인 시 메인 창 열기";
+"settings.application.help" = "변경 사항은 즉시 적용됩니다. 아이콘을 숨겨도 드래그 호출은 유지됩니다. 설정을 다시 열려면 FileToX를 실행하세요. 직접 실행하면 항상 메인 창이 열립니다.";
+"settings.login.approval" = "자동 실행하려면 시스템 설정에서 FileToX를 허용하세요.";
+"settings.login.open" = "로그인 항목 설정 열기…";
+"settings.login.error" = "자동 실행 설정을 변경하지 못했습니다: %@";
+"notifications.section" = "변환 알림";
+"notifications.success" = "변환 완료 시 알림";
+"notifications.failure" = "변환 실패 시 알림";
+"notifications.help" = "변경 사항은 즉시 적용됩니다. 알림을 클릭하면 Finder에서 결과를 표시하고, 결과가 없으면 FileToX를 엽니다. 일부 실패는 실패 알림으로 처리하며 취소한 작업은 알리지 않습니다.";
+"notifications.denied" = "macOS에서 알림이 차단되어 있습니다. 시스템 설정에서 FileToX 알림을 허용하세요.";
+"notifications.openSettings" = "알림 설정 열기…";
+"notifications.permission.error" = "알림 권한을 요청하지 못했습니다: %@";
+"notifications.delivery.error" = "변환은 끝났지만 알림을 보내지 못했습니다: %@";
+"notifications.completed.title" = "변환 완료";
+"notifications.failed.title" = "변환 실패 확인";
+"settings.excluded.title" = "드래그 호출 제외 앱";
+"settings.excluded.empty" = "제외한 앱이 없습니다.";
+"settings.excluded.add" = "앱 추가…";
+"settings.excluded.remove" = "%@ 제외 해제";
+"settings.excluded.invalid" = "유효한 번들 식별자가 있는 앱을 선택하세요.";
+"settings.excluded.help" = "변경 사항은 즉시 적용됩니다. 이 앱에서 시작한 드래그에는 원형 메뉴를 띄우지 않습니다. FileToX 안에서 파일을 선택해 변환하는 기능은 계속 사용할 수 있습니다.";
+"app.version" = "버전 %@ (%@)";

@@ -126,6 +126,9 @@ struct AboutView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text(L("about.description")).font(.body).lineSpacing(3)
+                Text(L("app.version", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—",
+                       Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"))
+                    .font(.callout).foregroundStyle(.secondary)
                 Text("Filee · MIT License").font(.headline)
                 Text(Bundle.main.url(forResource: "Filee", withExtension: "LICENSE").flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? L("라이선스 파일을 찾을 수 없습니다."))
                     .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)

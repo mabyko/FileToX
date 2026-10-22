@@ -4,8 +4,12 @@ import SwiftUI
 struct FileToXApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     var body: some Scene {
-        MenuBarExtra("FileToX", image: "MenuBarIcon") {
+        MenuBarExtra("FileToX", image: "MenuBarIcon", isInserted: Binding(
+            get: { delegate.model.applicationPreferences.showMenuBarIcon },
+            set: { delegate.model.applicationPreferences.showMenuBarIcon = $0 }
+        )) {
             Button(L("FileToX 열기")) { delegate.showConverterWindow() }.keyboardShortcut("o")
+            Button(L("settings.open")) { delegate.showSettings() }.keyboardShortcut(",")
             Text(delegate.model.statusMessage)
             Button(delegate.model.isDragEnabled ? L("드래그 호출 일시 정지") : L("드래그 호출 재개")) {
                 guard var settings = delegate.model.library?.settings else { return }

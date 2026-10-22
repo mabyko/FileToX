@@ -6,6 +6,7 @@ final class GlobalDragMonitor {
     var onSwitch: ((RadialMenuKind) -> Void)?
     var onEnd: (() -> Void)?
     var shortcuts: () -> [RadialMenuKind: DragShortcut] = { [.convert: .standard, .tools: .toolsStandard] }
+    var isApplicationExcluded: (String?) -> Bool = { _ in false }
 
     var isMonitoring: Bool { globalMonitor != nil && localMonitor != nil }
 
@@ -16,6 +17,7 @@ final class GlobalDragMonitor {
     private var pasteboardGate = DragPasteboardGate()
     private var pendingTrigger: Task<Void, Never>?
     private var presented = false
+    private var excludedDrag = false
 
     func start() {
         guard globalMonitor == nil, localMonitor == nil else { return }
@@ -52,7 +54,18 @@ final class GlobalDragMonitor {
         endDrag()
     }
 
-    private func handle(_ event: NSEvent) {
+    func handle(_ event: NSEvent) {
+        if event.type == .leftMouseDown {
+            endDrag()
+            // The event target also identifies clicks in a window that wasn't frontmost yet.
+            let targetPID = event.cgEvent?.getIntegerValueField(.eventTargetUnixProcessID) ?? 0
+            let source = targetPID > 0 ? NSRunningApplication(processIdentifier: pid_t(targetPID)) : nil
+            excludedDrag = isApplicationExcluded(source?.bundleIdentifier ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+        }
+        if excludedDrag {
+            if event.type == .leftMouseUp { endDrag() }
+            return
+        }
         let point = NSEvent.mouseLocation
         let configured = shortcuts()
         let pressed = DragMenuGestureState.matchingMenu(shortcuts: configured, modifiers: event.modifierFlags) { code in
@@ -66,7 +79,6 @@ final class GlobalDragMonitor {
         var triggered: RadialMenuKind?
         switch event.type {
         case .leftMouseDown:
-            endDrag()
             pasteboardGate.begin(changeCount: NSPasteboard(name: .drag).changeCount)
             gesture.mouseDown(at: point)
         case .leftMouseDragged:
@@ -150,6 +162,7 @@ final class GlobalDragMonitor {
         releaseTimer = nil
         if gesture.finish() { onEnd?() }
         presented = false
+        excludedDrag = false
     }
 
     isolated deinit {
