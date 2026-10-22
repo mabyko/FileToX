@@ -6,6 +6,10 @@ struct ConversionNotification {
     let body: String
     let outputs: [String]
 
+    static func existingOutputs(_ paths: [String]) -> [String] {
+        paths.filter { FileManager.default.fileExists(atPath: $0) }
+    }
+
     @MainActor
     init?(job: HostJob, preferences: ApplicationPreferences) {
         let failed: Bool

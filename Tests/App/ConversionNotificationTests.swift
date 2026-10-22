@@ -2,6 +2,19 @@ import XCTest
 @testable import FileToX
 
 final class ConversionNotificationTests: XCTestCase {
+    func testNotificationClickKeepsExistingFilesAndFoldersAndFallsBackAfterDeletion() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("filetox-notification-click-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("결과 file.txt")
+        try Data("converted".utf8).write(to: file)
+        let paths = [root.appendingPathComponent("missing.zip").path, file.path, root.path]
+        XCTAssertEqual(ConversionNotification.existingOutputs(paths), [file.path, root.path])
+        try FileManager.default.removeItem(at: root)
+        XCTAssertTrue(ConversionNotification.existingOutputs(paths).isEmpty)
+        XCTAssertTrue(ConversionNotification.existingOutputs([]).isEmpty)
+    }
+
     @MainActor
     func testNotificationOptionsPartialFailuresCancellationAndOutputPaths() throws {
         let suite = "filetox-notification-\(UUID().uuidString)"

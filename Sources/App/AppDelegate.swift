@@ -17,9 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifications.start()
         notifications.onOpen = { [weak self] paths in
             guard let self else { return }
-            showConverterWindow()
-            if paths.isEmpty { model.selectedPage = "home" }
-            else { model.reveal(paths) }
+            let existing = ConversionNotification.existingOutputs(paths)
+            if existing.isEmpty {
+                model.selectedPage = "home"
+                showConverterWindow()
+            } else { model.reveal(existing) }
         }
         notifications.onError = { [weak self] error in
             self?.model.statusMessage = L("notifications.delivery.error", error)

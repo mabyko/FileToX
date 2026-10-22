@@ -57,7 +57,7 @@ macOS에서 실행한 영어 Release 버전의 실제 화면이다.
 
 Xcode 27 / Swift 6.4, XcodeGen 2.46 이상을 사용한다. 빌드에 필요한 .NET SDK는 `Config/EngineHost.global.json`의 10.0.401이다. `~/.dotnet`의 SDK를 사용하거나 `DOTNET_ROOT`에 SDK 설치 폴더를 지정한다. SDK 설치는 [Microsoft 공식 다운로드](https://dotnet.microsoft.com/download/dotnet/10.0)를 따른다.
 
-현재 앱 버전은 **0.0.1 (빌드 1)**이며, 아직 출시하지 않은 내부 개발 버전이다. 버전은 `project.yml`의 `MARKETING_VERSION`과 `CURRENT_PROJECT_VERSION`에서 관리하고, 생성된 Info.plist와 두 정보 화면이 이 값을 사용한다. 같은 버전의 새 빌드는 빌드 번호를 올리고, 버전을 바꾸면 빌드 번호는 1부터 시작한다. 버전을 수정한 뒤 `xcodegen generate`를 실행한다. Git 태그(`v0.0.1`)와 GitHub Release는 배포할 때 별도로 만든다. 내장 엔진 호스트는 자체 버전을 유지한다.
+현재 앱 버전은 **0.0.1 (빌드 2)**이며, 아직 출시하지 않은 내부 개발 버전이다. 버전은 `project.yml`의 `MARKETING_VERSION`과 `CURRENT_PROJECT_VERSION`에서 관리하고, 생성된 Info.plist와 두 정보 화면이 이 값을 사용한다. 같은 버전의 새 빌드는 빌드 번호를 올리고, 버전을 바꾸면 빌드 번호는 1부터 시작한다. 버전을 수정한 뒤 `xcodegen generate`를 실행한다. Git 태그(`v0.0.1`)와 GitHub Release는 배포할 때 별도로 만든다. 내장 엔진 호스트는 자체 버전을 유지한다.
 
 ```sh
 xcodegen generate
