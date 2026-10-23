@@ -154,6 +154,9 @@ final class XmlTests: XCTestCase {
         XCTAssertEqual(root.attributes.filter { !$0.isNamespaceDeclaration }.map(\.name.localName), ["zeta", "alpha"])
         let runs = root.descendants(w + "t")
         XCTAssertEqual(runs.map(\.value), [" ", "", "a & b"])
+        XCTAssertTrue(root.firstDescendant(w + "t") { $0.value.isEmpty } === runs[1]) // document order, first match
+        XCTAssertTrue(root.firstDescendant(w + "t") === runs[0])
+        XCTAssertNil(root.firstDescendant(w + "t") { $0.value == "zzz" })
         XCTAssertEqual(root.element(w + "p")?.attributeValue(XNamespace("urn:r") + "id"), "x")
         XCTAssertEqual(root.element(w + "p")?.value, " a & b<c>")
         XCTAssertEqual(root.element(XNamespace("urn:d") + "x")?.attributeValue("b"), "1")

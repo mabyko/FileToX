@@ -18,15 +18,15 @@ extension HwpxWriter {
         }
         return width
     }
+    // Called per paragraph: firstDescendant stops at the match like C#'s lazy LINQ (the eager walk was quadratic).
     func baseSize(_ id: String) -> Int {
         DocumentXML.int(
-            head.descendants(Self.hh + "charPr").first { $0.attributeValue("id") == id }?.attributeValue("height"))
+            head.firstDescendant(Self.hh + "charPr") { $0.attributeValue("id") == id }?.attributeValue("height"))
             ?? 1000
     }
     func basePercent(_ id: String) -> Int {
-        let line = head.descendants(Self.hh + "paraPr").first { $0.attributeValue("id") == id }?.descendants(
-            Self.hh + "lineSpacing"
-        ).first
+        let line = head.firstDescendant(Self.hh + "paraPr") { $0.attributeValue("id") == id }?.firstDescendant(
+            Self.hh + "lineSpacing")
         return line?.attributeValue("type") == "PERCENT" ? DocumentXML.int(line?.attributeValue("value")) ?? 160 : 160
     }
     func estimateHeight(_ blocks: [HBlock], _ width: Int) -> Int {
