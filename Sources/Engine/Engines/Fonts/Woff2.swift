@@ -1,5 +1,7 @@
-// Port of Filee.Engines/Fonts/Woff2.cs. Apple's Brotli encoder exposes level 2 (Filee uses quality 11/window 22).
+// Port of Filee.Engines/Fonts/Woff2.cs. Encoding uses Google's Brotli (quality 11, window 22, as Filee); decoding uses
+// Apple's Compression framework.
 import Foundation
+import brotli
 import Compression
 
 enum Woff2 {
@@ -92,8 +94,43 @@ enum Woff2 {
         }
         return font
     }
+    /// Brotli at the highest quality (11, window 22) with Google's encoder, like Filee's BrotliEncoder. That takes about
+    /// 10 s per MB, so the data is fed in chunks to report progress and honour cancellation (same result as one call).
     static func compress(_ data: Data, _ progress: ProgressHandler? = nil) throws -> Data {
-        try brotli(data, encode: true, expectedLength: nil, progress: progress)
+        let failure = "Brotli compression failed."
+        guard let encoder = BrotliEncoderCreateInstance(nil, nil, nil) else { throw ConversionError(failure) }
+        defer { BrotliEncoderDestroyInstance(encoder) }
+        guard BrotliEncoderSetParameter(encoder, BROTLI_PARAM_QUALITY, 11) == BROTLI_TRUE,
+              BrotliEncoderSetParameter(encoder, BROTLI_PARAM_LGWIN, 22) == BROTLI_TRUE else { throw ConversionError(failure) }
+        let chunk = 256 * 1024
+        var output = Data()
+        output.reserveCapacity(data.count / 2 + 64)
+        var buffer = [UInt8](repeating: 0, count: chunk)
+        try data.withUnsafeBytes { raw in
+            var offset = 0
+            while true {
+                let take = min(chunk, data.count - offset), final = offset + take == data.count
+                var availableIn = take
+                var nextIn: UnsafePointer<UInt8>? = raw.bindMemory(to: UInt8.self).baseAddress.map { $0 + offset }
+                repeat {
+                    let written: Int = try buffer.withUnsafeMutableBufferPointer { out in
+                        var availableOut = chunk
+                        var nextOut: UnsafeMutablePointer<UInt8>? = out.baseAddress
+                        guard BrotliEncoderCompressStream(encoder, final ? BROTLI_OPERATION_FINISH : BROTLI_OPERATION_PROCESS,
+                                                          &availableIn, &nextIn, &availableOut, &nextOut, nil) == BROTLI_TRUE else {
+                            throw ConversionError(failure)
+                        }
+                        return chunk - availableOut
+                    }
+                    output.append(contentsOf: buffer[0..<written])
+                } while availableIn > 0 || BrotliEncoderHasMoreOutput(encoder) == BROTLI_TRUE || (final && BrotliEncoderIsFinished(encoder) != BROTLI_TRUE)
+                offset += take
+                if final { return }
+                try Task.checkCancellation()
+                progress?(Double(offset) / Double(data.count))
+            }
+        }
+        return output
     }
     static func decompress(_ data: Data, _ length: Int) throws -> Data { try brotli(data, encode: false, expectedLength: length, progress: nil) }
     private static func brotli(_ data: Data, encode: Bool, expectedLength: Int?, progress: ProgressHandler?) throws -> Data {

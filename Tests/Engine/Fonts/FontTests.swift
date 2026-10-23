@@ -79,9 +79,8 @@ final class FontTests: XCTestCase {
         for tag in ["glyf", "loca"] { XCTAssertEqual(directory[tag]?.0, 0); XCTAssertEqual(directory[tag]?.1, true) }
         XCTAssertEqual(directory["hmtx"]?.0, 1); XCTAssertEqual(directory["hmtx"]?.1, true); XCTAssertEqual(directory["cmap"]?.0, 0); XCTAssertEqual(directory["cmap"]?.1, false)
         XCTAssertEqual(woff2.count % 4, 0); XCTAssertEqual(Int(BinaryPrimitives.readUInt32BigEndian(woff2, 8)), woff2.count)
-        // Apple exposes Brotli level 2, versus .NET quality 11; Filee's 0.8/1.05 size thresholds cannot apply.
-        XCTAssertLessThan(woff2.count, woff.count)
-        print("FONT_BROTLI_SIZE apple=\(woff2.count) woff=\(woff.count) google=\(google.count)")
+        XCTAssertLessThan(Double(woff2.count), Double(woff.count) * 0.8, "WOFF2 \(woff2.count) vs WOFF \(woff.count)")
+        XCTAssertLessThan(Double(woff2.count), Double(google.count) * 1.05, "Filee \(woff2.count) vs Google \(google.count)")
     }
     func testWoff2FromGoogleReferenceEncoderDecodesToSource() async throws {
         let source = try load(sample(trueType)), google = try Data(contentsOf: sample(googleWoff2)), decoded = try FontFile.load(google)

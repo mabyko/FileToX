@@ -25,6 +25,8 @@ let package = Package(
             dependencies: [
                 .product(name: "libwebp", package: "libwebp-Xcode"),
                 .product(name: "libjxl", package: "libjxl-Xcode"),
+                // Google's Brotli (part of the libjxl package) for WOFF2 at Filee's quality 11.
+                .product(name: "brotli", package: "libjxl-Xcode"),
             ],
             path: "Sources/Engine",
             resources: [.copy("Resources")],

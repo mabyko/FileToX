@@ -58,17 +58,9 @@ Original C#/Swift outputs remain in the temporary comparison directory.
 
 ## Deliberate platform differences and limits
 
-Apple Compression's installed public header documents Brotli **level 2 only**;
-there is no public quality/window setting. Filee uses quality 11/window 22.
-Swift WOFF2 files were 11.9–20.9% larger than C# across these comparisons.
-For TTF-source conversions, C# -> Swift sizes in bytes were:
-
-- FileeTest-TrueType: 6,348 -> 7,540 (Google fixture: 6,440).
-- FileeTest-CID converted to TrueType: 2,700 -> 3,032.
-- FileeTest-NameKeyed converted to TrueType: 968 -> 1,144.
-- Arial: 320,676 -> 380,904.
-- Times New Roman: 362,064 -> 425,984.
-- STIXGeneral converted to TrueType: 180,356 -> 207,636.
+WOFF2 is encoded with Google's Brotli at Filee's quality 11/window 22 (the `brotli` product of the libjxl
+package; Apple Compression only offers level 2, which made files 11.9–20.9% larger). With it, all 24 WOFF2
+outputs are byte-identical to the C# outputs (99 of the 124 outputs are byte-identical; the rest are WOFF).
 
 The WOFF zlib level stays 9 (`SmallestSize`). macOS's system zlib and .NET's
 compressor produce different valid Deflate streams for some tables, even when
@@ -81,11 +73,7 @@ The browser used its own FontFace decoder, independent of this Swift decoder.
 EOT is checked through header fields and exact C# byte equality, since Chrome
 does not support EOT. The browser result is retained in the comparison JSON.
 
-Filee's original WOFF2 size assertions (<80% of WOFF and <105% of Google) are
-inapplicable to Apple's fixed level 2. The port asserts WOFF2 is smaller than
-WOFF for the TrueType fixture and reports all three sizes; the format/transform
-assertions remain unchanged. Matching quality 11 would require relaxing the
-platform/dependency constraint. No fallback codec or feature was silently dropped.
+Filee's original WOFF2 size assertions (<80% of WOFF and <105% of Google) hold again and are kept.
 
 The foundation's `EngineVersions.builtIn` displays `FileToX 0.1.0`, where C#
 displays `Filee 1.8.1`. The converter uses that shared version API, as Filee does.
