@@ -12,6 +12,7 @@ public enum EngineRegistry {
         // font, docx-writer, pdf-text, email, ffmpeg, cad, ebook, pandoc, ghostscript, calibre, libreoffice.
         _ = environment
         converters.append(ArchiveConverter())
+        converters.append(FfmpegConverter())
         return converters
     }
 
