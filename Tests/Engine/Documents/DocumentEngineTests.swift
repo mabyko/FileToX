@@ -214,7 +214,7 @@ extension DocumentEngineTests {
         }
         XCTAssertEqual(PlainTextWriter.write(d), "3. 첫째\n\n4. 둘째\n")
     }
-    func testUnhwpEmbedsImages() async throws {
+    func testUnhwpWritesMarkdownSidecarAndEmbedsHtmlImages() async throws {
         let d = HDocument()
         let s = HSection()
         let p = HParagraph()
@@ -227,7 +227,8 @@ extension DocumentEngineTests {
         try HwpxWriter.write(d, h)
         for ext in ["md", "html"] {
             let out = try await convert(UnhwpConverter(), h, "hwpx", ext, "out." + ext)
-            XCTAssertTrue(try String(contentsOfFile: out, encoding: .utf8).contains("data:image/png;base64,"))
+            XCTAssertTrue(try String(contentsOfFile: out, encoding: .utf8)
+                .contains(ext == "md" ? "out_files/img0001.png" : "data:image/png;base64,"))
         }
     }
 }

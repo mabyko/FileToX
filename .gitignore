@@ -23,10 +23,6 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 
-# .NET build and restore outputs, including vendor test projects
-bin/
-obj/
-
 # Python bytecode and caches, including Tests/Tools
 __pycache__/
 *.py[cod]

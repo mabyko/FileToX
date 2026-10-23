@@ -220,9 +220,12 @@ extension HwpxReader {
         }
     }
     func styleHeadingLevel(_ id: String?) -> Int {
-        guard let id, let s = styles[id], let n = Self.attr(s, "engName"), n.lowercased().hasPrefix("heading "),
-            let level = Int(n.dropFirst(8)), (1...9).contains(level)
-        else { return 0 }
-        return level
+        guard let id, let style = styles[id] else { return 0 }
+        for name in [Self.attr(style, "engName"), Self.attr(style, "name")].compactMap({ $0 }) {
+            let parts = name.lowercased().split(whereSeparator: { $0.isWhitespace })
+            if parts.count == 2, ["heading", "outline", "개요", "제목"].contains(String(parts[0])),
+               let level = Int(parts[1]), (1...9).contains(level) { return level }
+        }
+        return 0
     }
 }

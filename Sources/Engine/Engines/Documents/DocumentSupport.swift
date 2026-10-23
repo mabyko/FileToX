@@ -2,6 +2,17 @@
 import Foundation
 
 enum HDocumentWalker {
+    /// Text exports show each header at its definition, and footers after the body.
+    static func flowBlocks(_ section: HSection) -> [HBlock] {
+        var result: [HBlock] = []
+        let headers = Dictionary(grouping: section.headers) { min(max(0, $0.startBlockIndex), section.blocks.count) }
+        for i in 0...section.blocks.count {
+            for header in headers[i] ?? [] { result += header.blocks }
+            if i < section.blocks.count { result.append(section.blocks[i]) }
+        }
+        for footer in section.footers { result += footer.blocks }
+        return result
+    }
     static func inlines(_ blocks: [HBlock]) -> [HInline] {
         var result: [HInline] = []
         for block in blocks {
