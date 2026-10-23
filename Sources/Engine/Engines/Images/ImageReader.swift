@@ -24,7 +24,7 @@ enum ImageReader {
             } catch let error as CancellationError {
                 throw error
             } catch {
-                throw ConversionError("This GIMP file can't be read. FileToX reads 8-bit XCF files saved without \"better but slower compression\"; " +
+                throw ConversionError("This GIMP file can't be read. Filee reads 8-bit XCF files saved without \"better but slower compression\"; " +
                                       "in GIMP, export the picture as PNG or PSD instead. (" + error.localizedDescription + ")")
             }
         default:
