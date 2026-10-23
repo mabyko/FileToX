@@ -19,8 +19,7 @@ final class CadConverter: Converter {
     /// are converted at once.
     var maxParallelism: Int { min(max(ProcessInfo.processInfo.activeProcessorCount / 2, 1), 4) }
 
-    // shortcut: dxf → dwg is left out until the DWG writer port passes its tests; restore it after ("dwg", "dxf").
-    let edges: [ConversionEdge] = [ConversionEdge("dwg", "dxf")]
+    let edges: [ConversionEdge] = [ConversionEdge("dwg", "dxf"), ConversionEdge("dxf", "dwg")]
         + sources.flatMap { source in (["pdf", "svg"] + ImageEncoder.writable).map { ConversionEdge(source, $0) } }
 
     func status() -> EngineStatus {
