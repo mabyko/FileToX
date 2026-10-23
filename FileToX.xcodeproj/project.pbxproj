@@ -9,7 +9,9 @@
 /* Begin PBXBuildFile section */
 		0101683F324338D34300D6CA /* PanelPlacementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7C338D26B27FB21E225848 /* PanelPlacementTests.swift */; };
 		0520C4C7E9DB46ABDCFB3B2C /* Zip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1694472848057BC255F6F574 /* Zip.swift */; };
+		0657C0314A00B9567F80B2DC /* libwebp in Frameworks */ = {isa = PBXBuildFile; productRef = 02D996A23A90C00D82ADDFB4 /* libwebp */; };
 		128B094E5135B156F06AC108 /* PermissionOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD21748C8C4E483CED118566 /* PermissionOnboardingView.swift */; };
+		1516F8F865A569467C889E71 /* CodecLibraries.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9503CF807D9789A4E86BA4C0 /* CodecLibraries.swift */; };
 		1687C3F61EA222E850AC7951 /* FormatRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = E578E9E22F242284186174C0 /* FormatRegistry.swift */; };
 		1703DD5964460742CAB018CB /* FileToXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76AF946CDC0B29C440098FF8 /* FileToXApp.swift */; };
 		1B4306C8AEF852DAE5296136 /* DragPasteboardGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9899FAF433476CA2C6DC2464 /* DragPasteboardGate.swift */; };
@@ -24,6 +26,7 @@
 		3AF17BD151D06F567788E1BE /* LibraryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2783EDF420B714A2F709AFF3 /* LibraryViews.swift */; };
 		40E3A69857FA05E1C4CA1480 /* DonutGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3468B291C6CDBD7EF122DA54 /* DonutGeometryTests.swift */; };
 		43F2B146333970AC6F3F6996 /* EngineHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF4A43BA5B60E04A103B5483 /* EngineHost.swift */; };
+		46E4BF650C054D71DA5C713F /* libjxl in Frameworks */ = {isa = PBXBuildFile; productRef = FC48B070C1C986F25E90D517 /* libjxl */; };
 		4A1EB6AC2CAE45283990D0CE /* EngineHostMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = D586A07B5612A69BCA5A41B9 /* EngineHostMain.swift */; };
 		4C1DAE577A0A68C8C59A7641 /* TextEncodings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1741EF0B41FE4B9D874B1FA2 /* TextEncodings.swift */; };
 		513B64891B9E0EDA041AE9B6 /* GlobalDragMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931432C168F544F409883E9C /* GlobalDragMonitorTests.swift */; };
@@ -32,7 +35,9 @@
 		5D05815FBE47EF4C4FBCDC5F /* HwpxModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B43A56FEDD7E12DFC1CE33F /* HwpxModel.swift */; };
 		5DE6D15462178B6D620ED1AA /* DragMenuGestureState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11E4FB3294CAA3C585FB07C4 /* DragMenuGestureState.swift */; };
 		5F491ADB679A4ABA84518776 /* RadialMenuEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9A1DE2DC082DFA69C4C9670 /* RadialMenuEntry.swift */; };
+		6010730FD3148AD354C8856D /* libwebp in Frameworks */ = {isa = PBXBuildFile; productRef = B3A074F7E7C884F1F0A94AF3 /* libwebp */; };
 		6135A66FAA4C104A6FE97A79 /* OutputCommit+FinalPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B19C2ADA2AEF00A37C4B75A /* OutputCommit+FinalPath.swift */; };
+		64AB5AE8650EB3A6BF642D5C /* libjxl in Frameworks */ = {isa = PBXBuildFile; productRef = E9B779AF4E29615ED5499F1F /* libjxl */; };
 		6A626B54FA3002842B105FE0 /* DragMenuGestureStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F31AA977C20783522C95478 /* DragMenuGestureStateTests.swift */; };
 		6A9B81FB43110633C77DDD62 /* FormatCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0843785DD54A1766D323191 /* FormatCatalog.swift */; };
 		6B075805A08870CD8C2412EB /* DonutGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A6BCBF25DD8B066659EFC4B /* DonutGeometry.swift */; };
@@ -52,6 +57,7 @@
 		95A39665ACDD52FC8BCBD8EA /* GlobalDragMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEC1220C6DD1FF5419BADC88 /* GlobalDragMonitor.swift */; };
 		9819DC0C47B60DC656B6166A /* PanelPlacement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98120A61BE14A99C3C58C1CA /* PanelPlacement.swift */; };
 		9DCEDE2F9B1F694BB7524BA3 /* ApplicationSettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69134E092A3D8369B75378A2 /* ApplicationSettingsViews.swift */; };
+		A111A74A8D054F9E1EA227AC /* libjxl in Frameworks */ = {isa = PBXBuildFile; productRef = F760F46E558D10C145FA5825 /* libjxl */; };
 		A16D94E5A4E6E863C583A46D /* PermissionOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AF6BF1608F3BE41E48AD4DE /* PermissionOnboarding.swift */; };
 		A24BC3DAE55786FBE1B3D4BE /* DragPasteboardGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22A4946E966B339A39402356 /* DragPasteboardGateTests.swift */; };
 		A3ED32BB6CEFDF2A9FAC2C23 /* EngineVersions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 229804D98B9A04FC0EFDE75A /* EngineVersions.swift */; };
@@ -66,6 +72,7 @@
 		C0E8701AB52335D49D8BAE18 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FF49B53003F132EA5BBEF64 /* HomeView.swift */; };
 		C28A7960F4011D1AAEA8579B /* ConversionNotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1895F31EEE8ABFCD669C93 /* ConversionNotificationTests.swift */; };
 		C4FA48D0CBC3E5DD7A74A453 /* FileeFormats.json in Resources */ = {isa = PBXBuildFile; fileRef = 521A5BA9D1C2F7A08E6B90AD /* FileeFormats.json */; };
+		C7B222EC95F246340449E92F /* libwebp in Frameworks */ = {isa = PBXBuildFile; productRef = 0AD3A698F543AA1F99D4EE0D /* libwebp */; };
 		C96CC6A99AE1158D814C5793 /* ApplicationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D17548651AB41F64897EAD /* ApplicationPreferences.swift */; };
 		CD8E2672D8B56559EF991DBD /* EngineRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD34B297B2F52FBED8B35754 /* EngineRegistry.swift */; };
 		CE8B67AA1545769C0951362B /* FormatCatalogResourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F92069215A215E966DF70300 /* FormatCatalogResourceTests.swift */; };
@@ -192,6 +199,7 @@
 		924FBB77CB6A589D81F23335 /* Binary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Binary.swift; sourceTree = "<group>"; };
 		931432C168F544F409883E9C /* GlobalDragMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalDragMonitorTests.swift; sourceTree = "<group>"; };
 		932C381495FAD7A14A07BEB3 /* DragShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragShortcut.swift; sourceTree = "<group>"; };
+		9503CF807D9789A4E86BA4C0 /* CodecLibraries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecLibraries.swift; sourceTree = "<group>"; };
 		9562682C6DDBE80CAC103E35 /* FilePath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePath.swift; sourceTree = "<group>"; };
 		98120A61BE14A99C3C58C1CA /* PanelPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelPlacement.swift; sourceTree = "<group>"; };
 		9899FAF433476CA2C6DC2464 /* DragPasteboardGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragPasteboardGate.swift; sourceTree = "<group>"; };
@@ -224,8 +232,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				875AC037E15454B1ACC6F98F /* libFileToXEngineKit.a in Frameworks */,
+				0657C0314A00B9567F80B2DC /* libwebp in Frameworks */,
+				64AB5AE8650EB3A6BF642D5C /* libjxl in Frameworks */,
 				783222ED5A29FEA3F4D1056A /* libxml2.tbd in Frameworks */,
 				58E4544216A811146A8BD447 /* libz.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B09054269744270D885677B0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C7B222EC95F246340449E92F /* libwebp in Frameworks */,
+				46E4BF650C054D71DA5C713F /* libjxl in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -234,6 +253,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A9BFA6103C3FDAC658A668F5 /* libFileToXEngineKit.a in Frameworks */,
+				6010730FD3148AD354C8856D /* libwebp in Frameworks */,
+				A111A74A8D054F9E1EA227AC /* libjxl in Frameworks */,
 				1E98D11EEB8F4B4738A53BCC /* libxml2.tbd in Frameworks */,
 				6C090FEE1AD9CE1CC5A25FA4 /* libz.tbd in Frameworks */,
 			);
@@ -246,6 +267,7 @@
 			isa = PBXGroup;
 			children = (
 				924FBB77CB6A589D81F23335 /* Binary.swift */,
+				9503CF807D9789A4E86BA4C0 /* CodecLibraries.swift */,
 				9562682C6DDBE80CAC103E35 /* FilePath.swift */,
 				738DF9C6315BACFF0EBA2DC9 /* ImageSupport.swift */,
 				1741EF0B41FE4B9D874B1FA2 /* TextEncodings.swift */,
@@ -584,6 +606,8 @@
 			);
 			name = FileToXEngineTests;
 			packageProductDependencies = (
+				02D996A23A90C00D82ADDFB4 /* libwebp */,
+				E9B779AF4E29615ED5499F1F /* libjxl */,
 			);
 			productName = FileToXEngineTests;
 			productReference = 3350F78390B17BEF81D0AA51 /* FileToXEngineTests.xctest */;
@@ -613,6 +637,7 @@
 			buildPhases = (
 				1BA25ADF009F9E5B42364CB4 /* Sources */,
 				505A8FFCF96CD8E454BC94CA /* Copy Swift Objective-C Interface Header */,
+				B09054269744270D885677B0 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -620,6 +645,8 @@
 			);
 			name = FileToXEngineKit;
 			packageProductDependencies = (
+				0AD3A698F543AA1F99D4EE0D /* libwebp */,
+				FC48B070C1C986F25E90D517 /* libjxl */,
 			);
 			productName = FileToXEngineKit;
 			productReference = 2776875E8E4666891990176B /* libFileToXEngineKit.a */;
@@ -641,6 +668,8 @@
 			);
 			name = FileToXEngine;
 			packageProductDependencies = (
+				B3A074F7E7C884F1F0A94AF3 /* libwebp */,
+				F760F46E558D10C145FA5825 /* libjxl */,
 			);
 			productName = FileToXEngine;
 			productReference = 71EEB7DE2FCE6CA2D0AC54FF /* FileToXEngine.app */;
@@ -674,6 +703,10 @@
 			);
 			mainGroup = D534ED808AC732FE9960D967;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				408D0F57F5E7B5BB7BFECE0C /* XCRemoteSwiftPackageReference "libjxl-Xcode" */,
+				78219A6AC7EF43ECE0BC66AD /* XCRemoteSwiftPackageReference "libwebp-Xcode" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 05291C73B5B17BC91F723AE7 /* Products */;
 			projectDirPath = "";
@@ -762,6 +795,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B28EBF699EBF06EBB3546C87 /* Binary.swift in Sources */,
+				1516F8F865A569467C889E71 /* CodecLibraries.swift in Sources */,
 				B0B1E77E46BAEA3EC76E2DF8 /* Converter.swift in Sources */,
 				E8711EA7B7808BADB3E1FF8D /* EngineEnvironment.swift in Sources */,
 				4A1EB6AC2CAE45283990D0CE /* EngineHostMain.swift in Sources */,
@@ -975,7 +1009,7 @@
 			baseConfigurationReference = 7A999BB765DCB71CC48D7973 /* Base.xcconfig */;
 			buildSettings = {
 				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
-				BUNDLE_LOADER = "$(TEST_HOST)";
+				BUNDLE_LOADER = "";
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -991,7 +1025,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FILETOX_BUNDLE_ID).enginetests";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FileToXEngine.app/Contents/MacOS/FileToXEngine";
+				TEST_HOST = "";
 			};
 			name = Debug;
 		};
@@ -1000,7 +1034,7 @@
 			baseConfigurationReference = 7A999BB765DCB71CC48D7973 /* Base.xcconfig */;
 			buildSettings = {
 				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
-				BUNDLE_LOADER = "$(TEST_HOST)";
+				BUNDLE_LOADER = "";
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1016,7 +1050,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FILETOX_BUNDLE_ID).enginetests";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FileToXEngine.app/Contents/MacOS/FileToXEngine";
+				TEST_HOST = "";
 			};
 			name = Release;
 		};
@@ -1312,6 +1346,58 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		408D0F57F5E7B5BB7BFECE0C /* XCRemoteSwiftPackageReference "libjxl-Xcode" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/libjxl-Xcode.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.10.4;
+			};
+		};
+		78219A6AC7EF43ECE0BC66AD /* XCRemoteSwiftPackageReference "libwebp-Xcode" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/libwebp-Xcode.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		02D996A23A90C00D82ADDFB4 /* libwebp */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 78219A6AC7EF43ECE0BC66AD /* XCRemoteSwiftPackageReference "libwebp-Xcode" */;
+			productName = libwebp;
+		};
+		0AD3A698F543AA1F99D4EE0D /* libwebp */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 78219A6AC7EF43ECE0BC66AD /* XCRemoteSwiftPackageReference "libwebp-Xcode" */;
+			productName = libwebp;
+		};
+		B3A074F7E7C884F1F0A94AF3 /* libwebp */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 78219A6AC7EF43ECE0BC66AD /* XCRemoteSwiftPackageReference "libwebp-Xcode" */;
+			productName = libwebp;
+		};
+		E9B779AF4E29615ED5499F1F /* libjxl */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 408D0F57F5E7B5BB7BFECE0C /* XCRemoteSwiftPackageReference "libjxl-Xcode" */;
+			productName = libjxl;
+		};
+		F760F46E558D10C145FA5825 /* libjxl */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 408D0F57F5E7B5BB7BFECE0C /* XCRemoteSwiftPackageReference "libjxl-Xcode" */;
+			productName = libjxl;
+		};
+		FC48B070C1C986F25E90D517 /* libjxl */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 408D0F57F5E7B5BB7BFECE0C /* XCRemoteSwiftPackageReference "libjxl-Xcode" */;
+			productName = libjxl;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C2A6D2AC3F4EFFCB2976E15E /* Project object */;
 }

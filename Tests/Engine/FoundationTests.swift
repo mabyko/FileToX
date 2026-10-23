@@ -279,3 +279,10 @@ private final class LineBox: @unchecked Sendable {
     func add(_ line: String) { lock.withLock { storage.append(line) } }
     var values: [String] { lock.withLock { storage } }
 }
+
+final class CodecLibraryTests: XCTestCase {
+    func testEncoderLibrariesAreLinked() {
+        XCTAssertEqual(CodecLibraries.webpVersion, "1.6.0")
+        XCTAssertTrue(CodecLibraries.jxlVersion.hasPrefix("0.10."), CodecLibraries.jxlVersion)
+    }
+}

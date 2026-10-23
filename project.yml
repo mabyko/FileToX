@@ -9,6 +9,13 @@ settings:
     MARKETING_VERSION: 0.0.1
     CURRENT_PROJECT_VERSION: 2
     DEVELOPMENT_LANGUAGE: en
+packages:
+  libwebp:
+    url: https://github.com/SDWebImage/libwebp-Xcode.git
+    exactVersion: 1.6.0
+  libjxl:
+    url: https://github.com/SDWebImage/libjxl-Xcode.git
+    exactVersion: 0.10.4
 targets:
   FileToX:
     type: application
@@ -69,6 +76,11 @@ targets:
       - path: Sources/Engine
         excludes:
           - Resources
+    dependencies:
+      - package: libwebp
+        link: true
+      - package: libjxl
+        link: true
     settings:
       base:
         PRODUCT_NAME: FileToXEngineKit
@@ -89,6 +101,8 @@ targets:
         buildPhase: resources
     dependencies:
       - target: FileToXEngineKit
+      - package: libwebp
+      - package: libjxl
       - sdk: libxml2.tbd
       - sdk: libz.tbd
     settings:
@@ -126,11 +140,16 @@ targets:
       - target: FileToXEngine
         embed: false
         link: false
+      - package: libwebp
+      - package: libjxl
       - sdk: libxml2.tbd
       - sdk: libz.tbd
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).enginetests
+        # Logic tests: the helper is a dependency only so host tests can launch it, not their test host.
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_IDENTITY: "-"
         SWIFT_VERSION: "5.0"
