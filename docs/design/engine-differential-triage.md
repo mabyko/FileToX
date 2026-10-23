@@ -1,0 +1,815 @@
+# C# / Swift engine differential triage
+
+Date: 2026-10-23. Branch: `fix/swift-engine-differential`.
+
+This report covers the retained 849-case C# / Swift replay, excluding the 15 CAD
+cases from the parity verdict. CAD is being ported separately. It distinguishes
+comparator noise, confirmed engine defects, previously accepted differences, and
+backend differences that still need an acceptance decision. A raw FAIL is not
+automatically a Swift defect; matching failures can also receive PASS.
+
+## Evidence and results
+
+All paths below are relative to the named worktree, unless absolute.
+
+- C# evidence, in worktree `t3-6fdca402`:
+  `build/engine-compare/baseline-lo/run-optional` and
+  `build/engine-compare/comparison-r1/report.json`.
+- Original Swift evidence, in worktree `t3-6fdca402`:
+  `build/engine-compare/candidate-r1`.
+- Comparator-only replay of retained original artifacts, in this worktree:
+  `build/engine-compare/comparison-r1-normalized`.
+- First fixed helper, in this worktree:
+  `build/engine-compare/candidate-fixed` and `comparison-fixed` under the same
+  `build/engine-compare` directory.
+- Final helper replay: `build/engine-compare/candidate-final`; final comparison:
+  `build/engine-compare/comparison-final` in this worktree.
+
+| Stage | FAIL | WARN | PASS | Non-CAD FAIL |
+| --- | ---: | ---: | ---: | ---: |
+| Original comparison | 122 | 388 | 339 | 107 |
+| Original artifacts, corrected comparator | 83 | 235 | 531 | 68 |
+| First fixed helper | 75 | 243 | 531 | 60 |
+| Final helper (`cd35b98`) | **73** | **244** | **532** | **58** |
+
+The final non-CAD result is **58 FAIL / 244 WARN / 532 PASS** across 834 cases.
+All 849 conversions were replayed, with **zero harness errors and zero inspection
+errors**. Their raw states are 771 completed and 78 failed; the latter include 15
+missing CAD routes and 63 conversion failures also present in the reference.
+Matching expected errors can PASS the differential.
+
+The comparator removes 39 original FAILs without changing output artifacts. The
+engine replay removes nine more FAILs relative to the normalized original run;
+one additional final improvement is a Calibre cover happening to match the
+reference, not another engine fix. Between the first fixed and final runs,
+`auto-063-snb-to-rtf` improves FAIL -> WARN (fixed indentation),
+`auto-067-tcr-to-txtz` improves FAIL -> PASS (matching random cover),
+`auto-039-lrf-to-htmlz` changes WARN -> PASS, and `auto-054-pdb-to-rb` changes
+PASS -> WARN. The last two are external-tool output volatility. Counts from one
+replay must not be interpreted as a deterministic benchmark of random covers.
+
+The saved first fixed report contains **531 PASS / 243 WARN**. The interrupted
+agent's earlier progress message said 530 / 244; the saved report is authoritative.
+Its 849-case run had zero harness errors and zero inspection errors. The final
+replay uses the same corpus hashes, case plan, matrix and optional-engine paths.
+
+Thresholds remain PSNR >= 30 dB **and** global luminance SSIM-like >= 0.95;
+text/XML similarity >= 0.95; identical image geometry/frame count; PDF page sizes
+within 1 pt. No global threshold was relaxed to remove a failure. The wire does
+not expose the executed route, so `engineHint` describes a family, not proof of
+every intermediate converter. Route attribution below combines source code and
+retained output evidence.
+
+Class **a** is comparator noise/volatility, **b** is a permitted or accepted
+backend difference, and **c** is a real implementation/reference defect. **b?**
+marks a measured backend difference whose quantitative acceptance is still open.
+
+| Case group | Cause | Class | Action |
+| --- | --- | --- | --- |
+| TAR/PAX, XML IDs/dates, embedded image bytes, container IDs, TGA inspection, RST DPI | Incidental bytes were compared as content. | a | Normalize and add negative harness checks in `7b1393f`. |
+| GIF alpha/canvas, PSD/PSB composites, comic geometry/quality, OOXML directories, SNB indentation | Port implementation diverged from Filee. | c | Fix in the four engine commits below, with regression tests. |
+| 43 PDF raster cases | PDFKit/CoreGraphics versus PDFium/Skia. | b? | Retain strict FAIL; request a rendering-parity decision. |
+| Six JPEG and three ICO cases | Native chroma/quantization and resize filters. | b? | Retain strict FAIL; request encoding/resize acceptance. |
+| Three SVG raster cases and JP2 quality differences | Backend/quality choices already recorded in the migration decisions. | b | Record scores and retain raw statuses; no new choice required. |
+| Three image-to-markup cases | C# output lacks referenced assets; Swift preserves the images and changes layout/alt details. | c (reference) / b | Retain captured discrepancy; hand layout/alt evidence to the Markup owner. |
+| Generated Calibre covers | Random themes/layouts; one first-fixed cover is a bilingual OCR false positive. | a / b | Normalize only when marker, geometry and nonempty OCR agree; document the visually verified strict-guard exception. |
+| Other WARNs | Encoding/metadata differences or limited inspectors. | b, with stated limits | Retain warnings and evidence; no claim of unmeasured formatting or perceptual equivalence. |
+
+## Completed fixes
+
+| Commit | Cause and change | Verification |
+| --- | --- | --- |
+| `7b1393f` | Comparator treated PAX/TAR headers, generated UUID/date fields, embedded image bytes, RST DPI rounding and media-container identifiers as content. Compare TAR members, scoped XML metadata, decoded embedded pictures and media packet hashes/timing. Expand indexed TGA palettes before ImageIO decoding. | Harness tests retain negative checks for missing members, changed text/geometry/pixels and media payload/timing changes. Original artifacts improve from 122 to 83 FAIL without touching their outputs. |
+| `883aa0b` | GIF lost binary transparency and enlarged its logical screen to fit later pages; PSD/PSB composites applied a second white matte. Match Filee's GIF alpha threshold/canvas and straight composite samples. | GIF alpha/canvas and PSD sample regression tests. `auto-060-psb-to-gif`: 33.878 dB / 0.998006. `auto-068-tga-to-psd` and `-psb`: decoded pixels identical, 99 dB / 1.0. `builtin-to-psd`: 36.822 dB / 0.999953. Five `auto-119-pdf-to-{m2ts,m4v,mkv,mov,mp4}` height failures become WARN with matching geometry. |
+| `c8938d4` | Comic PDF rendering used different page boxes, rotation, rounded pixel dimensions and an uncalibrated JPEG quality mapping. Reuse `PdfiumConverter.render`, the shared JPEG quality mapping and NFC-preserving output helper. | Fractional rotated crop-box regression and byte-preserving JPEG-copy checks for CBZ/fixed-layout EPUB. Remaining PDF-renderer differences stay visible. |
+| `ce96e74` | OOXML rewriting discarded explicit directory entries. Preserve empty and populated directory entries while changing the package variant. | DOCM/DOTX/DOTM tests verify directory entries and original embedded JPEG bytes survive. |
+| `cd35b98` | `MarkdownWriter.escapeLineStart` returned its trimmed probe for ordinary paragraphs, deleting indentation on the SNB -> RTF route. Return the original text unless a line marker needs escaping, matching C#. | New test fails before the fix for spaces, tabs and two U+3000 ideographic spaces; passes after it. No file under `Sources/Engine/Engines/Markup` was changed. |
+
+The comparator-only result includes all 91 archive cases and all 21 spreadsheet
+cases at PASS. OOXML has 60 PASS, five downstream PDF-rendering FAILs and one WARN
+in the first fixed run. This is normalization of measured content, not a claim
+that every format has an independent perceptual inspector.
+
+Focused XCTest coverage:
+
+- `RasterFormatTests.testGifTransparencyUsesTheFileeHalfAlphaThreshold`
+- `RasterFormatTests.testGifLogicalScreenKeepsFirstPageGeometry`
+- `RasterFormatTests.testPsdAndPsbCompositeSamplesMatchFileeWriter`
+- `RasterFormatTests.testPhotoshopWhiteMattedCompositeIsUnblended`
+- `ComicRenderingTests.testComicPagesUseRasterCropRotationAndTruncatedDimensions`
+- `ComicRenderingTests.testComicAndEpubCopyExistingJpegBytes`
+- `OoxmlVariantTests.testWordVariantsPreserveJpegBytesAndDirectoryEntries`
+- `DocumentExportFixTests.testMarkdownPreservesLeadingWhitespaceInOrdinaryParagraphs`
+
+## Remaining FAIL groups and resolved handoff findings
+
+The final **58 non-CAD FAILs** are exactly 43 PDF raster cases, six JPEG cases,
+three ICO cases, three SVG cases and three image-to-markup resource cases. The
+Calibre OCR and SNB subsections retain evidence from the first fixed run, but
+neither remains FAIL in the final run.
+
+### PDFKit versus PDFium/Skia rasterization
+
+**Classification:** native backend difference; quantitative acceptance pending.
+**Decision needed:** accept the measured raster difference for the chosen native
+PDF backend, or require closer rendering parity. It remains FAIL until decided.
+
+There are 43 cases in the first fixed replay, with 44 measured images/pages.
+Dimensions and frame/page counts match. PSNR spans **31.788-39.393 dB**, while
+SSIM spans **0.872954-0.948911**, failing the 0.95 threshold. A representative
+`auto-055-pdf-to-webp` scores 34.184 dB / 0.890748; document-to-image routes share
+the same downstream renderer. The changed comic JPEG quality and geometry do not
+eliminate differences between PDFKit/CoreGraphics and PDFium/Skia text/edge
+rendering. These are not 43 unrelated parsers failing.
+
+`PdfiumConverter.render` replaces PDFtoImage/PDFium with PDFKit, draws on white,
+uses the crop box and rotation, and truncates points * Float(dpi/72), matching
+PDFtoImage's output geometry. `ComicBook.renderPdf` now calls that renderer.
+The ledger below lists every affected case and its measured scores.
+
+### ImageIO JPEG encoding
+
+**Classification:** native encoding difference; acceptance pending.
+**Decision needed:** accept the chroma/quantization difference, or require a
+different JPEG encoding policy/backend. Keep the six cases at FAIL meanwhile.
+
+Cases: `auto-032-flv-to-jpg`, `auto-043-m4v-to-cbz`,
+`auto-045-mkv-to-hwpx`, `auto-045-mkv-to-jpg`,
+`auto-076-webm-to-hwpx`, `auto-079-wmv-to-jpg`.
+
+PSNR is **27.393-28.027 dB**, below 30; SSIM is **0.993090-0.999108**.
+Geometry matches. In `auto-032-flv-to-jpg`, the C# JPEG's SOF sampling factors are
+`11/11/11` (4:4:4); Swift's are `22/11/11` (4:2:0). Quantization tables also
+differ. The output sizes are 8,440 versus 6,355 bytes. Thus the size reduction
+alone does not show missing video frames or document content; the embedded JPEG
+in CBZ/HWPX triggers the same strict pixel test as standalone output.
+
+### vImage versus ImageMagick ICO resampling
+
+**Classification:** native resize-filter difference; acceptance pending.
+**Decision needed:** accept these icon results or require a closer filter.
+
+Cases: `auto-032-flv-to-ico`, `auto-045-mkv-to-ico`,
+`auto-079-wmv-to-ico`. All retain six square frames at
+**256, 128, 64, 48, 32, 16 px**, including alpha metadata. Only the 16 px frame
+falls below 30 dB: **29.974 dB / 0.996098** for FLV/MKV, and
+**29.802 dB / 0.995891** for WMV. Other sizes clear both thresholds.
+`ImagePixels.resize` uses vImage high-quality Lanczos; Filee asks ImageMagick to
+resize. Do not suppress the failing smallest frame by comparing only frame zero.
+
+### CoreSVG versus Svg.Skia rendering
+
+**Classification:** previously accepted backend choice, with measured residual.
+**Decision needed:** none to retain the chosen backend. These remain raw FAILs;
+the user has not authorized changing the generic image thresholds.
+
+Cases: `auto-064-svg-to-jp2` (**31.823 dB / 0.870260**),
+`auto-064-svg-to-jpg` (**39.351 dB / 0.931245**),
+`auto-064-svg-to-jxl` (**31.827 dB / 0.870225**). Geometry matches.
+The [migration decision](swift-engine-migration.md#4-동등한-대체가-어려운-기능)
+selects the macOS SVG renderer with CSS/tspan preprocessing. Different
+rasterizers still produce different text and edge samples. The JP2 quality
+limitation below can compound an SVG or PDF route; it does not explain away a
+low score on JPG or JXL.
+
+### Image-to-markup resource packaging
+
+**Classification:** baseline resource loss plus an already documented Swift
+resource-writing behavior; not a new Swift content-loss defect.
+**Decision needed:** none to preserve readable images. Keep the raw discrepancy
+and pass the case evidence to the Markup branch for its own parity checks.
+
+| Case | C# artifact | Swift artifact | Measured discrepancy |
+| --- | --- | --- | --- |
+| `auto-061-psd-to-html` | 574-byte HTML references `assets/image1.jpg`; no such file or sidecar exists in the captured sample directory. | 3,549-byte HTML embeds one JPEG data URI. | Normalized text ratio 0.963090; embedded picture count 0 versus 1. |
+| `auto-077-webp-to-html` | Same 574-byte HTML and missing relative image. | 3,461-byte HTML embeds one JPEG data URI. | Same text ratio and picture-count difference. |
+| `auto-101-gif-to-md` | `![image](assets/image1.jpg)`; no image asset or sidecar. | `![](<sips_files/img0001.jpg>)` plus the actual 3,216-byte JPEG sidecar. | Text ratio 0.642857 and a sidecar difference. |
+
+These sample directories contain only the source and HTML/MD on the C# side.
+`run.py` fingerprints all remaining files as sidecars, so the missing image is
+not merely an omitted sidecar field. Swift HTML uses an empty alt and explicit
+96 px width instead of the C# generic `image` alt; those differences are retained
+in the evidence rather than normalized away. The existing
+[HWP export report](swift-hwp-export-r3.md) documents shared `EbookFiles.dataUri`
+and `markdownImages` use by HDocument writers, including `<output>_files` media.
+No blanket relative-link/data-URI equivalence was added: it could hide missing
+resources. Markup/Markdown/Email source remains owned by
+`feat/markdown-html-pandoc-email`.
+
+### Calibre generated cover / OCR false positive (final PASS)
+
+**Classification:** manually verified comparator limitation on volatile cover
+layout. **Decision needed:** none for the engine. Keep the strict OCR guard and
+this triage evidence; do not accept arbitrary covers by marker alone.
+
+`auto-067-tcr-to-txtz`: both ZIPs have byte-identical **132-byte `index.txt`** and
+a 494-byte `metadata.opf` with normalized metadata equivalence, plus one generated
+1200 x 1600 JPEG each. Both images
+have Calibre's explicit generated-cover COM marker. The first fixed pictures
+score **13.623 dB / 0.127085**, with sizes **171,141 versus 63,326 bytes**.
+Visual inspection confirms the same `FileToX sample` title and
+`안녕하세요. Bold and italic.` text, rendered in different themes and line wraps.
+Calibre's `covers.py` chooses both theme and style using `random.choice`.
+
+Vision reports `['FileToX sample', 'Bold and', 'italic.']` versus
+`['FileToX sample', '|. Bold and italic.']`, missing/misreading Korean and changing
+line segmentation. The exact nonempty OCR equality guard therefore cannot prove
+equivalence. Local extracted evidence is under
+`build/engine-compare/cover-inspection/{baseline,candidate}/tcr-cover.jpg`.
+Improving bilingual OCR or adding a narrowly scoped generated-cover comparator
+would be separate harness work; ignoring all cover pixels would be unsound.
+On the final replay this case receives **PASS**: the generated cover bytes match
+the reference, and `metadata.opf` has normalized similarity 1.0. This confirms
+the observed volatility without relaxing the comparator. The manual evidence
+above describes the earlier first-fixed cover, not the final matching picture.
+
+### SNB indentation: fixed, not an accepted deviation
+
+`auto-063-snb-to-rtf` in the first fixed replay loses two U+3000 characters at
+the start of each of four text paragraphs. Apart from the generated JPEG cover,
+these are the only normalized RTF differences: C# emits `\\u12288 ?` twice per
+paragraph; Swift emitted none. Text ratio **0.922078** fails 0.95.
+
+The cause is `Documents/MarkdownWriter.swift`, outside the Markup-owned code:
+`escapeLineStart` used `return t` instead of C#'s `return text`. This affects a
+route through the shared document writer and Pandoc, not an SNB decoder defect
+or RTF image loss. Commit `cd35b98` preserves that indentation. The final replay
+below records the post-fix result, including any remaining random cover warning.
+Final result: **WARN**, normalized RTF text ratio **1.0**, all eight U+3000
+escapes preserved. The only warning is the generated cover, whose recognized
+title matches; cover pixels score 16.874 dB / 0.229619.
+
+## WARN classification and limits
+
+Warnings are retained when the evidence supports a limited claim. The per-case
+ledger assigns exactly one primary category to each final warning; an output may
+also carry secondary reasons in `report.json`.
+
+| Category | Evidence and disposition |
+| --- | --- |
+| Decoded/structured content within thresholds | Same geometry/frames and acceptable scores, similar text/XML, or font table tags/glyph counts. Retain WARN for changed encoding. Font checks do not compare glyph outlines. SVG differences follow the selected native backend. No new decision needed unless stricter parity is desired. |
+| Unsupported binary books and documents | The comparator intentionally has no semantic parser for DOC/HWP and several binary ebook types. Independent original-candidate readback covered all seven changed DOC/HWP outputs (text identical) and 51 changed book outputs (50 text-identical). The remaining `auto-096-html-to-tcr` has a C#-only trailing `Fil`; Swift retains the complete source sentence. This is evidence against truncation, not exhaustive formatting equivalence. |
+| Different encoded media packets | Codecs, stream counts, geometry, pixel format/frame rate, audio properties and duration pass; packets or their timing differ. Keep WARN: structure is not perceptual video/audio equivalence. Identical packets with only container IDs/timestamps changed now PASS. |
+| PDF with no extractable text | Twelve cases in the first fixed replay check page count and geometry only. Keep WARN; no claim of page-pixel equivalence is made. |
+| Verified generated Calibre covers | Explicit COM marker, identical geometry and matching nonempty OCR permit layout volatility at WARN. Ten cases in the first fixed run meet that guard. The TCR cover above does not. |
+| Image metadata | Six first-fixed cases have DPI and/or alpha-metadata changes while decoded comparisons pass. DPI is not content-neutral for every consumer, so retain WARN. |
+| Embedded image encoding | Three first-fixed cases have different image bytes but the same image geometry and acceptable decoded pixels. The inspector measures the picture instead of treating compression metadata as lost document content. |
+
+The first fixed WARN categories total **243**: 104 within-threshold structured
+outputs, 57 unsupported binary cases, 51 media-packet cases, 12 empty-text PDFs,
+10 generated covers, six metadata cases and three embedded-encoding cases.
+The final warning counts are **104 / 58 / 51 / 12 / 10 / 6 / 3**, respectively,
+totaling **244**. The unsupported-binary increase is the volatile RB output.
+
+### Previously accepted JPEG 2000 limitation
+
+The [2026-10-23 migration decision](swift-engine-migration.md) explicitly accepts
+that ImageIO ignores lossy JPEG 2000 quality; q100 lossless works. No codec was
+added or installed for this triage. In the first fixed run, the four JP2 WARNs
+(`auto-032-flv-to-jp2`, `auto-045-mkv-to-jp2`, `auto-079-wmv-to-jp2`,
+`auto-100-avif-to-jp2`) score **34.227-40.864 dB / 0.999904-0.999909** with equal
+geometry. The JP2 FAILs on document/SVG input also have the renderer differences
+described above. **No new user decision is needed for the quality limitation.**
+
+RAW and CAD are separate workstreams. This small corpus is not evidence that
+the independently chosen LibRaw/Apple fallback policy has been fully revalidated.
+
+## Verification and final ledger
+
+`swift build --build-tests` and `swift build -c release --product FileToXEngine`
+pass. `python3 -I Tools/engine-compare/test_harness.py` passes all **15** tests.
+The new whitespace test was observed failing before the one-line correction
+(three assertions) and passing afterward.
+
+The requested unfiltered `swift test`, with
+`FILETOX_BUNDLED_ENGINES=worktrees/t3-6fdca402/build/engines/osx-arm64`,
+runs **433 engine tests: zero failures, 18 skipped**. Its separate 12-test Core
+target has one failure: `RealEngineHostTests.swift:83` expects 23 engines but
+this pre-CAD branch registers 22. The image/PDF/archive conversions in that Core
+test succeed with the bundled-engine path set. Do not change the expected
+catalog count to conceal the separately owned missing CAD port.
+
+The earlier unconfigured test run also lacked the bundled 7-Zip path, causing
+archive skips and Core archive assertions; supplying the existing path resolves
+those prerequisite failures without installing or changing anything. The final
+engine-only command and replay results are recorded below. Logs remain under
+`build/engine-compare/{build-tests-verified,all-tests-verified,engine-tests-verified,harness-tests-resumed}.log`.
+
+No changes were made to Markup, Email, the RAW reader, installed applications,
+user application data, .NET or NuGet installations. No software was installed.
+All generated evidence stays in this worktree; no push or merge was performed.
+
+The explicit engine-only verification also **passes: 433 tests, 18 skipped, zero failures** (415 executed without a skip). Its command is:
+
+```sh
+FILETOX_BUNDLED_ENGINES=worktrees/t3-6fdca402/build/engines/osx-arm64 swift test --filter FileToXEngineTests
+```
+
+The final replay uses the command in `Tools/engine-compare/README.md` with
+`--host` pointing to this worktree's `.build/release/FileToXEngine`, the retained
+`baseline-lo/{corpus,matrix-optional.json,run-optional/cases.json}` paths and the
+same external-engine and 7-Zip paths. Comparison exits 1 because known FAILs
+remain; the conversion harness itself completed successfully. The full command
+outputs are `candidate-final.log` and `compare-final.log` under the evidence root.
+
+### Per-case accounting
+
+This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any originally passing case that is now WARN/FAIL: **495 rows** in total. The 15 CAD cases are excluded. PASS rows record evidence of resolved comparator differences; they do not imply byte identity. Scores are min..max over all measured output frames/pictures; original and final statuses are raw comparator results. Full secondary reasons and metrics remain in `comparison-final/report.json`.
+
+| Case | Original | Final | Classification / action | Evidence |
+| --- | --- | --- | --- | --- |
+| `auto-000-bz2-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-001-gz-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-001-gz-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-001-gz-to-txz` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-001-gz-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-002-lzma-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-002-lzma-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-003-tar-to--` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-003-tar-to-7z` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-003-tar-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-003-tar-to-txz` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-003-tar-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-004-tbz2-to--` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-004-tbz2-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-004-tbz2-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-004-tbz2-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-004-tbz2-to-txz` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-004-tbz2-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-005-tgz-to-7z` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-005-tgz-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-005-tgz-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-005-tgz-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-005-tgz-to-txz` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-006-txz-to--` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-006-txz-to-7z` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-006-txz-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-006-txz-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-006-txz-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-007-xz-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-007-xz-to-txz` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-007-xz-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-008-zip-to--` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-008-zip-to-7z` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-008-zip-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-008-zip-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-008-zip-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-009-fb2-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 37.545; SSIM 0.895273 |
+| `auto-009-fb2-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-009-fb2-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 37.538; SSIM 0.894619 |
+| `auto-009-fb2-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 37.575; SSIM 0.895923 |
+| `auto-009-fb2-to-doc` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-009-fb2-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-010-md-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-010-md-to-dotm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-010-md-to-dotx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-010-md-to-epub` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-010-md-to-fb2` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `auto-010-md-to-gif` | FAIL | FAIL | b?: PDF raster backend | dB 34.972; SSIM 0.913927 |
+| `auto-011-cbz-to-htmlz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-011-cbz-to-hwpx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-011-cbz-to-icns` | WARN | WARN | b: within thresholds | dB 35.302..42.172; SSIM 0.998665..0.999863; within thresholds |
+| `auto-011-cbz-to-ico` | WARN | WARN | b: within thresholds | dB 32.552..39.962; SSIM 0.997960..0.999729; within thresholds |
+| `auto-012-txt-to-jp2` | FAIL | FAIL | b?: PDF raster backend | dB 36.284; SSIM 0.892029 |
+| `auto-012-txt-to-jpg` | FAIL | FAIL | b?: PDF raster backend | dB 36.323; SSIM 0.892923 |
+| `auto-012-txt-to-jxl` | FAIL | FAIL | b?: PDF raster backend | dB 36.267; SSIM 0.891745 |
+| `auto-012-txt-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-012-txt-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-012-txt-to-md` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `auto-015-7z-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-015-7z-to-txz` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-015-7z-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-016-aac-to-mka` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-017-ac3-to-opus` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-017-ac3-to-weba` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-019-au-to-mka` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-020-avi-to-mkv` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-021-avif-to-mxf` | WARN | WARN | b: media packets | media packets |
+| `auto-021-avif-to-pdf` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `auto-021-avif-to-png` | WARN | WARN | b: within thresholds | dB 34.261; SSIM 0.999930; within thresholds |
+| `auto-021-avif-to-ppm` | WARN | WARN | b: within thresholds | dB 34.261; SSIM 0.999891; within thresholds |
+| `auto-022-azw3-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-022-azw3-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-022-azw3-to-psb` | FAIL | FAIL | b?: PDF raster backend | dB 34.900; SSIM 0.912467 |
+| `auto-022-azw3-to-psd` | FAIL | FAIL | b?: PDF raster backend | dB 34.900; SSIM 0.912467 |
+| `auto-023-caf-to-opus` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-023-caf-to-weba` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-024-docm-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-024-docm-to-tga` | FAIL | FAIL | b?: PDF raster backend | dB 34.143; SSIM 0.890139 |
+| `auto-025-dotm-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 34.170; SSIM 0.890566 |
+| `auto-025-dotm-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-025-dotm-to-tiff` | FAIL | FAIL | b?: PDF raster backend | dB 34.143; SSIM 0.890139 |
+| `auto-025-dotm-to-txt` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `auto-025-dotm-to-txtz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-025-dotm-to-webp` | FAIL | FAIL | b?: PDF raster backend | dB 34.184; SSIM 0.890748 |
+| `auto-026-dotx-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 34.143; SSIM 0.890139 |
+| `auto-026-dotx-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 34.191; SSIM 0.890886 |
+| `auto-026-dotx-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-026-dotx-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-026-dotx-to-dotm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-027-dv-to-webm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-029-eot-to-woff` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-030-epub-to-fb2` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `auto-030-epub-to-gif` | FAIL | FAIL | b?: PDF raster backend | dB 34.885; SSIM 0.912221 |
+| `auto-030-epub-to-htmlz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-030-epub-to-hwpx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-032-flv-to-icns` | WARN | WARN | b: within thresholds | dB 41.216..46.846; SSIM 0.999756..0.999926; within thresholds |
+| `auto-032-flv-to-ico` | FAIL | FAIL | b?: ICO resampling | dB 29.974..37.346; SSIM 0.996098..0.999240 |
+| `auto-032-flv-to-jp2` | WARN | WARN | b: within thresholds | dB 40.864; SSIM 0.999909; within thresholds |
+| `auto-032-flv-to-jpg` | FAIL | FAIL | b?: JPEG encoding | dB 27.393; SSIM 0.999092 |
+| `auto-032-flv-to-jxl` | WARN | WARN | b: within thresholds | dB 33.889; SSIM 0.999326; within thresholds |
+| `auto-033-htmlz-to-epub` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-033-htmlz-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-033-htmlz-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-033-htmlz-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-033-htmlz-to-odt` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-034-hwp-to-mov` | WARN | WARN | b: media packets | media packets |
+| `auto-034-hwp-to-mp4` | WARN | WARN | b: media packets | media packets |
+| `auto-034-hwp-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-034-hwp-to-png` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-035-hwpx-to-ppm` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-035-hwpx-to-psb` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-035-hwpx-to-psd` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-035-hwpx-to-rb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-036-icns-to-m2ts` | WARN | WARN | b: media packets | media packets |
+| `auto-036-icns-to-m4v` | WARN | WARN | b: media packets | media packets |
+| `auto-036-icns-to-mkv` | WARN | WARN | b: media packets | media packets |
+| `auto-036-icns-to-mpg` | WARN | WARN | b: media packets | media packets |
+| `auto-036-icns-to-mxf` | WARN | WARN | b: media packets | media packets |
+| `auto-037-jxl-to-tex` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-037-jxl-to-tga` | WARN | WARN | b: within thresholds | dB 56.575; SSIM 0.999977; within thresholds |
+| `auto-037-jxl-to-tiff` | WARN | WARN | b: within thresholds | dB 56.575; SSIM 0.999977; within thresholds |
+| `auto-037-jxl-to-ts` | WARN | WARN | b: media packets | media packets |
+| `auto-038-lit-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-038-lit-to-doc` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-038-lit-to-docm` | FAIL | WARN | b: generated cover | dB 14.085; SSIM 0.954056; generated cover |
+| `auto-038-lit-to-docx` | FAIL | WARN | b: generated cover | dB 17.255; SSIM 0.173460; generated cover |
+| `auto-038-lit-to-snb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-038-lit-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-039-lrf-to-dotm` | WARN | WARN | b: generated cover | dB 22.362; SSIM 0.997112; generated cover |
+| `auto-039-lrf-to-dotx` | FAIL | WARN | b: generated cover | dB 16.709; SSIM 0.348315; generated cover |
+| `auto-039-lrf-to-epub` | FAIL | WARN | b: generated cover | dB 13.838; SSIM 0.252080; generated cover |
+| `auto-039-lrf-to-fb2` | FAIL | WARN | b: generated cover | text 1.000000; dB 16.754; SSIM 0.936707; generated cover |
+| `auto-039-lrf-to-html` | FAIL | WARN | b: generated cover | text 1.000000; dB 13.217; SSIM -0.177794; generated cover |
+| `auto-039-lrf-to-htmlz` | FAIL | PASS | a/b: replay matches reference | reference match on replay |
+| `auto-040-m2ts-to-webm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-041-m4a-to-mka` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-042-m4b-to-opus` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-042-m4b-to-weba` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-043-m4v-to-avif` | WARN | WARN | b: within thresholds | dB 45.450; SSIM 0.999932; within thresholds |
+| `auto-043-m4v-to-bmp` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-043-m4v-to-cbz` | FAIL | FAIL | b?: JPEG encoding | dB 28.027; SSIM 0.993090 |
+| `auto-045-mkv-to-hwpx` | FAIL | FAIL | b?: JPEG encoding | dB 27.914; SSIM 0.993128 |
+| `auto-045-mkv-to-icns` | WARN | WARN | b: within thresholds | dB 41.216..46.846; SSIM 0.999756..0.999926; within thresholds |
+| `auto-045-mkv-to-ico` | FAIL | FAIL | b?: ICO resampling | dB 29.974..37.346; SSIM 0.996098..0.999240 |
+| `auto-045-mkv-to-jp2` | WARN | WARN | b: within thresholds | dB 40.864; SSIM 0.999909; within thresholds |
+| `auto-045-mkv-to-jpg` | FAIL | FAIL | b?: JPEG encoding | dB 27.393; SSIM 0.999092 |
+| `auto-046-mobi-to-jxl` | FAIL | FAIL | b?: PDF raster backend | dB 31.788..39.393; SSIM 0.914399..0.948911 |
+| `auto-046-mobi-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-046-mobi-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-046-mobi-to-odt` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-047-mov-to-mkv` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-048-mp2-to-mka` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-049-mpg-to-mxf` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-049-mpg-to-pdf` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `auto-049-mpg-to-psb` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-050-mxf-to-psd` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-050-mxf-to-tiff` | WARN | WARN | b: image metadata | dB 99.000; SSIM 1.000000; image metadata |
+| `auto-051-odp-to-potx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-051-odp-to-ppsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-051-odp-to-pptm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-051-odp-to-pptx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-052-ods-to-xlsm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-052-ods-to-xlsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-052-ods-to-xltx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-053-opus-to-opus` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-053-opus-to-weba` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-054-pdb-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-054-pdb-to-rb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-054-pdb-to-rtf` | FAIL | WARN | b: generated cover | text 1.000000; dB 14.059; SSIM 0.962554; generated cover |
+| `auto-054-pdb-to-snb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-054-pdb-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-055-pdf-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-055-pdf-to-txtz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-055-pdf-to-webm` | WARN | WARN | b: media packets | media packets |
+| `auto-055-pdf-to-webp` | FAIL | FAIL | b?: PDF raster backend | dB 34.184; SSIM 0.890748 |
+| `auto-055-pdf-to-wmv` | WARN | WARN | b: media packets | media packets |
+| `auto-056-potx-to-avif` | WARN | WARN | b: image metadata | dB 99.000; SSIM 1.000000; image metadata |
+| `auto-056-potx-to-odp` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-056-potx-to-ppsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-056-potx-to-pptm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-056-potx-to-pptx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-057-ppsx-to-odp` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-057-ppsx-to-potx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-057-ppsx-to-pptm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-057-ppsx-to-pptx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-058-ppt-to-bmp` | WARN | WARN | b: image metadata | dB 99.000; SSIM 1.000000; image metadata |
+| `auto-058-ppt-to-cbz` | FAIL | WARN | b: embedded encoding | dB 99.000; SSIM 1.000000; embedded encoding |
+| `auto-058-ppt-to-doc` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-058-ppt-to-odp` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-058-ppt-to-potx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-058-ppt-to-ppsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-059-pptm-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-059-pptm-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-059-pptm-to-dotm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-059-pptm-to-dotx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-059-pptm-to-epub` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-059-pptm-to-fb2` | FAIL | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `auto-060-psb-to-3g2` | WARN | WARN | b: media packets | media packets |
+| `auto-060-psb-to-3gp` | WARN | WARN | b: media packets | media packets |
+| `auto-060-psb-to-avi` | WARN | WARN | b: media packets | media packets |
+| `auto-060-psb-to-dv` | WARN | WARN | b: media packets | media packets |
+| `auto-060-psb-to-flv` | WARN | WARN | b: media packets | media packets |
+| `auto-060-psb-to-gif` | FAIL | WARN | c: fixed alpha/composite/canvas | dB 33.878; SSIM 0.998006; within thresholds |
+| `auto-061-psd-to-html` | FAIL | FAIL | c/b: markup resource handoff | text 0.963090; embedded count 0 -> 1 |
+| `auto-061-psd-to-hwp` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-061-psd-to-hwpx` | FAIL | WARN | b: embedded encoding | dB 43.246; SSIM 0.999697; embedded encoding |
+| `auto-061-psd-to-icns` | WARN | WARN | b: within thresholds | dB 43.748..48.567; SSIM 0.999667..0.999930; within thresholds |
+| `auto-061-psd-to-ico` | WARN | WARN | b: within thresholds | dB 34.902..42.149; SSIM 0.997774..0.999646; within thresholds |
+| `auto-062-rb-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-062-rb-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-062-rb-to-md` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-062-rb-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-062-rb-to-odt` | FAIL | WARN | b: generated cover | dB 16.512; SSIM 0.084195; generated cover |
+| `auto-062-rb-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-063-snb-to-pdf` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-063-snb-to-rb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-063-snb-to-rst` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-063-snb-to-rtf` | FAIL | WARN | c: fixed indentation; b: cover | text 1.000000; dB 16.874; SSIM 0.229619; generated cover |
+| `auto-063-snb-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-064-svg-to-jp2` | FAIL | FAIL | b: CoreSVG (accepted) | dB 31.823; SSIM 0.870260 |
+| `auto-064-svg-to-jpg` | FAIL | FAIL | b: CoreSVG (accepted) | dB 39.351; SSIM 0.931245 |
+| `auto-064-svg-to-jxl` | FAIL | FAIL | b: CoreSVG (accepted) | dB 31.827; SSIM 0.870225 |
+| `auto-064-svg-to-m2ts` | WARN | WARN | b: media packets | media packets |
+| `auto-064-svg-to-m4v` | WARN | WARN | b: media packets | media packets |
+| `auto-065-svgz-to-mkv` | WARN | WARN | b: media packets | media packets |
+| `auto-065-svgz-to-mov` | WARN | WARN | b: media packets | media packets |
+| `auto-065-svgz-to-mp4` | WARN | WARN | b: media packets | media packets |
+| `auto-065-svgz-to-mpg` | WARN | WARN | b: media packets | media packets |
+| `auto-065-svgz-to-mxf` | WARN | WARN | b: media packets | media packets |
+| `auto-066-tbz2-to--` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-066-tbz2-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-066-tbz2-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-066-tbz2-to-txz` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-066-tbz2-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-067-tcr-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-067-tcr-to-doc` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-067-tcr-to-snb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-067-tcr-to-tex` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-067-tcr-to-txtz` | FAIL | PASS | a/b: replay matches reference | reference match on replay |
+| `auto-068-tga-to-png` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-068-tga-to-psb` | FAIL | WARN | c: fixed alpha/composite/canvas | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-068-tga-to-psd` | FAIL | WARN | c: fixed alpha/composite/canvas | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-069-tgz-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-069-tgz-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-069-tgz-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-069-tgz-to-txz` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-069-tgz-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-070-ts-to-webm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-071-txtz-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 34.977; SSIM 0.914325 |
+| `auto-071-txtz-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 34.983; SSIM 0.914119 |
+| `auto-071-txtz-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 34.975; SSIM 0.914410 |
+| `auto-071-txtz-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-071-txtz-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-071-txtz-to-dotm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-072-txz-to--` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-072-txz-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-072-txz-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-072-txz-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-074-voc-to-mka` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-075-weba-to-opus` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-075-weba-to-weba` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-076-webm-to-hwpx` | FAIL | FAIL | b?: JPEG encoding | dB 27.920; SSIM 0.993238 |
+| `auto-076-webm-to-icns` | WARN | WARN | b: within thresholds | dB 41.173..46.911; SSIM 0.999760..0.999928; within thresholds |
+| `auto-077-webp-to-dotx` | FAIL | WARN | b: embedded encoding | dB 44.773; SSIM 0.999729; embedded encoding |
+| `auto-077-webp-to-html` | FAIL | FAIL | c/b: markup resource handoff | text 0.963090; embedded count 0 -> 1 |
+| `auto-077-webp-to-hwp` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-079-wmv-to-ico` | FAIL | FAIL | b?: ICO resampling | dB 29.802..37.385; SSIM 0.995891..0.999264 |
+| `auto-079-wmv-to-jp2` | WARN | WARN | b: within thresholds | dB 40.751; SSIM 0.999907; within thresholds |
+| `auto-079-wmv-to-jpg` | FAIL | FAIL | b?: JPEG encoding | dB 27.580; SSIM 0.999108 |
+| `auto-079-wmv-to-jxl` | WARN | WARN | b: within thresholds | dB 33.496; SSIM 0.999181; within thresholds |
+| `auto-081-woff2-to-woff` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-082-xls-to-ods` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-082-xls-to-xlsm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-082-xls-to-xlsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-082-xls-to-xltx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-083-xlsm-to-ods` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-083-xlsm-to-xlsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-083-xlsm-to-xltx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-084-xlsx-to-ods` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-084-xlsx-to-xlsm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-084-xlsx-to-xltx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-085-xltx-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-085-xltx-to-ods` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-085-xltx-to-xlsm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-085-xltx-to-xlsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-087-svg-to-mp4` | WARN | WARN | b: media packets | media packets |
+| `auto-087-svg-to-mpg` | WARN | WARN | b: media packets | media packets |
+| `auto-087-svg-to-mxf` | WARN | WARN | b: media packets | media packets |
+| `auto-090-ttf-to-woff` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-091-bmp-to-pdf` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `auto-091-bmp-to-png` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-091-bmp-to-psb` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-091-bmp-to-psd` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-091-bmp-to-rst` | FAIL | WARN | b: within thresholds | text 1.000000; within thresholds |
+| `auto-092-ppm-to-rtf` | FAIL | WARN | b: within thresholds | text 0.999210; dB 49.166; SSIM 0.999905; within thresholds |
+| `auto-092-ppm-to-tex` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-092-ppm-to-tiff` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-092-ppm-to-ts` | WARN | WARN | b: media packets | media packets |
+| `auto-093-tga-to-3g2` | WARN | WARN | b: media packets | media packets |
+| `auto-093-tga-to-vob` | WARN | WARN | b: media packets | media packets |
+| `auto-093-tga-to-webm` | WARN | WARN | b: media packets | media packets |
+| `auto-093-tga-to-webp` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-093-tga-to-wmv` | WARN | WARN | b: media packets | media packets |
+| `auto-094-eml-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-094-eml-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-094-eml-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-096-html-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 38.193; SSIM 0.917842 |
+| `auto-096-html-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-096-html-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 38.210; SSIM 0.917287 |
+| `auto-096-html-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 38.222; SSIM 0.918410 |
+| `auto-096-html-to-doc` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-096-html-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-097-rst-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-097-rst-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-097-rst-to-dotm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-097-rst-to-dotx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-097-rst-to-epub` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-097-rst-to-fb2` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `auto-098-tex-to-gif` | WARN | WARN | b: image metadata | dB 43.606; SSIM 0.969291; image metadata |
+| `auto-098-tex-to-htmlz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-098-tex-to-hwpx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-098-tex-to-ico` | WARN | WARN | b: within thresholds | dB 35.337..45.651; SSIM 0.999163..0.999929; within thresholds |
+| `auto-099-png-to-3gp` | WARN | WARN | b: media packets | media packets |
+| `auto-099-png-to-avi` | WARN | WARN | b: media packets | media packets |
+| `auto-099-png-to-dv` | WARN | WARN | b: media packets | media packets |
+| `auto-099-png-to-flv` | WARN | WARN | b: media packets | media packets |
+| `auto-100-avif-to-icns` | WARN | WARN | b: within thresholds | dB 36.349..39.577; SSIM 0.999648..0.999889; within thresholds |
+| `auto-100-avif-to-jp2` | WARN | WARN | b: within thresholds | dB 34.227; SSIM 0.999904; within thresholds |
+| `auto-100-avif-to-jpg` | WARN | WARN | b: within thresholds | dB 33.394; SSIM 0.999601; within thresholds |
+| `auto-100-avif-to-jxl` | WARN | WARN | b: within thresholds | dB 33.100; SSIM 0.999578; within thresholds |
+| `auto-100-avif-to-m2ts` | WARN | WARN | b: media packets | media packets |
+| `auto-101-gif-to-md` | FAIL | FAIL | c/b: markup resource handoff | text 0.642857; actual Swift JPEG sidecar; C# asset absent |
+| `auto-101-gif-to-mkv` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-102-heic-to-mp4` | WARN | WARN | b: media packets | media packets |
+| `auto-102-heic-to-mpg` | WARN | WARN | b: media packets | media packets |
+| `auto-102-heic-to-mxf` | WARN | WARN | b: media packets | media packets |
+| `auto-103-jp2-to-pdf` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `auto-103-jp2-to-png` | WARN | WARN | b: within thresholds | dB 58.227; SSIM 0.999991; within thresholds |
+| `auto-103-jp2-to-ppm` | WARN | WARN | b: within thresholds | dB 58.851; SSIM 0.999987; within thresholds |
+| `auto-104-jpg-to-psb` | WARN | WARN | b: within thresholds | dB 47.066; SSIM 0.999962; within thresholds |
+| `auto-104-jpg-to-psd` | WARN | WARN | b: within thresholds | dB 47.066; SSIM 0.999962; within thresholds |
+| `auto-104-jpg-to-rst` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-104-jpg-to-rtf` | FAIL | WARN | b: within thresholds | text 0.999210; dB 39.845; SSIM 0.999582; within thresholds |
+| `auto-104-jpg-to-tex` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-104-jpg-to-tga` | WARN | WARN | b: within thresholds | dB 47.066; SSIM 0.999962; within thresholds |
+| `auto-105-psd-to-tiff` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-105-psd-to-ts` | WARN | WARN | b: media packets | media packets |
+| `auto-105-psd-to-vob` | WARN | WARN | b: media packets | media packets |
+| `auto-106-tiff-to-webm` | WARN | WARN | b: media packets | media packets |
+| `auto-106-tiff-to-webp` | WARN | WARN | b: within thresholds | dB 46.651; SSIM 0.999815; within thresholds |
+| `auto-106-tiff-to-wmv` | WARN | WARN | b: media packets | media packets |
+| `auto-107-pptx-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-107-pptx-to-odp` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-107-pptx-to-potx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-107-pptx-to-ppsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-107-pptx-to-pptm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-108-csv-to-ods` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-108-csv-to-xlsm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-108-csv-to-xlsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-108-csv-to-xltx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-109-tsv-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-109-tsv-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-109-tsv-to-ods` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-109-tsv-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-110-doc-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 33.984; SSIM 0.873487 |
+| `auto-110-doc-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-110-doc-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 33.957; SSIM 0.872954 |
+| `auto-110-doc-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-111-docx-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 34.191; SSIM 0.890886 |
+| `auto-111-docx-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-111-docx-to-dotm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-111-docx-to-dotx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-111-docx-to-epub` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-112-html-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-112-html-to-fb2` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `auto-112-html-to-gif` | FAIL | FAIL | b?: PDF raster backend | dB 36.238; SSIM 0.891609 |
+| `auto-112-html-to-htmlz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-112-html-to-hwpx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-113-odt-to-ico` | WARN | WARN | b: within thresholds | dB 35.166..44.492; SSIM 0.999117..0.999902; within thresholds |
+| `auto-113-odt-to-jp2` | FAIL | FAIL | b?: PDF raster backend | dB 36.277; SSIM 0.892354 |
+| `auto-113-odt-to-jpg` | FAIL | FAIL | b?: PDF raster backend | dB 36.316; SSIM 0.893263 |
+| `auto-113-odt-to-jxl` | FAIL | FAIL | b?: PDF raster backend | dB 36.269; SSIM 0.892168 |
+| `auto-113-odt-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-114-rtf-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-114-rtf-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-114-rtf-to-odt` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-114-rtf-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-118-wav-to-mka` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `auto-119-pdf-to-icns` | WARN | WARN | b: within thresholds | dB 35.302..42.172; SSIM 0.998665..0.999863; within thresholds |
+| `auto-119-pdf-to-m2ts` | FAIL | WARN | c: fixed alpha/composite/canvas | media packets |
+| `auto-119-pdf-to-m4v` | FAIL | WARN | c: fixed alpha/composite/canvas | media packets |
+| `auto-119-pdf-to-mkv` | FAIL | WARN | c: fixed alpha/composite/canvas | media packets |
+| `auto-119-pdf-to-mov` | FAIL | WARN | c: fixed alpha/composite/canvas | media packets |
+| `auto-119-pdf-to-mp4` | FAIL | WARN | c: fixed alpha/composite/canvas | media packets |
+| `auto-120-txt-to-png` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-120-txt-to-ppm` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-120-txt-to-psb` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-120-txt-to-psd` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-121-pdf-to-mpg` | WARN | WARN | b: media packets | media packets |
+| `auto-121-pdf-to-mxf` | WARN | WARN | b: media packets | media packets |
+| `auto-121-pdf-to-rst` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-121-pdf-to-rtf` | FAIL | WARN | b: within thresholds | text 0.998826; dB 39.750; SSIM 0.999223; within thresholds |
+| `auto-122-png-to-tex` | WARN | WARN | b: within thresholds | within thresholds |
+| `auto-122-png-to-tiff` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `auto-122-png-to-ts` | WARN | WARN | b: media packets | media packets |
+| `auto-123-txt-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 36.294; SSIM 0.892655 |
+| `auto-123-txt-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-123-txt-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-123-txt-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `auto-123-txt-to-webp` | FAIL | FAIL | b?: PDF raster backend | dB 36.319; SSIM 0.893130 |
+| `builtin-jpg-70` | WARN | WARN | b: within thresholds | dB 39.848; SSIM 0.999537; within thresholds |
+| `builtin-merge-pdf` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `builtin-pdf-split` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `builtin-tiff-300` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `builtin-to-7z` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-avif` | WARN | WARN | b: within thresholds | dB 42.377; SSIM 0.999774; within thresholds |
+| `builtin-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `builtin-to-bmp` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `builtin-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 34.894; SSIM 0.912828 |
+| `builtin-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-epub` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-fb2` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `builtin-to-gif` | WARN | WARN | b: image metadata | dB 35.653; SSIM 0.996936; image metadata |
+| `builtin-to-icns` | WARN | WARN | b: within thresholds | dB 36.244..39.461; SSIM 0.999658..0.999888; within thresholds |
+| `builtin-to-ico` | WARN | WARN | b: within thresholds | dB 34.553..42.896; SSIM 0.997811..0.999627; within thresholds |
+| `builtin-to-jpg` | WARN | WARN | b: within thresholds | dB 48.418; SSIM 0.999950; within thresholds |
+| `builtin-to-jxl` | WARN | WARN | b: within thresholds | dB 38.672; SSIM 0.999784; within thresholds |
+| `builtin-to-md` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `builtin-to-mkv` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `builtin-to-odp` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-ods` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-odt` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-opus` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-pdf` | WARN | WARN | b: within thresholds | within thresholds |
+| `builtin-to-png` | WARN | WARN | b: within thresholds | dB 34.261; SSIM 0.999930; within thresholds |
+| `builtin-to-pptx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-psd` | FAIL | WARN | c: fixed alpha/composite/canvas | dB 36.822; SSIM 0.999953; within thresholds |
+| `builtin-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-tga` | FAIL | WARN | b: image metadata | dB 99.000; SSIM 1.000000; image metadata |
+| `builtin-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-tiff` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `builtin-to-webm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-webp` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `builtin-to-woff` | WARN | WARN | b: within thresholds | within thresholds |
+| `builtin-to-xlsx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `builtin-zip-all` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-archive-fast` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-archive-maximum` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-archive-normal` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-archive-store` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-background-black` | WARN | WARN | b: within thresholds | dB 33.589; SSIM 0.999773; within thresholds |
+| `option-conflict-overwrite` | WARN | WARN | b: within thresholds | dB 33.786; SSIM 0.999622; within thresholds |
+| `option-conflict-rename` | WARN | WARN | b: within thresholds | dB 33.786; SSIM 0.999622; within thresholds |
+| `option-dpi-300` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `option-engine-archive` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-engine-calibre` | WARN | WARN | b: unsupported binary | unsupported binary |
+| `option-engine-docx-writer` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-engine-font` | WARN | WARN | b: within thresholds | within thresholds |
+| `option-engine-hwpx-writer` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-engine-icns` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `option-engine-libreoffice` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-engine-magick` | WARN | WARN | b: within thresholds | dB 33.786; SSIM 0.999622; within thresholds |
+| `option-engine-ooxml` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-engine-pandoc` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-engine-pdfium` | WARN | WARN | b: within thresholds | dB 41.959..44.259; SSIM 0.999837..0.999942; within thresholds |
+| `option-engine-pdfsharp` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `option-engine-spreadsheet` | WARN | PASS | a: comparator normalization | semantic/normalized match |
+| `option-engine-unhwp` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
+| `option-engine-vector` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `option-grayscale` | WARN | WARN | b: within thresholds | dB 55.145; SSIM 0.999949; within thresholds |
+| `option-ico-sizes` | WARN | WARN | b: within thresholds | dB 34.497..39.817; SSIM 0.997857..0.999386; within thresholds |
+| `option-keep-dates` | WARN | WARN | b: within thresholds | dB 33.786; SSIM 0.999622; within thresholds |
+| `option-location-customFolder` | WARN | WARN | b: within thresholds | dB 33.786; SSIM 0.999622; within thresholds |
+| `option-location-sameFolder` | WARN | WARN | b: within thresholds | dB 33.786; SSIM 0.999622; within thresholds |
+| `option-location-subfolder` | WARN | WARN | b: within thresholds | dB 33.786; SSIM 0.999622; within thresholds |
+| `option-merge-pdf` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `option-multipage-tiff` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `option-naming` | WARN | WARN | b: within thresholds | dB 31.291..33.786; SSIM 0.999614..0.999622; within thresholds |
+| `option-page-a4` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `option-page-letter` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `option-page-range` | WARN | WARN | b: within thresholds | dB 45.776; SSIM 0.999964; within thresholds |
+| `option-quality-25` | WARN | WARN | b: within thresholds | dB 37.552; SSIM 0.998080; within thresholds |
+| `option-quality-95` | WARN | WARN | b: within thresholds | dB 34.319; SSIM 0.999737; within thresholds |
+| `option-render-300` | WARN | WARN | b: within thresholds | dB 42.214..44.512; SSIM 0.999848..0.999946; within thresholds |
+| `option-render-72` | WARN | WARN | b: within thresholds | dB 45.776..46.289; SSIM 0.999838..0.999964; within thresholds |
+| `option-resize-long-edge` | WARN | WARN | b: within thresholds | dB 43.624; SSIM 0.999962; within thresholds |
+| `option-resize-percent` | WARN | WARN | b: within thresholds | dB 43.624; SSIM 0.999962; within thresholds |
+| `option-split-pages` | WARN | WARN | b: empty-text PDF | empty-text PDF |
+| `option-strip-metadata` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `option-tiff-lzw` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `option-tiff-none` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `option-tiff-zip` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
+| `option-webp-lossless` | WARN | WARN | b: within thresholds | dB 53.413; SSIM 0.999974; within thresholds |
