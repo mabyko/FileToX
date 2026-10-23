@@ -763,6 +763,8 @@ extension ACad {
         var blockRecordTemplates: [CadBlockRecordTemplate] = []
         var paperSpaceEntities: [Entity] = []
         var modelSpaceEntities: [Entity] = []
+        /// The `new BlockRecord()` owners of BLOCK / ENDBLK entities until `SetBlockToRecord` (owner links are weak).
+        var temporaryRecords: [BlockRecord] = []
 
         /// `BuildDocument`.
         func buildDwgDocument() throws {

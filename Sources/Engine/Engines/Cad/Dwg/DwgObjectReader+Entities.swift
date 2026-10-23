@@ -62,7 +62,10 @@ extension ACad.DwgObjectReader {
 
     func readBlock() throws -> ACad.CadTemplate? {
         // `new Block(new BlockRecord())`: the name lives on the temporary record until SetBlockToRecord.
-        let block = ACad.BlockRecord(name: "").blockEntity
+        let record = ACad.BlockRecord(name: "")
+        // The owner link is weak: the builder keeps the temporary record alive until the tables are built.
+        builder.temporaryRecords.append(record)
+        let block = record.blockEntity
         let template = ACad.CadEntityTemplate(block)
         try readCommonEntityData(template)
         // Block name TV 2
@@ -74,7 +77,9 @@ extension ACad.DwgObjectReader {
     }
 
     func readEndBlock() throws -> ACad.CadTemplate? {
-        let template = ACad.CadEntityTemplate(ACad.BlockRecord(name: "").blockEnd)
+        let record = ACad.BlockRecord(name: "")
+        builder.temporaryRecords.append(record)
+        let template = ACad.CadEntityTemplate(record.blockEnd)
         try readCommonEntityData(template)
         return template
     }
@@ -1582,6 +1587,14 @@ extension ACad.DwgObjectReader {
         let proxy = ACad.ProxyEntity()
         let template = ACad.CadEntityTemplate(proxy)
         try readCommonEntityData(template)
+        try readCommonProxyData(proxy)
+        return template
+    }
+
+    func readProxyObject() throws -> ACad.CadTemplate? {
+        let proxy = ACad.ProxyObject()
+        let template = ACad.CadNonGraphicalObjectTemplate(proxy)
+        try readCommonNonEntityData(template)
         try readCommonProxyData(proxy)
         return template
     }
