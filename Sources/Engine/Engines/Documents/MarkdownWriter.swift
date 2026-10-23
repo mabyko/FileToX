@@ -199,6 +199,6 @@ final class MarkdownWriter {
         if !digits.isEmpty, let next = t.dropFirst(digits.count).first, next == "." || next == ")" {
             return digits + "\\" + t.dropFirst(digits.count)
         }
-        return t
+        return text
     }
 }

@@ -168,6 +168,13 @@ final class DocumentExportFixTests: DocumentTestCase {
         XCTAssertEqual(eqs.count, 3); XCTAssertEqual(eqs[0].text, "x over y"); XCTAssertTrue(eqs[1].display)
         XCTAssertTrue(MarkdownWriter.write(doc) { _ in nil }.contains("$\\frac{x}{y}$ $$\\sqrt{5}$$ [unhwp:equation-unsupported]"))
     }
+    func testMarkdownPreservesLeadingWhitespaceInOrdinaryParagraphs() {
+        for prefix in ["  ", "\t", "\u{3000}\u{3000}"] {
+            let paragraph = HParagraph()
+            paragraph.inlines = [HText(prefix + "FileToX sample")]
+            XCTAssertEqual(MarkdownWriter.write(document([paragraph])) { _ in nil }, prefix + "FileToX sample\n")
+        }
+    }
     func testUnknownKeywordsAndEmptyEquations() {
         XCTAssertEqual(HwpEquationConverter.toLatex("eqalign{x}"), "eqalign{x}")
         XCTAssertEqual(HwpEquationConverter.toLatex("RM IT"), "")
