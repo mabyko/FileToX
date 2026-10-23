@@ -66,6 +66,9 @@
 - SVG: macOS 내장 렌더러에 CSS·`tspan` 전처리를 더한다.
 - HWP/HWPX → TXT·MD·HTML: 공개 HWP 문서 20개로 Unhwp(A), rhwp 직접 내보내기(B), "rhwp로 HWPX 변환 + 이식한 Filee 읽기·작성기"(C)를 비교했다. C가 구조·그림·가독성에서 가장 낫고 HWP 3.x도 처리한다(A는 실패). 결정: C를 쓰고, 수식은 Unhwp의 수식→LaTeX 변환기(MIT)만 Swift로 옮겨 기존처럼 LaTeX로 낸다. 비교에서 나온 C의 문제(그림 실패, 목록 들여쓰기, 중첩 표·캡션·제목·머리말 누락, BMP 재압축, 셀 줄바꿈)를 수정하고 같은 표본으로 재검증했다. 결과·동작 변경·남은 차이는 [r3 구현·비교 보고서](swift-hwp-export-r3.md)에 있다.
 
+- 카메라 RAW: Apple 현상기(Core Image)는 보정을 꺼도 C#과 평균 색차 ΔE00 2.7이 남는다. C# 앱이 쓰던 LibRaw 0.22.2를 소스로 포함(CDDL-1.0)하고 ImageMagick과 같은 순서로 호출하면 공개 샘플 10개가 모두 픽셀까지 같다. 결정: LibRaw를 포함하고, LibRaw가 열지 못하는 파일(손실 DNG 등)은 Apple 현상으로 대신한다.
+- JPEG 2000 쓰기: ImageIO가 손실 품질 설정을 무시한다(q100 무손실은 정상). 결정: 수용하고 제한으로 기록한다.
+
 그 밖에 PDF 텍스트 배치(PdfPig→PDFKit), HTML 파싱(AngleSharp→libxml2), Markdown 확장(Markdig→Swift 파서)은 결과가 미세하게 달라질 수 있어 비교 검증으로 확인한다. 앱에 연결되지 않은 Filee 기능(앱 내 엔진 다운로드 `EngineInstaller`, 감시 폴더 실행 `FolderWatcher`)은 설정 데이터만 보존하고 실행 코드는 옮기지 않는다.
 
 ## 5. 전환 순서와 검증
