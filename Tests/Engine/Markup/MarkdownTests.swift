@@ -153,6 +153,25 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(depth, count)
     }
 
+    func testDeepNestingFailsLikeMarkdigOrIsReadInsteadOfOverflowingTheStack() async throws {
+        // Parsing up to Markdig's depth limits, reading and releasing the tree recurse per level, deeper than the stack
+        // of the pool threads conversions run on.
+        let folder = try MarkupTestSupport.newFolder()
+        let lists = FilePath.combine(folder, "lists.md")
+        try Data((String(repeating: "- ", count: 1000) + "x").utf8).write(to: URL(fileURLWithPath: lists))
+        for target in ["html", "txt", "hwpx"] {
+            let job = await MarkupTestSupport.run([lists], MarkupTestSupport.preset(target))
+            XCTAssertEqual(job.files.first?.state, .failed, target)
+            XCTAssertEqual(job.files.first?.errorDetail, Markdown.DepthLimitError().localizedDescription, target)
+        }
+        // 1 500 nested emphases: past the HTML renderer's limit, but read into HWPX (Filee's reader overflowed the stack).
+        let emphasis = FilePath.combine(folder, "emphasis.md")
+        try Data((String(repeating: "*", count: 3000) + "x" + String(repeating: "*", count: 3000)).utf8).write(to: URL(fileURLWithPath: emphasis))
+        let html = await MarkupTestSupport.run([emphasis], MarkupTestSupport.preset("html"))
+        XCTAssertEqual(html.files.first?.errorDetail, Markdown.DepthLimitError().localizedDescription)
+        try HwpxAssert.validPackage(try await MarkupTestSupport.convert(emphasis, "hwpx"))
+    }
+
     func testMarkdownToPdfWithBuiltInEngines() async throws {
         guard RhwpConverter.locate() != nil else { throw XCTSkip("rhwp not found (bundled engine)") }
         let pdf = try await MarkupTestSupport.convert(try writeSample(try MarkupTestSupport.newFolder()), "pdf")

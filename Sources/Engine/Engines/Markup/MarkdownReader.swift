@@ -26,14 +26,16 @@ final class MarkdownReader {
 
     /// Parses Markdown text; relative image paths are resolved against `baseFolder` (the Markdown file's folder).
     static func read(_ markdown: String, _ baseFolder: String) throws -> HDocument {
-        let parsed = try Markdown.parse(markdown, pipeline)
-        let reader = MarkdownReader(baseFolder)
-        let section = HSection()
-        // Nested emphasis (up to Markdig's 10 240 inline levels) and chains of footnotes recurse here.
-        try MarkupConvert.onLargeStack { reader.blocks(parsed, &section.blocks, Context()) }
         let document = HDocument()
-        document.title = title(parsed)
-        document.sections.append(section)
+        // Parsing up to Markdig's depth limits (10 240 inline levels), reading nested emphasis and chains of footnotes,
+        // and releasing the syntax tree recurse per level: all of it runs on a large stack.
+        try MarkupConvert.onLargeStack {
+            let parsed = try Markdown.parse(markdown, pipeline)
+            let section = HSection()
+            MarkdownReader(baseFolder).blocks(parsed, &section.blocks, Context())
+            document.title = title(parsed)
+            document.sections.append(section)
+        }
         return document
     }
 
