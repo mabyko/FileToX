@@ -78,7 +78,7 @@ final class XhtmlWriter {
         var length = 0
         for section in doc.sections {
             var start = true
-            for b in section.blocks {
+            for b in HDocumentWalker.flowBlocks(section) {
                 if split && hasContent(chapters.last!) {
                     let p = b as? HParagraph
                     if start || p?.pageBreakBefore == true || p?.headingLevel == 1
@@ -119,7 +119,7 @@ final class XhtmlWriter {
         var i = 0
         var s = ""
         while i < list.count {
-            if (list[i] as? HParagraph)?.list != nil {
+            if let p = list[i] as? HParagraph, p.list != nil, p.headingLevel == 0 {
                 let result = writeList(list, i)
                 i = result.0
                 s += result.1
@@ -196,7 +196,7 @@ final class XhtmlWriter {
             let last = stack.removeLast()
             s += "</li>\n" + (last.ordered ? "</ol>\n" : "</ul>\n")
         }
-        while i < list.count, let p = list[i] as? HParagraph, let item = p.list {
+        while i < list.count, let p = list[i] as? HParagraph, p.headingLevel == 0, let item = p.list {
             while !stack.isEmpty && stack.last!.level > item.level { close() }
             i += 1
             if !item.numbered {
@@ -277,6 +277,7 @@ final class XhtmlWriter {
     }
     static func hasVisible(_ list: [HInline]) -> Bool {
         HDocumentWalker.inlinesOf(list).contains { i in
+            if i is HEquation { return true }
             if let t = i as? HText { return !DocumentXML.trim(t.text).isEmpty || t.text.contains("\u{A0}") }
             return i is HImage || i is HNote || i is HTextBox || i is HTab
         }
@@ -288,6 +289,9 @@ final class XhtmlWriter {
         var s = ""
         for i in list {
             switch i {
+            case let e as HEquation:
+                s += e.latex.isEmpty ? Self.escape(e.fallback)
+                    : "<span class=\"math inline\">\\(\(Self.escape(e.latex))\\)</span>"
             case let t as HText: s += run(t.text, t.format, heading)
             case is HLineBreak: s += "<br/>"
             case is HTab: s += "\u{2003}"
@@ -305,14 +309,23 @@ final class XhtmlWriter {
                 }
             case let n as HNote: s += note(n)
             case let b as HTextBox:
-                let parts = b.blocks.compactMap { $0 as? HParagraph }.map { inlines($0.inlines, false) }.filter {
-                    !$0.isEmpty
-                }
-                if !parts.isEmpty { s += "<span class=\"box\">" + parts.joined(separator: "<br/>") + "</span>" }
+                let content = inlineBlocks(b.blocks)
+                if !content.isEmpty { s += "<span class=\"box\">" + content + "</span>" }
             default: break
             }
         }
         return s
+    }
+    private func inlineBlocks(_ blocks: [HBlock]) -> String {
+        blocks.map { block -> String in
+            if let p = block as? HParagraph { return inlines(p.inlines, false) }
+            if let t = block as? HTable {
+                return ([inlineBlocks(t.caption)] + t.rows.map { row in
+                    row.cells.map { inlineBlocks($0.blocks) }.joined(separator: " | ")
+                }).filter { !$0.isEmpty }.joined(separator: "<br/>")
+            }
+            return ""
+        }.filter { !$0.isEmpty }.joined(separator: "<br/>")
     }
     func run(_ text: String, _ f: HCharFormat, _ heading: Bool) -> String {
         if text.isEmpty { return "" }

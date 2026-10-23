@@ -6,7 +6,7 @@ enum PlainTextWriter {
         let writer = State()
         let numbers = ListNumbers()
         var output = ""
-        for section in document.sections { writer.blocks(section.blocks, &output, numbers) }
+        for section in document.sections { writer.blocks(HDocumentWalker.flowBlocks(section), &output, numbers) }
         if !writer.notes.isEmpty {
             output += "\n----\n"
             for (i, note) in writer.notes.enumerated() { output += "[\(i + 1)] \(note)\n" }
@@ -43,13 +43,11 @@ enum PlainTextWriter {
                     }
                     previous = p
                 } else if let t = block as? HTable, !t.rows.isEmpty {
+                    self.blocks(t.caption, &output, numbers)
                     if !output.isEmpty { output += "\n\n" }
                     output += t.rows.map { row in
                         row.cells.map { cell in
-                            cell.blocks.compactMap { $0 as? HParagraph }.map {
-                                inlines($0.inlines).replacingOccurrences(of: "\n", with: " ").replacingOccurrences(
-                                    of: "\t", with: " ")
-                            }.filter { !$0.isEmpty }.joined(separator: " ")
+                            cellText(cell.blocks)
                         }.joined(separator: "\t")
                     }.joined(separator: "\n")
                     previous = t
@@ -59,10 +57,25 @@ enum PlainTextWriter {
         func isCode(_ p: HParagraph) -> Bool {
             !p.inlines.isEmpty && p.inlines.allSatisfy { ($0 as? HText)?.format.shade == HtmlReader.codeShade }
         }
+        func cellText(_ blocks: [HBlock]) -> String {
+            blocks.map { block -> String in
+                if let p = block as? HParagraph {
+                    return inlines(p.inlines).replacingOccurrences(of: "\n", with: " ")
+                        .replacingOccurrences(of: "\t", with: " ")
+                }
+                if let t = block as? HTable {
+                    return ([cellText(t.caption)] + t.rows.map { row in
+                        row.cells.map { cellText($0.blocks) }.joined(separator: " | ")
+                    }).filter { !$0.isEmpty }.joined(separator: " / ")
+                }
+                return ""
+            }.filter { !$0.isEmpty }.joined(separator: " ")
+        }
         func inlines(_ list: [HInline]) -> String {
             var text = ""
             for item in list {
                 switch item {
+                case let e as HEquation: text += e.latex.isEmpty ? e.fallback : e.latex
                 case let t as HText: text += t.text
                 case is HLineBreak: text += "\n"
                 case is HTab: text += "\t"
@@ -73,7 +86,7 @@ enum PlainTextWriter {
                     notes.append(DocumentXML.trim(content).replacingOccurrences(of: "\n\n", with: " "))
                     text += "[\(notes.count)]"
                 case let b as HTextBox:
-                    text += b.blocks.compactMap { $0 as? HParagraph }.map { inlines($0.inlines) }.joined(separator: " ")
+                    text += cellText(b.blocks)
                 default: break
                 }
             }
