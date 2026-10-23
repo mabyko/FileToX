@@ -1,3 +1,4 @@
+import Darwin
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -6,6 +7,20 @@ import XCTest
 @testable import FileToXEngineKit
 
 final class DocumentExportFixTests: DocumentTestCase {
+    private func directoryNames(_ path: String) throws -> [[UInt8]] {
+        let directory = try XCTUnwrap(opendir(path))
+        defer { closedir(directory) }
+        var result: [[UInt8]] = []
+        while let entry = readdir(directory) {
+            let bytes = withUnsafePointer(to: &entry.pointee.d_name) {
+                $0.withMemoryRebound(to: UInt8.self, capacity: Int(entry.pointee.d_namlen)) {
+                    Array(UnsafeBufferPointer(start: $0, count: Int(entry.pointee.d_namlen)))
+                }
+            }
+            result.append(bytes)
+        }
+        return result
+    }
     private func document(_ blocks: [HBlock]) -> HDocument {
         let d = HDocument(), s = HSection()
         s.blocks = blocks; d.sections = [s]
@@ -65,15 +80,15 @@ final class DocumentExportFixTests: DocumentTestCase {
         let image = path("한글 (그림)#1_files/img0001.png")
         XCTAssertTrue((try Data(contentsOf: URL(fileURLWithPath: image))).starts(with: [0x89, 0x50, 0x4E, 0x47]))
         XCTAssertEqual(ImageSupport.info(image)?.width, 5)
+        XCTAssertTrue(try directoryNames(folder).contains(Array("한글 (그림)#1_files".utf8)))
+        XCTAssertTrue(try directoryNames(path("한글 (그림)#1_files")).contains(Array("img0001.png".utf8)))
         let html = try await convert(UnhwpConverter(), input, "hwpx", "html", "bmp.html")
         XCTAssertTrue(try String(contentsOfFile: html, encoding: .utf8).contains("data:image/png;base64,"))
     }
     func testCommonImagesKeepOriginalBytesAndOpaqueTiffBecomesJpeg() throws {
         let png = path("keep.png"), bytes = try DocumentFixtures.png(path("keep.png"), 2, 2)
-        XCTAssertEqual(try DocumentImages.commonImage(png, path("converted"))?.file, png)
-        let doc = document([DocumentFixtures.p("사진")])
-        (doc.sections[0].blocks[0] as! HParagraph).inlines.append(HImage(png))
-        XCTAssertEqual(try DocumentImages.sources(doc, path("out.html"), folder, markdown: false)[png],
+        XCTAssertEqual(EbookFiles.commonImage(png, path("converted"), true)?.file, png)
+        XCTAssertEqual(try EbookFiles.dataUri(png, folder),
                        "data:image/png;base64," + bytes.base64EncodedString())
         let context = try XCTUnwrap(CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 8,
                                             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
@@ -81,7 +96,7 @@ final class DocumentExportFixTests: DocumentTestCase {
         let dest = try XCTUnwrap(CGImageDestinationCreateWithURL(URL(fileURLWithPath: tiff) as CFURL, UTType.tiff.identifier as CFString, 1, nil))
         CGImageDestinationAddImage(dest, try XCTUnwrap(context.makeImage()), nil)
         XCTAssertTrue(CGImageDestinationFinalize(dest))
-        let common = try XCTUnwrap(DocumentImages.commonImage(tiff, path("converted")))
+        let common = try XCTUnwrap(EbookFiles.commonImage(tiff, path("converted"), true))
         XCTAssertEqual(common.mediaType, "image/jpeg")
     }
     func testListsStartAtZeroIndentAndKeepNestedLevels() throws {
@@ -136,11 +151,12 @@ final class DocumentExportFixTests: DocumentTestCase {
     func testMidSectionHeadersPreserveEveryDefinitionInOrder() throws {
         let first = "<header applyPageType=\"BOTH\"><subList>\(p("머리말 처음"))</subList></header>"
         let next = "<header applyPageType=\"BOTH\"><subList>\(p("머리말 변경"))</subList></header>"
-        let input = try package("<p><run><ctrl>\(first)</ctrl><t>본문1</t></run></p><p><run><ctrl>\(next)</ctrl><t>본문2</t></run></p>")
+        let nested = "<header applyPageType=\"BOTH\"><subList>\(p("표 안 머리말"))</subList></header>"
+        let input = try package("<p><run><ctrl>\(first)</ctrl><t>본문1</t></run></p><p><run><ctrl>\(next)</ctrl><t>본문2</t></run></p><p><run><tbl><tr><tc><subList><p><run><ctrl>\(nested)</ctrl><t>표 본문</t></run></p></subList></tc></tr></tbl></run></p>")
         let doc = try HwpxReader.read(input, path("media"))
-        XCTAssertEqual(doc.sections[0].headers.map(\.startBlockIndex), [0, 1])
+        XCTAssertEqual(doc.sections[0].headers.map(\.startBlockIndex), [0, 1, 2])
         for content in exports(doc) {
-            let ranges = ["머리말 처음", "본문1", "머리말 변경", "본문2"].map { content.range(of: $0) }
+            let ranges = ["머리말 처음", "본문1", "머리말 변경", "본문2", "표 안 머리말", "표 본문"].map { content.range(of: $0) }
             XCTAssertTrue(ranges.allSatisfy { $0 != nil })
             if ranges.allSatisfy({ $0 != nil }) { XCTAssertEqual(ranges.map { $0!.lowerBound }, ranges.map { $0!.lowerBound }.sorted()) }
         }

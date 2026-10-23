@@ -59,16 +59,16 @@ public final class EbookConverter: Converter {
         case "hwpx": book.document.title = book.displayTitle(step.inputPath); try HwpxWriter.write(book.document, output)
         case "txt": try (Data([0xEF, 0xBB, 0xBF]) + Data(PlainTextWriter.write(book.document).utf8)).write(to: URL(fileURLWithPath: output))
         case "html":
-            let images = try EbookFiles.newFolder(work, "html-images"), failure = ImageFailure()
+            let images = try EbookFiles.newFolder(work, "html-images"), failure = EbookFiles.ImageFailure()
             let pages = XhtmlWriter.write(book.document, XhtmlOptions(imageSource: { path in
-                do { return try dataUri(path, images) } catch { failure.error = error; return nil }
+                do { return try EbookFiles.dataUri(path, images) } catch { failure.error = error; return nil }
             }))
             if let error = failure.error { throw error }
             guard pages.count == 1, let page = pages.first else { throw ConversionError("Sequence contains more than one element") }
             try Data(XhtmlWriter.page(book.displayTitle(step.inputPath), page.body, book.displayLanguage(), nil, false).utf8).write(to: URL(fileURLWithPath: output))
         case "md":
-            let failure = ImageFailure()
-            let markdown = try MarkdownWriter.write(book.document, markdownImages(output, work, failure))
+            let failure = EbookFiles.ImageFailure()
+            let markdown = try MarkdownWriter.write(book.document, EbookFiles.markdownImages(output, work, failure))
             if let error = failure.error { throw error }
             try Data(markdown.utf8).write(to: URL(fileURLWithPath: output))
         case "fb2": try Fb2Writer.write(book, output, step.inputPath, work)
@@ -91,13 +91,16 @@ public final class EbookConverter: Converter {
         }
         progress?(1); return [output]
     }
-    private final class ImageFailure { var error: Error? }
-    private static func dataUri(_ path: String, _ convertFolder: String) throws -> String? {
+}
+
+extension EbookFiles {
+    final class ImageFailure { var error: Error? }
+    static func dataUri(_ path: String, _ convertFolder: String) throws -> String? {
         guard let (file, mediaType) = EbookFiles.commonImage(path, convertFolder, true) else { return nil }
         let bytes = try Data(contentsOf: URL(fileURLWithPath: file))
         return "data:\(mediaType);base64,\(bytes.base64EncodedString())"
     }
-    private static func markdownImages(_ output: String, _ work: String, _ failure: ImageFailure) throws -> (String) -> String? {
+    static func markdownImages(_ output: String, _ work: String, _ failure: ImageFailure) throws -> (String) -> String? {
         let folderName = FilePath.fileNameWithoutExtension(output) + "_files", folder = FilePath.combine(FilePath.directoryName(output)!, folderName)
         let convert = try EbookFiles.newFolder(work, "md-images")
         var names: [String: String] = [:]
@@ -108,7 +111,7 @@ public final class EbookConverter: Converter {
                 try FileManager.default.createDirectoryIfNeeded(folder)
                 let name = String(format: "img%04d%@", names.count + 1, FilePath.extension(file).lowercased()), target = FilePath.combine(folder, name)
                 // Copy overwrite like File.Copy(..., overwrite: true).
-                try Data(contentsOf: URL(fileURLWithPath: file)).write(to: URL(fileURLWithPath: target))
+                try FileManager.default.writeFile(target, Data(contentsOf: URL(fileURLWithPath: file)))
                 let reference = EbookFiles.uriEscape(folderName) + "/" + name
                 names[path.lowercased()] = reference; return reference
             } catch { failure.error = error; return nil }

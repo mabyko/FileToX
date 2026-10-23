@@ -172,7 +172,8 @@ extension HwpxReader {
                 section!.current.columns = Self.columns(c)
                 section!.columnsSet = true
             }
-        case "header", "footer": if let section { try headerFooter(c, section.current) } else { skip(c) }
+        case "header", "footer":
+            if let owner = section ?? activeSection { try headerFooter(c, owner.current) } else { skip(c) }
         case "footNote", "endNote": b.add(try note(c, c.name.localName == "endNote"))
         case "fieldBegin": fieldBegin(c, b)
         case "fieldEnd": fieldEnd(c, b)

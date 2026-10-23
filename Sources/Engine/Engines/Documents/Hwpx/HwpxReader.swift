@@ -22,6 +22,7 @@ final class HwpxReader {
         let target: String?
     }
     var fields: [OpenField] = [], markpen: String?, deleted = false, outlineNumberingId: String?
+    var activeSection: SectionState?
     private init(_ zip: ZipReader, _ media: String) {
         self.zip = zip
         mediaFolder = media
@@ -175,6 +176,8 @@ final class HwpxReader {
     }
     func readSection(_ root: XElement, _ document: HDocument) throws {
         let state = SectionState(document)
+        activeSection = state
+        defer { activeSection = nil }
         for e in Self.elements(root) {
             if e.name.localName == "p" {
                 if let sec = Self.elements(e).filter({ $0.name.localName == "run" }).flatMap({ Self.elements($0) })

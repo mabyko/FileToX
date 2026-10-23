@@ -133,20 +133,30 @@ public final class UnhwpConverter: Converter {
         try Task.checkCancellation()
         progress?(0.5)
         guard let path = try step.output.allocate(step.to) else { return [] }
-        let imageSources = step.to == "md" || step.to == "html"
-            ? try DocumentImages.sources(doc, path, step.workDirectory, markdown: step.to == "md") : [:]
+        let failure = EbookFiles.ImageFailure()
+        let imageSource: (String) -> String?
+        if step.to == "md" {
+            imageSource = try EbookFiles.markdownImages(path, step.workDirectory, failure)
+        } else if step.to == "html" {
+            let images = try EbookFiles.newFolder(step.workDirectory, "html-images")
+            imageSource = { source in
+                do { return try EbookFiles.dataUri(source, images) }
+                catch { failure.error = error; return nil }
+            }
+        } else { imageSource = { _ in nil } }
         let content: String
         switch step.to {
         case "txt": content = PlainTextWriter.write(doc)
         case "md":
             doc.title = nil  // Unhwp used IncludeFrontmatter = false for Markdown exports.
-            content = MarkdownWriter.write(doc) { imageSources[$0] }
+            content = MarkdownWriter.write(doc, imageSource)
         case "html":
-            let body = XhtmlWriter.write(doc, XhtmlOptions(imageSource: { imageSources[$0] })).map(\.body).joined()
+            let body = XhtmlWriter.write(doc, XhtmlOptions(imageSource: imageSource)).map(\.body).joined()
             let title = doc.title ?? FilePath.fileNameWithoutExtension(step.inputPath)
             content = Self.htmlPage(title, body)
         default: throw ConversionError(step.to)
         }
+        if let error = failure.error { throw error }
         var data = Data()
         if step.to == "txt" { data.append(contentsOf: [0xEF, 0xBB, 0xBF]) }
         data.append(contentsOf: content.utf8)
