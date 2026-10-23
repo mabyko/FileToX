@@ -808,10 +808,11 @@ extension ACad {
 
         override init() { super.init(type: DimensionType.linear) }
 
+        /// 3.8.0: the aligned length times |cos| of the angle between the rotation and the points' direction.
         override func measurement() throws -> Double {
-            let angle = rotation
-            let refPoint = XYZ(cos(angle), sin(angle), 0)
-            return abs(XYZ.dot(secondPoint - firstPoint, refPoint))
+            let angle = XYZ(cos(rotation), sin(rotation), 0.0)
+            let dot = abs(CSVector.dot(angle, CSVector.normalize(secondPoint - firstPoint)))
+            return try super.measurement() * dot
         }
 
         override var objectType: ObjectType { .dimensionLinear }
@@ -852,12 +853,32 @@ extension ACad {
 
         init() { super.init(type: DimensionType.angular) }
 
+        /// `Center`: the intersection of the two lines (`Line3D.FindIntersection`), NaN when they do not meet.
+        var center: XYZ {
+            let u = angleVertex - definitionPoint, v = secondPoint - firstPoint
+            let w0 = definitionPoint - firstPoint
+            let a = CSVector.dot(u, u), b = CSVector.dot(u, v), c = CSVector.dot(v, v)
+            let d = CSVector.dot(u, w0), e = CSVector.dot(v, w0)
+            let sc = ((b * e) - (c * d)) / ((a * c) - (b * b))
+            let tc = ((a * e) - (b * d)) / ((a * c) - (b * b))
+            let pt1 = definitionPoint + u * sc
+            let pt2 = firstPoint + v * tc
+            return pt1 == pt2 ? pt1 : XYZ(.nan, .nan, .nan)
+        }
+
+        /// 3.8.0: the angle between the lines, or its supplement when the arc point lies in the opposite sector.
         override func measurement() throws -> Double {
             let v1 = secondPoint - firstPoint
             let v2 = definitionPoint - angleVertex
-            let cross = XYZ.cross(v1, v2)
-            if cross.isEqual(.zero) { throw ConversionError("The angular dimension's lines are parallel.") }
-            return angleBetween(v1, v2)
+            var angle = try CSVector.angleBetween(v1, v2)
+            let vArc = dimensionArc - center
+            if CSVector.isZero(vArc) { return angle }
+            let cross1 = XYZ.cross(v1, vArc)
+            let cross2 = XYZ.cross(vArc, v2)
+            let dot1 = CSVector.dot(cross1, normal)
+            let dot2 = CSVector.dot(cross2, normal)
+            if (dot1 < 0 && dot2 > 0) || (dot1 > 0 && dot2 < 0) { angle = Double.pi - angle }
+            return angle
         }
 
         override var objectType: ObjectType { .dimensionAng2Ln }
@@ -874,8 +895,9 @@ extension ACad {
         override func measurement() throws -> Double {
             let v1 = firstPoint - angleVertex
             let v2 = secondPoint - angleVertex
-            if v1.isEqual(v2) { throw ConversionError("The angular dimension's points coincide.") }
-            return angleBetween(v1, v2)
+            if v1 == v2 { return 0.0 }
+            if CSVector.isParallel(v1, v2) { return Double.pi }
+            return try CSVector.angleBetween(v1, v2)
         }
 
         override var objectType: ObjectType { .dimensionAng3Pt }
@@ -901,8 +923,12 @@ extension ACad {
         init() { super.init(type: DimensionType.angular3Point) }
 
         override func measurement() throws -> Double {
-            let radius = XYZ.distance(center, firstPoint)
-            return radius * abs(endAngle - startAngle)
+            let v1 = firstPoint - center
+            let v2 = secondPoint - center
+            let radius = CSVector.length(v1)
+            if v1 == v2 { return 0.0 }
+            let angle = CSVector.isParallel(v1, v2) ? Double.pi : try CSVector.angleBetween(v1, v2)
+            return radius * angle
         }
 
         override var objectName: String { DxfFileToken.entityArcDimension }
@@ -922,19 +948,57 @@ extension ACad {
         }
 
         override func measurement() throws -> Double {
-            isOrdinateTypeX ? abs(featureLocation.x - definitionPoint.x) : abs(featureLocation.y - definitionPoint.y)
+            var dir = isOrdinateTypeX ? XY(0, 1) : XY(1, 0)
+            let sinH = sin(horizontalDirection), cosH = cos(horizontalDirection)
+            dir = XY(dir.x * cosH - dir.y * sinH, dir.x * sinH + dir.y * cosH)
+            let t = dir.x * (definitionPoint.x - featureLocation.x) + dir.y * (definitionPoint.y - featureLocation.y)
+            let pr = XY(featureLocation.x + t * dir.x, featureLocation.y + t * dir.y)
+            let v = XY(definitionPoint.x - pr.x, definitionPoint.y - pr.y)
+            return (v.x * v.x + v.y * v.y).squareRoot()
         }
 
         override var objectType: ObjectType { .dimensionOrdinate }
         override var subclassMarker: String { DxfSubclassMarker.ordinateDimension }
     }
 
-    /// The angle between two vectors (`XYZ.AngleBetweenVectors`).
-    fileprivate static func angleBetween(_ a: XYZ, _ b: XYZ) -> Double {
-        let den = a.length * b.length
-        guard den > 0 else { return 0 }
-        return acos(max(-1, min(1, XYZ.dot(a, b) / den)))
+    /// CSMath's vector extensions with their exact arithmetic (sums from 0 in component order, `Math.Pow(x, 2)`).
+    enum CSVector {
+        static func dot(_ a: XYZ, _ b: XYZ) -> Double {
+            var r = 0.0
+            r += a.x * b.x
+            r += a.y * b.y
+            r += a.z * b.z
+            return r
+        }
+
+        static func length(_ v: XYZ) -> Double {
+            var l = 0.0
+            l += v.x * v.x
+            l += v.y * v.y
+            l += v.z * v.z
+            return l.squareRoot()
+        }
+
+        static func isZero(_ v: XYZ) -> Bool { let l = length(v); return l >= -1e-12 && l <= 1e-12 }
+
+        static func normalize(_ v: XYZ) -> XYZ { let l = length(v); return XYZ(v.x / l, v.y / l, v.z / l) }
+
+        /// `IsParallel`: the component ratios are all equal (NaN ratios never are).
+        static func isParallel(_ a: XYZ, _ b: XYZ) -> Bool {
+            if isZero(a) || isZero(b) { return false }
+            let first = b.x / a.x
+            return (b.y / a.y).isEqualNet(first) && (b.z / a.z).isEqualNet(first)
+        }
+
+        /// `AngleBetweenVectors`: throws for a zero vector, NaN beyond ±1.
+        static func angleBetween(_ v: XYZ, _ u: XYZ) throws -> Double {
+            if isZero(v) || isZero(u) {
+                throw DxfWriteError("Cannot calculate the angle between two vectors, if one is zero.")
+            }
+            return acos(dot(v, u) / (length(v) * length(u)))
+        }
     }
+
 
     // ───────────────────────── Leaders ─────────────────────────
 
@@ -1328,4 +1392,9 @@ extension ACad {
         override var objectType: ObjectType { .viewport }
         override var subclassMarker: String { DxfSubclassMarker.viewport }
     }
+}
+
+fileprivate extension Double {
+    /// .NET `double.Equals`: NaN equals NaN.
+    func isEqualNet(_ other: Double) -> Bool { self == other || (isNaN && other.isNaN) }
 }
