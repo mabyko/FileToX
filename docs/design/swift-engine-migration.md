@@ -59,6 +59,13 @@
 | HWP/HWPX → TXT·MD·HTML(Unhwp) | Rust 라이브러리의 HWP 파서·Markdown 출력과 같은 결과를 내려면 그 파서를 옮겨야 한다. | ① 번들 rhwp로 HWP→HWPX 후 Filee의 HWPX 읽기·Markdown/텍스트/XHTML 작성기 사용(출력 서식이 다소 다름) ② Unhwp 파서를 Swift로 이식 |
 | SVG 텍스트 서식 | macOS SVG 렌더러가 `tspan`별 스타일과 CSS `font` 단축 속성을 반영하지 않는다(그라데이션·마스크·필터·패턴은 처리). | ① 렌더링 전에 SVG 텍스트·CSS를 정규화해 보완 ② Swift SVG 렌더러를 별도 구현 |
 
+**결정(2026-10-23):**
+
+- DWG: 읽기와 쓰기 모두 Swift로 이식한다. 생성한 DWG는 Swift 읽기로 되읽고, 기존 C# helper(ACadSharp 읽기)로도 읽혀 비교한다. AutoCAD·ODA에서 여는 확인은 이 환경에서 할 수 없으므로 남은 위험으로 둔다.
+- WebP·JPEG XL 쓰기: SwiftPM으로 Google libwebp 1.6.0과 libjxl 0.10.4를 소스 빌드해 쓴다(`SDWebImage/libwebp-Xcode`, `SDWebImage/libjxl-Xcode`, 버전 고정). 첫 빌드에서 패키지를 내려받는다.
+- SVG: macOS 내장 렌더러에 CSS·`tspan` 전처리를 더한다.
+- HWP/HWPX → TXT·MD·HTML: Unhwp와 rhwp(`export-text`·`export-markdown`)를 공개 HWP 문서로 비교한 뒤 정한다. 그동안 기본 구현은 "rhwp로 HWPX 변환 + HWPX 읽기·작성기"다.
+
 그 밖에 PDF 텍스트 배치(PdfPig→PDFKit), HTML 파싱(AngleSharp→libxml2), Markdown 확장(Markdig→Swift 파서)은 결과가 미세하게 달라질 수 있어 비교 검증으로 확인한다. 앱에 연결되지 않은 Filee 기능(앱 내 엔진 다운로드 `EngineInstaller`, 감시 폴더 실행 `FolderWatcher`)은 설정 데이터만 보존하고 실행 코드는 옮기지 않는다.
 
 ## 5. 전환 순서와 검증
