@@ -46,7 +46,7 @@ Home and both radial menus are captured from native SwiftUI views using an isola
 2. Pick a preset or file tool on Home and click its Run button, open the radial menu, or select an output from **All output formats**.
 3. Find the result beside the source, or in your chosen output folder.
 
-On first launch, a setup guide explains Accessibility access for Finder drag activation and checks access when you return from System Settings. Choose **Later** to keep converting through Home, or reopen the guide through **Activation → Show setup guide**. The app includes its conversion runtime; a separate .NET installation is not needed.
+On first launch, a setup guide explains Accessibility access for Finder drag activation and checks access when you return from System Settings. Choose **Later** to keep converting through Home, or reopen the guide through **Activation → Show setup guide**. The app includes native conversion components and uses no .NET runtime.
 
 Under **Settings → General**, configure launch at login, menu bar visibility, whether login launches open the main window, and separate completion/failure notifications. These options apply immediately; automatic startup and notifications are off by default, and the menu bar icon is on. Hiding the icon keeps drag activation running; open FileToX again to reach its settings. Manual launches always open the main window. Notification clicks reveal available outputs in Finder, or open FileToX when there are no outputs. Partial failures follow the failure notification option; cancelled jobs do not notify. **Settings → Activation → Exclude apps from drag activation** lets you add or remove apps immediately; drags started in those apps do not open the radial menu. Login approval and notification permissions are managed by macOS, with links to System Settings when access is blocked.
 
@@ -61,7 +61,7 @@ Outputs are written to a hidden staging folder beside the source, then published
 
 ## Build and run
 
-Use Xcode 27 / Swift 6.4 and XcodeGen 2.46 or later. Builds require .NET SDK 10.0.401, pinned in `Config/EngineHost.global.json`. Use the SDK in `~/.dotnet` or set `DOTNET_ROOT` to its installation directory. See [Microsoft's official download](https://dotnet.microsoft.com/download/dotnet/10.0) for installation.
+Use Xcode 27 / Swift 6.4 and XcodeGen 2.46 or later. Python 3 runs the standard-library build scripts. The app and conversion helper build with Swift and native libraries; no .NET SDK, runtime or NuGet restore is required.
 
 The current app version is **0.0.1 (build 2)**, an internal development version with no published release. `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml` are the app version source of truth; generated Info.plist values and both About views use those values. Increment the build number for a new build of the same version, and reset it to 1 when changing the version. Run `xcodegen generate` after editing the version. Git tags (`v0.0.1`) and GitHub Releases are created separately when publication is intended. The embedded engine host has its own version.
 
@@ -72,10 +72,10 @@ xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
 open 'build/DerivedData/Build/Products/Debug/FileToX Dev.app'
 ```
 
-The Xcode build phase verifies upstream hashes, applies patches to a staged copy, and publishes, signs and embeds the helper. The first build downloads NuGet packages and pinned rhwp and 7-Zip versions. Later builds use the cached output when the source is unchanged.
+Xcode consumes the engine and Core products from the root `Package.swift`, then signs and embeds the Swift helper, PDFium and bundled tools. Initial package resolution fetches pinned libwebp/libjxl sources; staging downloads pinned rhwp and 7-Zip archives only when their verified cache is missing. LibRaw and libjpeg-turbo sources and the PDFium dylib are checked in.
 
 ```sh
-Tools/build-engine-host.sh --rid osx-arm64 --configuration Debug
+swift build -c release --product FileToXEngine
 python3 Tools/fetch-optional-engines.py --help
 ```
 
@@ -87,35 +87,32 @@ The Debug bundle ID is `forked.filetox.local.dev`; Release uses `forked.filetox.
 swift test
 xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
   -destination 'platform=macOS' -derivedDataPath build/DerivedData test
-python3 -I Tools/verify-filee-vendor.py --selftest
-python3 -I Tools/verify-filee-vendor.py
-python3 -I Tools/import-filee-formats.py --check
-python3 -I -m unittest discover -s Tests/Tools -v
+python3 -I Tools/engine-compare/test_harness.py
+python3 -I Tools/test-engine-entitlements.py
 ```
 
 Build the helper before running real helper integration tests; those tests alone are skipped if it is absent. Set `FILETOX_TEST_HOST` to use another helper path. The scripts below reproduce real-engine samples. Use a new absolute path for the work directory.
 
 ```sh
-python3 EngineHost/smoke.py \
-  "$PWD/build/engine-host/osx-arm64/Debug/FileToXEngine.app/Contents/MacOS/FileToXEngine" \
-  "$PWD/build/smoke-new"
-python3 EngineHost/optional-smoke.py --help
+FILETOX_SMOKE_HOST="$PWD/build/DerivedData/Build/Products/Debug/FileToX Dev.app/Contents/Helpers/FileToXEngine.app/Contents/MacOS/FileToXEngine"
+python3 Tools/engine-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/smoke-new"
+python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optional-smoke-new"
 ```
 
-On Apple silicon, 32 Xcode tests, 12 Swift Package tests, 22 built-in engine checks (20 actual conversions and 2 selection checks), and 11 additional samples covering optional engines, video, audio, in-flight cancellation and attached-image collisions passed. Swift communication also verified PNG→JPG, PDF merge→multiple PNGs, unknown files and folders→ZIP→extraction, and history. In the running app, clicking the donut's JPG preset produced an output and a recent-history entry. Actual Finder Option-drag checks covered slow movement, source preservation and Finder focus after dropping. Korean HWP and DOCX→PDF text extraction and PNG rendering were also verified. Language switches between English, Korean and Japanese update the running app and host. The native color picker, saved colors after relaunch, localized built-in names and preservation of custom names were also verified.
+During earlier app verification on Apple silicon, 32 Xcode tests, 12 Swift Package tests, 22 built-in engine checks (20 actual conversions and 2 selection checks), and 11 additional samples covering optional engines, video, audio, in-flight cancellation and attached-image collisions passed. Swift communication also verified PNG→JPG, PDF merge→multiple PNGs, unknown files and folders→ZIP→extraction, and history. In the running app, clicking the donut's JPG preset produced an output and a recent-history entry. Actual Finder Option-drag checks covered slow movement, source preservation and Finder focus after dropping. Korean HWP and DOCX→PDF text extraction and PNG rendering were also verified. Language switches between English, Korean and Japanese update the running app and host. The native color picker, saved colors after relaunch, localized built-in names and preservation of custom names were also verified.
 
-Upstream Core tests passed 154 with 2 skipped; patched Core passed 164 with 2 skipped. Both upstream and patched Engines tests passed 445 and failed 3; these 3 failures come from missing FFmpeg encoders on this machine. The 4 added real-engine tests pass when Pandoc and LibreOffice are available.
+Final native verification: SwiftPM 536 tests (17 skipped), Xcode 598 tests (56 skipped), zero failures. The final Unicode correction also passed five rebuilt Xcode tests in the SDK-denying sandbox. The 849-case conversion replay retains 578 PASS / 263 WARN / 8 FAIL and an independently reproduced Calibre TCR defect. Exact scope, user-data compatibility, isolation/signing checks and remaining limits are in [the final verification record](docs/design/engine-differential-triage.md#performance-integration-2026-10-23).
 
 Not every format pair or codec has been tested. Ghostscript is absent on this machine, and its FFmpeg lacks some encoders. Automatic watch folders and in-app engine downloads are not connected yet. Login registration and notification delivery across a real logout/login remain unverified. External exFAT and SMB volumes, Intel, distribution notarization and TCC relaunch checks remain unverified.
 
 ## Source and design
 
-Development reference: [KnifeLemon/Filee](https://github.com/KnifeLemon/Filee) commit `21fdd05ef7181b032ed83ec895cc9bbc4b198985`. File metadata and SHA-256 hashes are recorded in `Vendor/filee-manifest.json`, and build patches are tracked in `Vendor/Filee.patches/`. The `.reference/Filee` checkout is needed only to regenerate the catalog.
+Development reference: [KnifeLemon/Filee](https://github.com/KnifeLemon/Filee) commit `21fdd05ef7181b032ed83ec895cc9bbc4b198985`. Current Core, host and engine implementations are in `Sources/Engine`; the app-facing Core package is in `Sources/Core`. Upstream licences and notices are retained under `docs/upstream`. The current build does not reference Filee C# projects.
 
 - [Full format list](docs/formats.md), [architecture](docs/architecture.md)
-- [Wire contract](docs/design/host-wire-v1.md), [host implementation](EngineHost/README.md)
+- [Wire contract](docs/design/host-wire-v1.md), [host implementation](Sources/Engine/Host/Host.swift)
 - [UI design](docs/design/swiftui-port.md), [packaging and signing](docs/design/macos-packaging.md)
-- [Claude design review](docs/design/review.md), [engine implementation and verification](EngineHost/IMPLEMENTATION.md)
+- [Claude design review](docs/design/review.md), [engine implementation and verification](docs/design/engine-differential-triage.md)
 
 Mockups from the earlier conversation are kept in `docs/archive/pre-filetox/`. A notch shelf, file storage, moving and copying are outside the current scope.
 

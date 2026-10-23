@@ -39,7 +39,7 @@
 | `archive` | System.IO.Compression·SharpCompress + 외부 7-Zip | ZIP·TAR·GZ는 Swift(zlib), 나머지는 같은 7-Zip, ALZ·EGG·LZIP·bzip2 자체 코드 이식 | 중 |
 | `vector` | Svg.Skia·SkiaSharp·HarfBuzz | macOS SVG 렌더러(CoreSVG, `NSImage`)와 CoreGraphics. **텍스트 서식 일부는 4절** | 중 |
 | `icns` | 자체 코드 + ImageMagick | 이식 + ImageIO | 하 |
-| `font` | 자체 코드 + Brotli | 이식 + Apple Compression(Brotli) | 중 |
+| `font` | 자체 코드 + Brotli | 컨테이너·글리프·WOFF2 변환은 Swift 이식, WOFF2 압축은 Google Brotli C 라이브러리(기존 품질 11 유지) | 중 |
 | `email` | MimeKitLite | MIME 파서(다중 파트·인코딩·RFC 2047·문자 집합)를 Swift로 구현 | 중 |
 | `ffmpeg` | 외부 FFmpeg | 같은 실행 파일 | 하 |
 | `cad` | ACadSharp·SkiaSharp | DXF 읽기·쓰기, DWG 읽기(AC1014–AC1032)·쓰기(AC1032), 장면·렌더링을 Swift·CoreGraphics로 이식 완료. 세부는 4절 | 상 |
@@ -73,7 +73,7 @@
 
 **결정(2026-10-23, JPEG 쓰기·크기 조정):** C# 출력과 같게 만든다.
 
-- JPEG 쓰기: C# helper의 ImageMagick 7.1.2-32 Q8이 쓴 libjpeg-turbo 3.2.0(`Magick.Native` 문자열로 확인)을 소스 포함해 빌드한다(`Vendor/libjpeg-turbo`, IJG 라이선스, SIMD 없음 — C 경로로도 C# 파일과 같다). `Vendor/libjpeg-turbo/FileToX/encode.c`가 ImageMagick `coders/jpeg.c`의 `WriteJPEGImage`를 Filee 설정대로 따른다: `jpeg_set_quality`(품질 미지정 92), 품질 90 이상 4:4:4·미만 libjpeg 기본 4:2:0, 품질 90 이하 빠른 정수 DCT(`JDCT_IFAST`), 기준선(progressive 아님), Huffman 표 최적화, 모든 화소가 R=G=B면 1성분 회색, JPEG 원본의 샘플링 계수 유지(`jpeg:sampling-factor` 속성), ImageMagick이 읽은 해상도·단위를 JFIF에(EXIF/TIFF 태그 우선, PNG pHYs·BMP는 px/cm, JFIF 그대로), EXIF·ICC·XMP 순서의 APP 표지. ImageMagick으로 JPEG를 쓰던 곳(이미지 변환·PDF/SVG/CAD 래스터 출력, PDF에 넣는 JPEG, 전자책 그림 변환)이 이것을 쓴다. C#이 Skia로 JPEG를 쓰던 곳(만화 PDF 쪽, PDF 스캔 쪽)은 ImageIO로 둔다. 같은 화소에서 ImageMagick(C# helper의 `Magick.Native`)과 바이트가 같다: 그림 6개 × 품질 15개, C# 동영상 프레임 JPEG 3개.
+- JPEG 쓰기: C# helper의 ImageMagick 7.1.2-32 Q8이 쓴 libjpeg-turbo 3.2.0(`Magick.Native` 문자열로 확인)을 소스 포함해 빌드한다(`Vendor/libjpeg-turbo`, IJG 라이선스, SIMD 없음 — C 경로로도 C# 파일과 같다). `Vendor/libjpeg-turbo/FileToX/encode.c`가 ImageMagick `coders/jpeg.c`의 `WriteJPEGImage`를 Filee 설정대로 따른다: `jpeg_set_quality`(품질 미지정 92), 품질 90 이상 4:4:4·미만 libjpeg 기본 4:2:0, 품질 90 이하 빠른 정수 DCT(`JDCT_IFAST`), 기준선(progressive 아님), Huffman 표 최적화, 모든 화소가 R=G=B면 1성분 회색, JPEG 원본의 샘플링 계수 유지(`jpeg:sampling-factor` 속성), ImageMagick이 읽은 해상도·단위를 JFIF에(EXIF/TIFF 태그 우선, PNG pHYs·BMP는 px/cm, JFIF 그대로), EXIF·ICC·XMP 순서의 APP 표지. ImageMagick으로 JPEG를 쓰던 곳(이미지 변환·PDF/SVG/CAD 래스터 출력, PDF에 넣는 JPEG, 전자책 그림 변환)이 이것을 쓴다. C#이 Skia로 JPEG를 쓰던 곳(만화 PDF 쪽, PDF 스캔 쪽)은 같은 libjpeg-turbo의 Skia 설정 모드로 인코딩한다. 같은 화소에서 ImageMagick(C# helper의 `Magick.Native`)과 바이트가 같다: 그림 6개 × 품질 15개, C# 동영상 프레임 JPEG 3개.
 - 크기 조정: ImageMagick `ResizeImage`(Q8)를 Swift로 옮긴다(`MagickResize`): 필터 선택(Lanczos, 알파·팔레트·확대면 Mitchell, ICNS는 명시한 Lanczos), SincFast·CubicBC, 지지 폭·blur, 가로/세로 처리 순서, 정규화·알파 가중, 단계 사이와 결과의 8비트 반올림, 그리고 C# helper를 컴파일한 clang이 합친 곱셈-덧셈(FMA). 무작위 그림 84건·명시 Lanczos 16건·C# ICO 프레임에서 표본이 같다. 회색 PNG·팔레트 그림은 ImageMagick에서 PseudoClass라 Mitchell이 된다.
 - 남은 차이: JPEG *읽기*는 ImageIO(ImageMagick은 libjpeg)라 JPEG 원본은 화소가 조금 다르다(시험 그림 35–59 dB); 원본 주석(COM)·IPTC·CMYK JPEG 출력은 옮기지 않았다; Grayscale 옵션 뒤 정사각형 ICO 크기 조정은 Mitchell(ImageMagick은 Lanczos)이다.
 

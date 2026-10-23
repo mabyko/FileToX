@@ -40,7 +40,7 @@ macOSで動作する英語のRelease版を撮影した画面です。
 2. 円形メニューでプリセットを選ぶか、**すべての出力形式**から変換先を選びます。
 3. 元のファイルと同じフォルダ、または指定した出力フォルダで結果を確認します。
 
-初回起動時にFinderのドラッグ操作の検出で使用するアクセシビリティの設定ガイドが表示され、システム設定から戻るとアクセス権を確認します。**後で**を選ぶとホームで変換を続けられ、**呼び出し → 設定方法を見る**からガイドを開き直せます。変換ランタイムは同梱しているため、.NETを別途インストールする必要はありません。
+初回起動時にFinderのドラッグ操作の検出で使用するアクセシビリティの設定ガイドが表示され、システム設定から戻るとアクセス権を確認します。**後で**を選ぶとホームで変換を続けられ、**呼び出し → 設定方法を見る**からガイドを開き直せます。ネイティブ変換コンポーネントを同梱しており、.NETランタイムは使用しません。
 
 登録されたすべての形式間で変換できるわけではありません。変換経路の探索が入力とエンジンの状態から利用可能なプリセット・出力形式を判断します。読み取り専用の58形式は出力候補に表示しません。未導入のエンジンやmacOSで利用できない経路には理由を表示します。
 
@@ -53,7 +53,7 @@ macOSで動作する英語のRelease版を撮影した画面です。
 
 ## ビルドと実行
 
-Xcode 27 / Swift 6.4、XcodeGen 2.46以降を使います。ビルドには`Config/EngineHost.global.json`で固定した.NET SDK 10.0.401が必要です。`~/.dotnet`のSDKを使うか、`DOTNET_ROOT`にSDKのインストール先を指定してください。導入方法は[Microsoft公式ダウンロード](https://dotnet.microsoft.com/download/dotnet/10.0)を参照してください。
+Xcode 27 / Swift 6.4、XcodeGen 2.46以降を使います。ビルドスクリプトはPython 3の標準ライブラリを使用します。アプリと変換helperはSwiftとネイティブライブラリでビルドし、.NET SDK・ランタイム・NuGetの復元は不要です。
 
 ```sh
 xcodegen generate
@@ -62,10 +62,10 @@ xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
 open 'build/DerivedData/Build/Products/Debug/FileToX Dev.app'
 ```
 
-Xcodeのビルド処理が上流ソースのハッシュを検証し、作業用コピーにパッチを適用してhelperを生成・署名・同梱します。初回ビルドではNuGetと固定バージョンのrhwp・7-Zipを取得します。ソースに変更がなければ、次回以降はキャッシュされた生成結果を使います。
+Xcodeはルートの`Package.swift`に定義したエンジン・Core製品を使用し、Swift helper・PDFium・同梱ツールを署名して組み込みます。初回の依存関係解決で固定バージョンのlibwebp・libjxlソースを取得します。rhwp・7-Zipは検証済みキャッシュがない場合だけ固定アーカイブを取得します。LibRaw・libjpeg-turboのソースとPDFium dylibはリポジトリに含まれています。
 
 ```sh
-Tools/build-engine-host.sh --rid osx-arm64 --configuration Debug
+swift build -c release --product FileToXEngine
 python3 Tools/fetch-optional-engines.py --help
 ```
 
@@ -77,35 +77,32 @@ DebugのバンドルIDは`forked.filetox.local.dev`、Releaseは`forked.filetox.
 swift test
 xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
   -destination 'platform=macOS' -derivedDataPath build/DerivedData test
-python3 -I Tools/verify-filee-vendor.py --selftest
-python3 -I Tools/verify-filee-vendor.py
-python3 -I Tools/import-filee-formats.py --check
-python3 -I -m unittest discover -s Tests/Tools -v
+python3 -I Tools/engine-compare/test_harness.py
+python3 -I Tools/test-engine-entitlements.py
 ```
 
 実際のhelperを使う統合テストの前に、helperをビルドしてください。見つからない場合は、そのテストだけをスキップします。別のhelperを使うには`FILETOX_TEST_HOST`でパスを指定します。実エンジンのサンプルは次のスクリプトで再現できます。作業フォルダには新しい絶対パスを指定してください。
 
 ```sh
-python3 EngineHost/smoke.py \
-  "$PWD/build/engine-host/osx-arm64/Debug/FileToXEngine.app/Contents/MacOS/FileToXEngine" \
-  "$PWD/build/smoke-new"
-python3 EngineHost/optional-smoke.py --help
+FILETOX_SMOKE_HOST="$PWD/build/DerivedData/Build/Products/Debug/FileToX Dev.app/Contents/Helpers/FileToXEngine.app/Contents/MacOS/FileToXEngine"
+python3 Tools/engine-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/smoke-new"
+python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optional-smoke-new"
 ```
 
-Apple siliconで、Xcodeテスト32件、Swift Packageテスト12件、内蔵エンジンの検証22件（実変換20件・選択判定2件）、追加エンジン・動画・音声・処理中のキャンセル・添付画像の衝突を含むサンプル11件が成功しました。Swiftとの通信でも、PNG→JPG、PDF結合→複数PNG、不明な形式のファイル・フォルダ→ZIP→展開、履歴を確認しました。実行中のアプリでは、円形メニューのJPGクリック→結果生成→最近の履歴を確認しました。実際のFinder Optionドラッグでは、遅い動き、元ファイルの保持、ドロップ後のFinderのフォーカス維持を確認しました。韓国語のHWP・DOCXから生成したPDFのテキスト抽出とPNG描画も確認しています。英語・韓国語・日本語の切り替えは、実行中のアプリとhelperにすぐ反映されます。標準カラーピッカーで選んだ色の再起動後の保持、組み込みプリセット名の翻訳、ユーザーが付けた名前の保持も確認しました。
+以前のアプリ検証ではApple siliconで、Xcodeテスト32件、Swift Packageテスト12件、内蔵エンジンの検証22件（実変換20件・選択判定2件）、追加エンジン・動画・音声・処理中のキャンセル・添付画像の衝突を含むサンプル11件が成功しました。Swiftとの通信でも、PNG→JPG、PDF結合→複数PNG、不明な形式のファイル・フォルダ→ZIP→展開、履歴を確認しました。実行中のアプリでは、円形メニューのJPGクリック→結果生成→最近の履歴を確認しました。実際のFinder Optionドラッグでは、遅い動き、元ファイルの保持、ドロップ後のFinderのフォーカス維持を確認しました。韓国語のHWP・DOCXから生成したPDFのテキスト抽出とPNG描画も確認しています。英語・韓国語・日本語の切り替えは、実行中のアプリとhelperにすぐ反映されます。標準カラーピッカーで選んだ色の再起動後の保持、組み込みプリセット名の翻訳、ユーザーが付けた名前の保持も確認しました。
 
-上流Coreは154件成功・2件スキップ、パッチ適用後のCoreは164件成功・2件スキップです。Enginesは上流・パッチ適用後とも445件成功・3件失敗で、3件の失敗はこのマシンのFFmpegに必要なエンコーダーがないためです。追加した実エンジンテスト4件は、Pandoc・LibreOfficeがある環境で通ります。
+現在のネイティブ実装ではSwiftPM 536件（17件スキップ）、Xcode 598件（56件スキップ）のテストが失敗なしで終了しました。最後のUnicode修正もSDKへのアクセスを遮断した環境でXcodeにより再ビルドし、文書テスト5件が成功しました。849件の変換比較は578 PASS / 263 WARN / 8 FAILで、Calibre TCRの既存の内容破損も別途再現しました。検証範囲・ユーザーデータ互換性・隔離・署名と残る制限は[最終検証記録](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)を参照してください。
 
 すべての形式の組み合わせ・コーデックを検証したわけではありません。このマシンにはGhostscriptがなく、FFmpegにも一部のエンコーダーがありません。監視フォルダの自動変換、アプリ内でのエンジンダウンロード、ログイン項目はまだ接続していません。外部exFAT・SMBボリューム、Intel、配布用公証、TCCの再起動時の動作も未検証です。
 
 ## ソースと設計
 
-開発時の参考は[KnifeLemon/Filee](https://github.com/KnifeLemon/Filee)のコミット`21fdd05ef7181b032ed83ec895cc9bbc4b198985`です。ファイル情報とSHA-256は`Vendor/filee-manifest.json`に、ビルド用パッチは`Vendor/Filee.patches/`に記録しています。`.reference/Filee`はカタログの再生成時にだけ必要です。
+開発時の参考は[KnifeLemon/Filee](https://github.com/KnifeLemon/Filee)のコミット`21fdd05ef7181b032ed83ec895cc9bbc4b198985`です。現在のCore・host・エンジンは`Sources/Engine`、アプリ向けCoreパッケージは`Sources/Core`にあります。上流のライセンスと告知は`docs/upstream`に保管し、現在のビルドはFileeのC#プロジェクトを参照しません。
 
 - [全形式の一覧](docs/formats.md)、[全体設計](docs/architecture.md)
-- [通信仕様](docs/design/host-wire-v1.md)、[hostの実装](EngineHost/README.md)
+- [通信仕様](docs/design/host-wire-v1.md)、[hostの実装](Sources/Engine/Host/Host.swift)
 - [UI設計](docs/design/swiftui-port.md)、[パッケージング・署名](docs/design/macos-packaging.md)
-- [Claudeによる設計レビュー](docs/design/review.md)、[エンジン実装・検証状況](EngineHost/IMPLEMENTATION.md)
+- [Claudeによる設計レビュー](docs/design/review.md)、[エンジン実装・検証状況](docs/design/engine-differential-triage.md)
 
 以前の会話の試案は`docs/archive/pre-filetox/`に保存しています。ノッチ棚、ファイルの保管・移動・コピーは現在の対象範囲に含みません。
 

@@ -1,5 +1,17 @@
 # FileToX 설계
 
+## 현재 구현
+
+앱은 SwiftUI·AppKit, 변환 helper는 Swift로 구현한다. 엔진·작업 큐·설정·이력은 `Sources/Engine`,
+앱에서 사용하는 통신·모델은 `Sources/Core`에 있다. 엔진과 네이티브 라이브러리의 빌드 정의는
+루트 `Package.swift`, 앱 번들·서명·내장은 `project.yml`이 담당한다. .NET SDK·런타임·NuGet 의존성은 없다.
+현재 기능별 구성은 [Swift 전환 계획](design/swift-engine-migration.md), 빌드·배포는
+[패키징](design/macos-packaging.md), 실제 검증 범위는 [최종 검증 기록](design/engine-differential-triage.md#performance-integration-2026-10-23)을 따른다.
+
+## 전환 전 설계 기록
+
+이하 C#·NuGet·Filee manifest 관련 내용은 당시 설계의 조사 기록이며 현재 빌드 지침으로 적용하지 않는다.
+
 FileToX는 Filee에서 영감을 받아 만든 Mac 전용 파일 변환 앱이다. UI는 SwiftUI·AppKit으로 구성하고, 변환 작업은 C# 보조 실행 파일에서 처리한다. 지원 범위를 JPEG·PNG로 제한하지 않는다. 최소 OS는 macOS 15이며 Swift 앱과 host의 타깃도 동일하다. .NET 10의 공식 지원 범위를 따른다.
 
 검토 기준은 Filee 커밋 `21fdd05ef7181b032ed83ec895cc9bbc4b198985`다. 이 설계를 바탕으로 전체 변환 host와 SwiftUI 앱을 연결했다. 구현 범위와 검증 결과는 마지막 절에 구분했다.

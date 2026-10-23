@@ -40,7 +40,7 @@ macOS에서 실행한 영어 Release 버전의 실제 화면이다.
 2. 원형 메뉴에서 프리셋을 고르거나 **모든 출력 형식**에서 원하는 형식을 선택한다.
 3. 원본 폴더 또는 지정한 출력 폴더에서 결과를 확인한다.
 
-첫 실행에는 Finder 드래그 호출에 쓰는 손쉬운 사용 권한 안내가 뜨고, 시스템 설정에서 돌아오면 허용 여부를 확인한다. **나중에**를 선택하면 홈에서 바로 변환할 수 있고, **호출 키 → 설정 방법 보기**에서 안내를 다시 열 수 있다. 변환 런타임은 앱에 포함되어 있어 .NET을 따로 설치할 필요가 없다.
+첫 실행에는 Finder 드래그 호출에 쓰는 손쉬운 사용 권한 안내가 뜨고, 시스템 설정에서 돌아오면 허용 여부를 확인한다. **나중에**를 선택하면 홈에서 바로 변환할 수 있고, **호출 키 → 설정 방법 보기**에서 안내를 다시 열 수 있다. 앱에 네이티브 변환 구성 요소를 포함하며 .NET 런타임을 사용하지 않는다.
 
 **설정 → 일반**에서 로그인 시 자동 실행, 메뉴 막대 아이콘 표시, 로그인 시 메인 창 열기, 완료·실패 알림을 각각 설정할 수 있다. 이 옵션은 즉시 적용된다. 자동 실행과 알림은 기본으로 꺼져 있고 메뉴 막대 아이콘은 켜져 있다. 아이콘을 숨겨도 드래그 호출은 유지되며, FileToX를 다시 실행하면 설정에 접근할 수 있다. 직접 실행하면 항상 메인 창이 열린다. 알림을 클릭하면 Finder에서 결과를 표시하고 결과가 없으면 앱을 연다. 일부 실패는 실패 알림 설정을 따르며 취소한 작업은 알리지 않는다. **설정 → 호출 키 → 드래그 호출 제외 앱**에서 앱을 추가·제거하면 즉시 적용되며, 해당 앱에서 시작한 드래그에는 원형 메뉴가 나타나지 않는다. 자동 실행 승인과 알림 권한이 필요하면 시스템 설정으로 이동할 수 있다.
 
@@ -55,7 +55,7 @@ macOS에서 실행한 영어 Release 버전의 실제 화면이다.
 
 ## 빌드와 실행
 
-Xcode 27 / Swift 6.4, XcodeGen 2.46 이상을 사용한다. 빌드에 필요한 .NET SDK는 `Config/EngineHost.global.json`의 10.0.401이다. `~/.dotnet`의 SDK를 사용하거나 `DOTNET_ROOT`에 SDK 설치 폴더를 지정한다. SDK 설치는 [Microsoft 공식 다운로드](https://dotnet.microsoft.com/download/dotnet/10.0)를 따른다.
+Xcode 27 / Swift 6.4, XcodeGen 2.46 이상을 사용한다. 빌드 스크립트는 Python 3 표준 라이브러리를 쓴다. 앱과 변환 helper는 Swift·네이티브 라이브러리로 빌드하며 .NET SDK·런타임·NuGet 복원이 필요 없다.
 
 현재 앱 버전은 **0.0.1 (빌드 2)**이며, 아직 출시하지 않은 내부 개발 버전이다. 버전은 `project.yml`의 `MARKETING_VERSION`과 `CURRENT_PROJECT_VERSION`에서 관리하고, 생성된 Info.plist와 두 정보 화면이 이 값을 사용한다. 같은 버전의 새 빌드는 빌드 번호를 올리고, 버전을 바꾸면 빌드 번호는 1부터 시작한다. 버전을 수정한 뒤 `xcodegen generate`를 실행한다. Git 태그(`v0.0.1`)와 GitHub Release는 배포할 때 별도로 만든다. 내장 엔진 호스트는 자체 버전을 유지한다.
 
@@ -66,10 +66,10 @@ xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
 open 'build/DerivedData/Build/Products/Debug/FileToX Dev.app'
 ```
 
-Xcode 빌드 단계가 원본 해시를 검증하고 패치를 적용한 사본으로 helper를 게시·서명·포함한다. 첫 빌드는 NuGet과 고정 버전의 rhwp·7-Zip을 받는다. 이후 소스가 같으면 이전 빌드 결과를 캐시에서 읽는다.
+Xcode는 루트 `Package.swift`의 엔진·Core 제품을 사용하고 Swift helper·PDFium·번들 도구를 서명해 포함한다. 첫 패키지 해석에서 고정 버전 libwebp·libjxl 소스를 받으며, rhwp·7-Zip은 검증된 캐시가 없을 때만 고정 아카이브를 받는다. LibRaw·libjpeg-turbo 소스와 PDFium dylib는 저장소에 포함돼 있다.
 
 ```sh
-Tools/build-engine-host.sh --rid osx-arm64 --configuration Debug
+swift build -c release --product FileToXEngine
 python3 Tools/fetch-optional-engines.py --help
 ```
 
@@ -81,35 +81,32 @@ python3 Tools/fetch-optional-engines.py --help
 swift test
 xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
   -destination 'platform=macOS' -derivedDataPath build/DerivedData test
-python3 -I Tools/verify-filee-vendor.py --selftest
-python3 -I Tools/verify-filee-vendor.py
-python3 -I Tools/import-filee-formats.py --check
-python3 -I -m unittest discover -s Tests/Tools -v
+python3 -I Tools/engine-compare/test_harness.py
+python3 -I Tools/test-engine-entitlements.py
 ```
 
 실제 helper 통합 테스트는 먼저 helper를 빌드해야 한다. 없으면 해당 테스트만 skip한다. 별도 helper 경로는 `FILETOX_TEST_HOST`로 지정할 수 있다. 실제 엔진 표본은 아래 스크립트로 재현한다. 작업 폴더는 새 절대 경로를 사용한다.
 
 ```sh
-python3 EngineHost/smoke.py \
-  "$PWD/build/engine-host/osx-arm64/Debug/FileToXEngine.app/Contents/MacOS/FileToXEngine" \
-  "$PWD/build/smoke-new"
-python3 EngineHost/optional-smoke.py --help
+FILETOX_SMOKE_HOST="$PWD/build/DerivedData/Build/Products/Debug/FileToX Dev.app/Contents/Helpers/FileToXEngine.app/Contents/MacOS/FileToXEngine"
+python3 Tools/engine-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/smoke-new"
+python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optional-smoke-new"
 ```
 
-Apple silicon에서 Xcode 테스트 32개, Swift Package 테스트 12개, 내장 엔진 검증 22개(실제 변환 20개·선택 판단 2개), 추가 엔진·영상·음성·실행 중 취소·첨부 이미지 충돌 표본 11개를 통과했다. Swift 통신에서도 실제 PNG→JPG, PDF 병합→여러 PNG, unknown 파일·폴더 ZIP→압축 해제와 이력을 확인했다. 실제 앱의 도넛 JPG 클릭→결과 생성→최근 이력도 통과했다. 실제 Finder Option 드래그에서도 느린 움직임, 원본 보존과 드롭 후 Finder 포커스 유지를 확인했다. 한글 HWP·DOCX에서 만든 PDF의 텍스트 추출과 PNG 렌더링도 확인했다. 영어·한국어·일본어 변경은 실행 중인 앱과 helper에 바로 반영된다. 기본 색상 선택기로 고른 색의 재실행 후 유지, 기본 프리셋 이름 번역과 사용자 이름 보존도 확인했다.
+이전 앱 검증에서는 Apple silicon에서 Xcode 테스트 32개, Swift Package 테스트 12개, 내장 엔진 검증 22개(실제 변환 20개·선택 판단 2개), 추가 엔진·영상·음성·실행 중 취소·첨부 이미지 충돌 표본 11개를 통과했다. Swift 통신에서도 실제 PNG→JPG, PDF 병합→여러 PNG, unknown 파일·폴더 ZIP→압축 해제와 이력을 확인했다. 실제 앱의 도넛 JPG 클릭→결과 생성→최근 이력도 통과했다. 실제 Finder Option 드래그에서도 느린 움직임, 원본 보존과 드롭 후 Finder 포커스 유지를 확인했다. 한글 HWP·DOCX에서 만든 PDF의 텍스트 추출과 PNG 렌더링도 확인했다. 영어·한국어·일본어 변경은 실행 중인 앱과 helper에 바로 반영된다. 기본 색상 선택기로 고른 색의 재실행 후 유지, 기본 프리셋 이름 번역과 사용자 이름 보존도 확인했다.
 
-원본 Core는 154 통과·2 skip, 패치한 Core는 164 통과·2 skip이다. Engines는 원본과 패치 모두 445 통과·3 실패이며, 이 3개 실패는 이 머신의 FFmpeg 인코더 부족이다. 추가한 실제 엔진 테스트 4개는 Pandoc·LibreOffice가 있을 때 통과한다.
+현재 네이티브 구현은 SwiftPM 536개(17 skip), Xcode 598개(56 skip) 테스트에서 실패가 없었다. 마지막 Unicode 수정도 SDK 접근을 차단한 환경에서 Xcode로 다시 빌드해 문서 테스트 5개를 통과했다. 전체 변환 849건은 578 PASS / 263 WARN / 8 FAIL이며, Calibre TCR의 기존 내용 손상도 별도로 재현했다. 검증 범위·사용자 데이터 호환성·격리·서명과 남은 한계는 [최종 검증 기록](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)을 따른다.
 
 모든 형식 조합·코덱을 검사하지 않았다. Ghostscript는 이 머신에 없고, 현재 FFmpeg에는 일부 인코더가 없다. 자동 변환 폴더와 앱 안에서 엔진 다운로드는 아직 연결하지 않았다. 실제 로그아웃·로그인 후 자동 실행과 알림 전달은 검증하지 않았다. 외장 exFAT·SMB, Intel, 배포 공증·TCC 재실행 검증도 남아 있다.
 
 ## 소스와 설계
 
-개발 참고 기준은 [KnifeLemon/Filee](https://github.com/KnifeLemon/Filee) 커밋 `21fdd05ef7181b032ed83ec895cc9bbc4b198985`다. 파일 정보와 SHA-256은 `Vendor/filee-manifest.json`에, 빌드 패치는 `Vendor/Filee.patches/`에 기록한다. `.reference/Filee`는 카탈로그 재생성에만 필요하다.
+개발 참고 기준은 [KnifeLemon/Filee](https://github.com/KnifeLemon/Filee) 커밋 `21fdd05ef7181b032ed83ec895cc9bbc4b198985`다. 현재 Core·host·엔진 구현은 `Sources/Engine`, 앱에서 사용하는 Core 패키지는 `Sources/Core`에 있다. 원본 라이선스와 고지는 `docs/upstream`에 보존하며 현재 빌드는 Filee C# 프로젝트를 참조하지 않는다.
 
 - [전체 형식 목록](docs/formats.md), [전체 설계](docs/architecture.md)
-- [통신 계약](docs/design/host-wire-v1.md), [host 구현](EngineHost/README.md)
+- [통신 계약](docs/design/host-wire-v1.md), [host 구현](Sources/Engine/Host/Host.swift)
 - [UI 설계](docs/design/swiftui-port.md), [패키징·서명](docs/design/macos-packaging.md)
-- [Claude 설계 검토](docs/design/review.md), [엔진 구현·검증 현황](EngineHost/IMPLEMENTATION.md)
+- [Claude 설계 검토](docs/design/review.md), [엔진 구현·검증 현황](docs/design/engine-differential-triage.md)
 
 이전 대화의 시안은 `docs/archive/pre-filetox/`에 보존한다. 노치 선반·파일 보관·이동·복사는 현재 범위에 포함하지 않는다.
 

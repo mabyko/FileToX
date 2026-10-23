@@ -41,7 +41,7 @@ C# 변환 helper(`EngineHost` + Filee `Core`·`Engines`)를 Swift helper로 옮�
 | `Path.*`, `File.Exists`, `Directory.*` | `FilePath.*`(.NET과 같은 규칙), `FileManager.default.fileExists(_:)`/`directoryExists(_:)`/`createDirectoryIfNeeded(_:)` |
 | `ZipArchive`, `ZipFile` | `ZipReader`, `ZipWriter` (`CompressionLevel.Optimal` → `.optimal` 등) |
 | `GZipStream`, `DeflateStream`, `ZLibStream` | `Deflate` (windowBits 31=gzip, 15=zlib, -15=raw) |
-| Brotli, XZ | Apple `Compression` (`COMPRESSION_BROTLI`, `COMPRESSION_LZMA`) |
+| Brotli, XZ | 일반 스트림은 Apple `Compression` (`COMPRESSION_BROTLI`, `COMPRESSION_LZMA`), WOFF2 쓰기는 기존 품질 11을 맞추기 위해 Google Brotli C 라이브러리 |
 | `System.Xml.Linq` | `XDocument`·`XElement`·`XName`·`XNamespace` (`ns + "local"`), `element(_:)`, `elements(_:)`, `descendants(_:)`, `attributeValue(_:)`, `value`, `XElement(name, 내용...)`, `try doc.save(path, indent:)`. `LoadOptions.PreserveWhitespace` → `preserveWhitespace: true`, `SaveOptions.DisableFormatting` → `indent: false` |
 | `Encoding.GetEncoding(949)` 등 | `TextEncodings.encoding(codePage:)` / `encoding(name:)`, `TextEncodings.decode(_:encoding:)` (.NET처럼 잘못된 바이트는 U+FFFD) |
 | `DocumentReaders.DecodeText` | `TextEncodings.decodeText(_:)` |
