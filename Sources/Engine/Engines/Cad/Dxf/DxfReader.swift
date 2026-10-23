@@ -74,6 +74,7 @@ extension ACad {
             }
             document.header.document = document
             builder.buildDocument()
+            if let failure = builder.failure { throw DxfException(failure) }
             return document
         }
 

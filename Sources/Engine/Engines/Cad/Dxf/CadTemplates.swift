@@ -176,7 +176,7 @@ extension ACad {
         }
     }
 
-    final class CadInsertTemplate: CadEntityTemplate, CadOwnerTemplate {
+    class CadInsertTemplate: CadEntityTemplate, CadOwnerTemplate {
         var hasAtts = false
         var ownedObjectsCount = 0
         var blockHeaderHandle: UInt64?
@@ -475,9 +475,9 @@ extension ACad {
             super.buildCore(builder)
             let leader = cadObject as! MultiLeader
             let context = leader.contextData
+            if let scale: Scale = builder.tryGetObject(contextScaleHandle) { context.scale = scale }
             if let style: TextStyle = builder.tryGetObject(contextTextStyleHandle) { context.textStyle = style }
             if let block: BlockRecord = builder.tryGetObject(contextBlockRecordHandle) { context.blockContent = block }
-            if let scale: Scale = builder.tryGetObject(contextScaleHandle) { context.scale = scale }
             for template in leaderLineTemplates { template.build(builder) }
             if let style: MultiLeaderStyle = builder.tryGetObject(leaderStyleHandle) { leader.style = style }
             if let lineType: LineType = builder.tryGetObject(leaderLineTypeHandle) { leader.leaderLineType = lineType }
@@ -490,11 +490,7 @@ extension ACad {
                     leader.blockAttributes[i].attributeDefinition = definition
                 }
             }
-            for (handle, _) in arrowheadHandles {
-                var association = MultiLeader.ArrowheadAssociation()
-                association.arrowhead = builder.tryGetObject(handle)
-                leader.arrowheads.append(association)
-            }
+            // ACadSharp 3.8 does not build the arrowhead overrides (a TODO there).
         }
     }
 
@@ -1011,7 +1007,6 @@ extension ACad {
         }
     }
 
-    final class CadTableStyleTemplate: CadTemplate {}
 
     /// Plain objects with nothing to resolve beyond the common data (`CadNonGraphicalObjectTemplate`).
     final class CadNonGraphicalObjectTemplate: CadTemplate {}

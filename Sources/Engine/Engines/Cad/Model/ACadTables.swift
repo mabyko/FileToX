@@ -489,7 +489,12 @@ extension ACad {
         var snapBasePoint = XY.zero
         var snapSpacing = XY(0.5, 0.5)
         var gridSpacing = XY(10, 10)
-        var direction = XYZ.axisZ
+        private var _direction = XYZ.axisZ
+        /// View direction; ACadSharp 3.8 normalizes on every write, also per component while reading.
+        var direction: XYZ {
+            get { _direction }
+            set { _direction = newValue.normalized() }
+        }
         var target = XYZ.zero
         var viewHeight = 10.0
         var aspectRatio = 1.0

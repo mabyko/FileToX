@@ -20,7 +20,7 @@ extension ACad.DxfReader {
     }
 
     /// `readObjectCodes`.
-    private func readObjectCodes<T: ACad.CadTemplate>(_ template: T, _ read: () throws -> Bool) throws -> T {
+    func readObjectCodes<T: ACad.CadTemplate>(_ template: T, _ read: () throws -> Bool) throws -> T {
         try reader.readNext()
         while reader.code != 0 {
             if try !read() {
@@ -177,15 +177,25 @@ extension ACad.DxfReader {
         case T.objectTableStyle:
             let t = ACad.CadTableStyleTemplate(ACad.TableStyle())
             return try readObjectCodes(t) { try self.readTableStyle(t) }
+        case T.objectTableContent:
+            let t = ACad.CadTableContentTemplate(ACad.TableContent())
+            return try readObjectCodes(t) { try self.readTableContent(t) }
         case T.objectXRecord:
             let t = ACad.CadXRecordTemplate(ACad.XRecord())
             return try readObjectCodes(t) { try self.readXRecord(t) }
         default:
-            // Unsupported objects (dynamic block data, AEC, fields, geodata, unknown classes) are not kept.
-            builder.notify("UnknownNonGraphicalObject not supported: \(reader.valueAsString)")
+            if let template = try readEvaluationObject(reader.valueAsString) { return template }
+            // Objects of a known class become placeholders that take a new handle (KeepUnknownEntities = false).
+            var template: ACad.CadTemplate?
+            if let dxfClass = builder.document.classes[reader.valueAsString] {
+                builder.notify("NonGraphicalObject not supported read as an UnknownNonGraphicalObject: \(reader.valueAsString)")
+                template = ACad.CadNonGraphicalObjectTemplate(ACad.UnknownNonGraphicalObject(dxfClass: dxfClass))
+            } else {
+                builder.notify("UnknownNonGraphicalObject not supported: \(reader.valueAsString)")
+            }
             try reader.readNext()
             repeat { try reader.readNext() } while reader.code != 0
-            return nil
+            return template
         }
     }
 
@@ -502,29 +512,6 @@ extension ACad.DxfReader {
         return true
     }
 
-    private func readTableStyle(_ t: ACad.CadTableStyleTemplate) throws -> Bool {
-        let style = t.cadObject as! ACad.TableStyle
-        switch reader.code {
-        case 7, 94, 62, 63, 140, 170, 283, 90, 91, 1, 274...279, 284...289, 64...69:
-            // Cell style values: ACadSharp keeps them only for cell styles with a known name (never in DXF).
-            return true
-        default:
-            return mapped {
-                switch reader.code {
-                case 3: style.description = rawString
-                case 70: style.flowDirection = try reader.valueAsShort
-                case 71: style.flags = try reader.valueAsShort
-                case 40: style.horizontalCellMargin = try reader.valueAsDouble
-                case 41: style.verticalCellMargin = try reader.valueAsDouble
-                case 280: style.suppressTitle = try reader.valueAsBool
-                case 281: style.suppressHeaderRow = try reader.valueAsBool
-                default: return false
-                }
-                return true
-            }
-        }
-    }
-
     private func readSpatialFilter(_ f: ACad.SpatialFilter, _ hasFrontPlane: inout Bool, _ insertTransformRead: inout Bool) throws -> Bool {
         switch reader.code {
         case 10:
@@ -572,57 +559,42 @@ extension ACad.DxfReader {
     // ───────────────────────── ACDSDATA ─────────────────────────
 
     /// `DxfAcdsDataSectionReader`: records with an entity id (AcDbDs::ID) and its ASM data.
+    /// `DxfAcdsDataSectionReader`: ACDSRECORD entries pair an entity handle (320) with its ACIS payload (310).
     func readAcdsData() throws {
         if reader.valueAsString != ACad.DxfFileToken.acdsDataSection { _ = try reader.find(ACad.DxfFileToken.acdsDataSection) }
-        var records: [(UInt64, Data)] = []
+        var inRecord = false
+        var currentHandle: UInt64 = 0
+        var payload: Data?
+        func store() {
+            guard currentHandle != 0, let payload, !payload.isEmpty else { return }
+            // Dictionary semantics: a repeated handle keeps its position and takes the last payload.
+            if let index = builder.acdsData.firstIndex(where: { $0.0 == currentHandle }) {
+                builder.acdsData[index].1 = payload
+            } else {
+                builder.acdsData.append((currentHandle, payload))
+            }
+        }
         do {
             try reader.readNext()
             while reader.valueAsString != ACad.DxfFileToken.endSection {
-                if reader.code != 0 {
-                    try reader.readNext()
-                    continue
-                }
-                switch reader.valueAsString.uppercased() {
-                case "ACDSSCHEMA":
-                    try reader.readNext()
-                    while reader.code != 0 { try reader.readNext() }
-                    continue
-                case "ACDSRECORD":
-                    var id: UInt64?
-                    var asm: Data?
-                    try reader.readNext()
-                    while reader.code != 0, reader.code != 101 {
-                        if reader.code == 2 {
-                            let name = reader.valueAsString
-                            var handle: UInt64?
-                            var data: Data?
-                            try reader.readNext()
-                            while reader.code != 0, reader.code != 2, reader.code != 101 {
-                                switch reader.code {
-                                case 310: data = (data ?? Data()) + (reader.valueAsBinaryChunk ?? Data())
-                                case 320: handle = try reader.valueAsHandle
-                                default: break
-                                }
-                                try reader.readNext()
-                            }
-                            if name == "AcDbDs::ID", id == nil { id = handle }
-                            if name == "ASM_Data", asm == nil { asm = data }
-                            continue
-                        }
-                        try reader.readNext()
+                if reader.code == 0 {
+                    store()
+                    inRecord = reader.valueAsString == ACad.DxfFileToken.acdsRecord
+                    currentHandle = 0
+                    payload = nil
+                } else if inRecord {
+                    switch reader.code {
+                    case 320: currentHandle = try reader.valueAsHandle
+                    case 310: payload = (payload ?? Data()) + (reader.valueAsBinaryChunk ?? Data())
+                    default: break
                     }
-                    if let id, let asm { records.append((id, asm)) }
-                    continue
-                default:
-                    break
                 }
                 try reader.readNext()
             }
+            store()
         } catch {
-            builder.notify("An error occurred while reading the ACDSDATA: \(error)")
-            records = []
+            builder.notify("An error occurred while reading the Prototype1b: \(error)")
         }
-        builder.acdsData = records
     }
 }
 

@@ -44,10 +44,10 @@ extension ACad {
         var isZero: Bool { x == 0 && y == 0 && z == 0 }
         var xy: XY { XY(x, y) }
 
-        /// CSMath `Normalize`: a zero vector stays NaN-free (returns itself).
+        /// CSMath `Normalize`: each component divided by the length (a zero vector becomes NaN).
         func normalized() -> XYZ {
             let l = length
-            return l == 0 ? self : XYZ(x / l, y / l, z / l)
+            return XYZ(x / l, y / l, z / l)
         }
 
         static func cross(_ a: XYZ, _ b: XYZ) -> XYZ {
@@ -93,9 +93,10 @@ extension ACad {
         var length: Double { (x * x + y * y).squareRoot() }
         var xyz: XYZ { XYZ(x, y, 0) }
 
+        /// CSMath `Normalize` (a zero vector becomes NaN).
         func normalized() -> XY {
             let l = length
-            return l == 0 ? self : XY(x / l, y / l)
+            return XY(x / l, y / l)
         }
 
         static func + (a: XY, b: XY) -> XY { XY(a.x + b.x, a.y + b.y) }
@@ -107,14 +108,69 @@ extension ACad {
         var angle: Double { atan2(y, x) }
     }
 
-    /// CSMath `MathHelper` constants and helpers used by the ported code.
+    /// CSMath `MathHelper` (CSUtilities b1f53ee, the submodule of ACadSharp 3.8.0).
     enum MathHelper {
+        static let degToRadFactor = Double.pi / 180
+        static let radToDegFactor = 180 / Double.pi
         static let epsilon = 1e-12
-        static let twoPI = 2 * Double.pi
         static let halfPI = Double.pi / 2
-        static func radToDeg(_ value: Double) -> Double { value * 180 / .pi }
-        static func degToRad(_ value: Double) -> Double { value * .pi / 180 }
-        static func isZero(_ value: Double) -> Bool { abs(value) < epsilon }
+        static let threeHalfPI = 3 * Double.pi * 0.5
+        static let twoPI = Double.pi * 2
+
+        static func degToRad(_ value: Double) -> Double { value * degToRadFactor }
+
+        /// `RadToDeg`: normalized to [0, 360] unless asked otherwise.
+        static func radToDeg(_ value: Double, normalize: Bool = true, absolute: Bool = true) -> Double {
+            let result = value * radToDegFactor
+            return normalize ? normalizeAngle(result, absolute: absolute) : result
+        }
+
+        /// `DoubleExtensions.IsZero`: inclusive threshold.
+        static func isZero(_ value: Double, _ threshold: Double = epsilon) -> Bool { value >= -threshold && value <= threshold }
+
+        static func isEqual(_ a: Double, _ b: Double, _ threshold: Double = epsilon) -> Bool { isZero(a - b, threshold) }
+
+        static func fixZero(_ value: Double, _ threshold: Double = epsilon) -> Double { isZero(value, threshold) ? 0 : value }
+
+        static func cos(_ value: Double) -> Double {
+            let result = Foundation.cos(value)
+            return isZero(result) ? 0 : result
+        }
+
+        static func sin(_ value: Double) -> Double {
+            let result = Foundation.sin(value)
+            return isZero(result) ? 0 : result
+        }
+
+        static func normalizeAngle(_ angle: Double, absolute: Bool = true) -> Double {
+            normalize(angle, fullCircle: 360, absolute: absolute)
+        }
+
+        static func normalizeAngleRadians(_ angle: Double, absolute: Bool = true) -> Double {
+            normalize(angle, fullCircle: twoPI, absolute: absolute)
+        }
+
+        static func isAngleInRange(_ angle: Double, _ start: Double, _ end: Double, precision: Double = epsilon) -> Bool {
+            let angle = normalizeAngleRadians(angle), start = normalizeAngleRadians(start), end = normalizeAngleRadians(end)
+            if start > end {
+                return (angle >= 0 && angle <= end + precision) || (angle >= start - precision && angle <= twoPI)
+            }
+            return angle >= start - precision && angle <= end + precision
+        }
+
+        static func roundToNearest(_ number: Double, _ roundTo: Double) -> Double {
+            (number / roundTo).rounded(.toNearestOrEven) * roundTo
+        }
+
+        private static func normalize(_ angle: Double, fullCircle: Double, absolute: Bool) -> Double {
+            if isEqual(Swift.abs(angle), fullCircle) {
+                return angle < 0 && !absolute ? -fullCircle : fullCircle
+            }
+            let normalized = angle.truncatingRemainder(dividingBy: fullCircle)
+            if isZero(normalized) { return 0 }
+            if normalized < 0 && absolute { return fullCircle + normalized }
+            return normalized
+        }
     }
 
     /// ACadSharp `Color`: an ACI index (0 = ByBlock, 256 = ByLayer, 257 = ByEntity) or a 24-bit true colour.

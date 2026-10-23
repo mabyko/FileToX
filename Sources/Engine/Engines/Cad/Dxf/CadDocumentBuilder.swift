@@ -43,6 +43,13 @@ extension ACad {
             notifications.append(message)
         }
 
+        /// The first exception a template build would throw; the reader fails with it after building.
+        private(set) var failure: String?
+
+        func fail(_ message: String) {
+            if failure == nil { failure = message }
+        }
+
         /// `AddTemplate`.
         func addTemplate(_ template: CadTemplate) {
             guard addToMap(template) else { return }
@@ -186,17 +193,17 @@ extension ACad {
             buildDictionaries()
             for template in orphanTemplates { assignOwner(template) }
             super.buildDocument()
+            applyAcdsData()
             if createDefaults { document.createDefaults() }
-            buildDataStorage()
         }
 
-        /// `BuildDataStorage`: ACIS data replaces what the entity carried.
-        func buildDataStorage() {
+        /// `applyAcdsData`: ACIS payloads read from ACDSDATA replace what the entity carried.
+        private func applyAcdsData() {
             for (handle, data) in acdsData {
-                if let geometry = document.object(handle) as? ModelerGeometry {
+                if let geometry: ModelerGeometry = tryGetObject(handle) {
                     geometry.acisData = data
                 } else {
-                    notify("ModelerGeometry with handle \(handle) not found in the document")
+                    notify("ACDSDATA record owner \(handle) is not a ModelerGeometry entity in the document")
                 }
             }
         }

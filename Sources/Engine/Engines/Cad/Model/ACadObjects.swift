@@ -517,62 +517,125 @@ extension ACad {
         }
     }
 
-    /// `TableStyle` with the three cell styles the writers use.
+    /// `TableStyle`: ACAD_TABLESTYLE entries with their cell styles.
     final class TableStyle: NonGraphicalObject, DxfClassDefined {
         static let defaultName = "Standard"
 
-        final class CellBorder {
-            var color = Color.byBlock
-            var lineWeight: LineWeight = .byBlock
-            var isInvisible = false
-            var doubleLineSpacing = 0.0
-            /// `BorderPropertyFlags`.
-            var propertyOverrideFlags: Int32 = 0
-            var type: Int16 = 1
-            var edgeFlags: Int32 = 0
-            init(edge: Int32) { edgeFlags = edge }
+        /// `CellEdgeFlags`.
+        enum CellEdgeFlags {
+            static let unknown: Int32 = 0, top: Int32 = 1, right: Int32 = 2, bottom: Int32 = 4, left: Int32 = 8
+            static let insideVertical: Int32 = 16, insideHorizontal: Int32 = 32
         }
 
-        final class CellStyle {
-            var name = ""
-            var textStyle: TextStyle?
+        /// `CellBorder`.
+        final class CellBorder {
+            var applyBorder = false
+            var color = Color.byBlock
+            var doubleLineSpacing = 0.0
+            let edgeFlags: Int32
+            var isInvisible = false
+            var lineWeight: LineWeight = .byBlock
+            /// `BorderPropertyFlags` (90).
+            var propertyOverrideFlags: Int32 = 0
+            /// `BorderType` (91): single.
+            var type: Int16 = 1
+            init(_ edgeFlags: Int32) { self.edgeFlags = edgeFlags }
+        }
+
+        /// `ContentFormat`.
+        class ContentFormat {
+            var alignment: Int32 = 0
+            var color = Color.byBlock
+            var hasData = false
+            var propertyFlags: Int32 = 0
+            /// `CellStylePropertyFlags` (91).
+            var propertyOverrideFlags: Int32 = 0
+            var rotation = 0.0
+            var scale = 0.0
             var textHeight = 0.0
-            /// `CellAlignmentType` (170).
-            var cellAlignment: Int16 = 0
-            var contentColor = Color.byBlock
+            /// A new "Standard" style per format, outside any document (`TextStyle.Default`).
+            var textStyle: TextStyle? = TextStyle.makeDefault()
+            var valueDataType: Int32 = 0
+            var valueFormatString: String?
+            var valueUnitType: Int32 = 0
+            init() {}
+        }
+
+        /// `CellStyle`.
+        final class CellStyle: ContentFormat {
+            static let tableCellStyleName = "Table", dataCellStyleName = "_DATA"
+            static let headerCellStyleName = "_HEADER", titleCellStyleName = "_TITLE"
+
+            /// `CellStyleClass`.
+            enum StyleClass { static let data: Int32 = 1, label: Int32 = 2 }
+
+            static func makeDefaultDataCellStyle() -> CellStyle { CellStyle(dataCellStyleName, StyleClass.label, id: 3) }
+            static func makeDefaultHeaderCellStyle() -> CellStyle { CellStyle(headerCellStyleName, StyleClass.data, id: 2) }
+            static func makeDefaultTitleCellStyle() -> CellStyle { CellStyle(titleCellStyleName, StyleClass.data, id: 1) }
+            static func makeDefaultTableCellStyle() -> CellStyle { CellStyle(tableCellStyleName, StyleClass.label, id: 4) }
+
             var backgroundColor = Color.byBlock
-            var textColor = Color.byBlock
+            var bottomBorder = CellBorder(CellEdgeFlags.bottom)
+            var bottomMargin = 0.0
+            /// `CellAlignmentType` (170).
+            var cellAlignment: Int32 = 0
+            var contentColor = Color.byBlock
+            /// `CellContentLayoutFlags`.
+            var contentLayoutFlags: Int32 = 0
+            var horizontalInsideBorder = CellBorder(CellEdgeFlags.insideHorizontal)
+            var horizontalMargin = 0.06
             var isFillColorOn = false
+            var leftBorder = CellBorder(CellEdgeFlags.left)
+            var marginHorizontalSpacing = 0.0
+            /// `MarginFlags` (171).
+            var marginOverrideFlags: Int32 = 0
+            var marginVerticalSpacing = 0.0
+            var name: String?
+            var rightBorder = CellBorder(CellEdgeFlags.right)
+            var rightMargin = 0.0
+            /// `CellStyleClass` (91).
+            var styleClass: Int32 = 0
+            /// `CellStylePropertyFlags` (92).
+            var tableCellStylePropertyFlags: Int32 = 0
+            var textColor = Color.byBlock
+            /// ACadSharp creates the top border with the right edge flag.
+            var topBorder = CellBorder(CellEdgeFlags.right)
             /// `CellStyleType` (90).
             var type: Int32 = 0
-            /// Value data type (91).
-            var valueDataType: Int32 = 0
-            var topBorder = CellBorder(edge: 1)
-            var horizontalInsideBorder = CellBorder(edge: 32)
-            var bottomBorder = CellBorder(edge: 4)
-            var leftBorder = CellBorder(edge: 8)
-            var verticalInsideBorder = CellBorder(edge: 16)
-            var rightBorder = CellBorder(edge: 2)
-            var horizontalMargin = 0.06
+            var verticalInsideBorder = CellBorder(CellEdgeFlags.insideVertical)
             var verticalMargin = 0.06
-            init(name: String = "") { self.name = name }
+            var id: Int32 = 0
+
+            override init() { super.init() }
+
+            convenience init(_ name: String, _ styleClass: Int32, id: Int32) {
+                self.init()
+                self.name = name
+                self.styleClass = styleClass
+                self.id = id
+                hasData = true
+            }
         }
 
+        var cellStyles: [CellStyle] = []
+        var dataCellStyle = CellStyle.makeDefaultDataCellStyle()
         var description: String?
+        var flags: Int16 = 0
         /// `TableFlowDirectionType` (70): down.
         var flowDirection: Int16 = 0
-        var flags: Int16 = 0
+        var headerCellStyle = CellStyle.makeDefaultHeaderCellStyle()
         var horizontalCellMargin = 0.06
-        var verticalCellMargin = 0.06
-        var suppressTitle = false
         var suppressHeaderRow = false
-        var dataCellStyle = CellStyle(name: "_DATA")
-        var titleCellStyle = CellStyle(name: "_TITLE")
-        var headerCellStyle = CellStyle(name: "_HEADER")
-        var tableCellStyle = CellStyle(name: "Table")
+        var suppressTitle = false
+        var tableCellStyle = CellStyle.makeDefaultTableCellStyle()
+        var titleCellStyle = CellStyle.makeDefaultTitleCellStyle()
+        var verticalCellMargin = 0.06
 
         override var objectName: String { DxfFileToken.objectTableStyle }
+        override var objectType: ObjectType { .unlisted }
         override var subclassMarker: String { DxfSubclassMarker.tableStyle }
+
+        static func makeDefault() -> TableStyle { TableStyle(name: defaultName) }
 
         func dxfClass() -> DxfClass {
             DxfClass(DxfSubclassMarker.tableStyle, DxfFileToken.objectTableStyle, dwgVersion: Version.ac1018.rawValue,
@@ -736,6 +799,9 @@ extension ACad {
 
         override init(name: String = "") { super.init(name: name) }
 
+        /// `Scale.Default`: a new 1:1 unit scale.
+        static func makeDefault() -> Scale { Scale(name: defaultName, paper: 1, drawing: 1, isUnit: true) }
+
         override var objectName: String { DxfFileToken.objectScale }
         override var subclassMarker: String { DxfSubclassMarker.scale }
 
@@ -809,7 +875,7 @@ extension ACad {
     // ───────────────────────── Multileader annotation context ─────────────────────────
 
     /// `MultiLeaderObjectContextData`: the geometry of a multileader (embedded in the MULTILEADER entity).
-    final class MultiLeaderObjectContextData: NonGraphicalObject, DxfClassDefined {
+    final class MultiLeaderObjectContextData: AnnotScaleObjectContextData, DxfClassDefined {
         struct StartEndPointPair {
             var startPoint = XYZ.zero
             var endPoint = XYZ.zero
@@ -893,9 +959,6 @@ extension ACad {
         /// 16 values, row-major (a default `Matrix4` is all zeros).
         var transformationMatrix: [Double] = Array(repeating: 0, count: 16)
         var wordBreak = false
-        var scale: Scale?
-        var `default` = false
-        var version: Int16 = 3
 
         override var objectName: String { DxfFileToken.objectMLeaderContextData }
         override var subclassMarker: String { DxfSubclassMarker.multiLeaderObjectContextData }

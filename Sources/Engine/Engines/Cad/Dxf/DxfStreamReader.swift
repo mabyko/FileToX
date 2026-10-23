@@ -214,7 +214,7 @@ extension ACad {
         }
 
         var valueAsDouble: Double { get throws { try value.double() } }
-        var valueAsAngle: Double { get throws { try value.double() * .pi / 180 } }
+        var valueAsAngle: Double { get throws { MathHelper.degToRad(try value.double()) } }
         var valueAsShort: Int16 { get throws { Int16(try value.integer(-32768...32767)) } }
         var valueAsUShort: UInt16 { get throws { UInt16(try value.integer(0...65535)) } }
         var valueAsInt: Int32 { get throws { Int32(try value.integer(-2_147_483_648...2_147_483_647)) } }

@@ -94,7 +94,7 @@ extension ACad.DxfReader {
             let t = ACad.CadEntityTemplate(ACad.Solid())
             return try readEntityCodes(t) { try self.readSolid(t.cadObject as! ACad.Solid) }
         case ACad.DxfFileToken.entityTable:
-            let t = ACad.CadInsertTemplate(ACad.TableEntity())
+            let t = ACad.CadTableEntityTemplate(ACad.TableEntity())
             return try readEntityCodes(t) { try self.readTableEntity(t) }
         case ACad.DxfFileToken.entityText:
             let t = ACad.CadTextEntityTemplate(ACad.TextEntity())
@@ -140,11 +140,18 @@ extension ACad.DxfReader {
             let t = ACad.CadEntityTemplate(ACad.XLine())
             return try readEntityCodes(t) { try self.readXLine(t.cadObject as! ACad.XLine) }
         default:
-            // Unknown entities are not kept (KeepUnknownEntities = false).
-            builder.notify("Entity not supported: \(reader.valueAsString)")
+            // Entities of a known class become placeholders that take a new handle; their codes are skipped
+            // (KeepUnknownEntities = false) and they never join a block.
+            var template: ACad.CadEntityTemplate?
+            if let dxfClass = builder.document.classes[reader.valueAsString] {
+                builder.notify("Entity not supported read as an UnknownEntity: \(reader.valueAsString)")
+                template = ACad.CadEntityTemplate(ACad.UnknownEntity(dxfClass: dxfClass))
+            } else {
+                builder.notify("Entity not supported: \(reader.valueAsString)")
+            }
             try reader.readNext()
             repeat { try reader.readNext() } while reader.code != 0
-            return nil
+            return template
         }
     }
 
@@ -502,7 +509,7 @@ extension ACad.DxfReader {
     }
 
     /// The AcDbBlockReference map.
-    private func assignInsert(_ insert: ACad.Insert) throws -> Bool {
+    func assignInsert(_ insert: ACad.Insert) throws -> Bool {
         switch reader.code {
         case 70: insert.columnCount = try reader.valueAsUShort
         case 44: insert.columnSpacing = try reader.valueAsDouble
@@ -519,39 +526,6 @@ extension ACad.DxfReader {
         default: return false
         }
         return true
-    }
-
-    /// ACAD_TABLE: the insert part (block, placement) like `readTableEntity`; the cell data of the AcDbTable
-    /// subclass is skipped (it is not drawn and the DXF writer does not write tables).
-    private func readTableEntity(_ t: ACad.CadInsertTemplate) throws -> Bool {
-        let table = t.cadObject as! ACad.TableEntity
-        let inTable = currentSubclass.caseInsensitiveCompare(ACad.DxfSubclassMarker.tableEntity) == .orderedSame
-        switch reader.code {
-        case 2:
-            if !inTable { t.blockName = reader.valueAsString }
-            return true
-        case 301:
-            // A CAD value runs to its 304 end marker.
-            while reader.code != 304, reader.code != 0 { try reader.readNext() }
-            return true
-        case 1, 177, 279, 275, 276, 278, 69, 65, 66, 68, 40, 63, 64, 140, 283, 342, 343, 141, 142, 144, 145,
-             170, 171, 172, 173, 174, 175, 176, 178, 179, 340:
-            if inTable || reader.code >= 140 || reader.code == 1 { return true }
-            return mapped { try assignInsert(table) }
-        default:
-            if mapped({ try assignInsert(table) }) { return true }
-            guard inTable else { return false }
-            return mapped {
-                switch reader.code {
-                case 280: table.version = try reader.valueAsShort
-                case 11, 21, 31: table.horizontalDirection[axis(reader.code)] = try reader.valueAsDouble
-                case 90: table.valueFlag = try reader.valueAsInt
-                case 91, 92, 93, 94, 95, 96: break
-                default: return false
-                }
-                return true
-            }
-        }
     }
 
     // ───────────────────────── Polylines ─────────────────────────

@@ -218,14 +218,10 @@ extension ACad {
         /// `AttributeFlags` (70).
         var flags: Int16 = 0
         var isLocked = false
+        /// The multiline value; ACadSharp does not register it in the document.
         var mtext: MText?
         var tag = ""
         var version: UInt8 = 0
-
-        override func assignDocument(_ document: Document) {
-            super.assignDocument(document)
-            if let mtext { document.addCadObject(mtext) }
-        }
     }
 
     final class AttributeEntity: AttributeBase {
@@ -351,17 +347,6 @@ extension ACad {
 
     /// ACAD_TABLE: drawn through its anonymous block like an insert. The table data itself (rows, columns, cells)
     /// is not modelled; see `rawCellCount` for what was read.
-    final class TableEntity: Insert {
-        var horizontalDirection = XYZ.axisX
-        var version: Int16 = 0
-        var valueFlag: Int32 = 0
-        var tableStyle: NonGraphicalObject?
-
-        override var objectName: String { DxfFileToken.entityTable }
-        override var objectType: ObjectType { .unlisted }
-        override var subclassMarker: String { DxfSubclassMarker.tableEntity }
-    }
-
     // ───────────────────────── Polylines ─────────────────────────
 
     /// `VertexFlags`.
@@ -1069,9 +1054,12 @@ extension ACad {
 
         override func assignDocument(_ document: Document) {
             super.assignDocument(document)
+            if let collection = document.mleaderStyles { _style = collection.resolve(style) }
             _textStyle = document.textStyles.resolve(textStyle)
             _leaderLineType = document.lineTypes.resolve(leaderLineType)
-            if let collection = document.mleaderStyles { _style = collection.resolve(style) }
+            if let arrowhead { self.arrowhead = document.blockRecords.resolve(arrowhead) }
+            if let blockContent { self.blockContent = document.blockRecords.resolve(blockContent) }
+            contextData.assignDocument(document)
         }
     }
 
@@ -1221,14 +1209,16 @@ extension ACad {
     }
 
     /// An entity type ACadSharp reads but this port does not model; kept with its DXF name so drawings report it.
+    /// `UnknownEntity`: an entity of a class ACadSharp does not read (never added to a block).
     final class UnknownEntity: Entity {
-        let dxfName: String
-        init(dxfName: String) {
-            self.dxfName = dxfName
+        let dxfClass: DxfClass?
+        init(dxfClass: DxfClass?) {
+            self.dxfClass = dxfClass
             super.init()
         }
 
-        override var objectName: String { dxfName }
+        override var objectName: String { dxfClass?.dxfName ?? "UNKNOWN" }
+        override var subclassMarker: String { dxfClass?.cppClassName ?? DxfSubclassMarker.entity }
         override var objectType: ObjectType { .undefined }
     }
 
