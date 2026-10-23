@@ -242,6 +242,7 @@ final class EmlTests: XCTestCase {
         XCTAssertEqual(EmlConverter.htmlDecode("&lt;&nbsp;&eacute;&hellip;&#65;&#x42;&#xD800;&bogus;&amp;amp;&NotEqualTilde;&apos;"),
                        "<\u{00A0}é…AB&#xD800;&bogus;&amp;&NotEqualTilde;'")
         XCTAssertEqual(MarkupConvert.unescapeDataString("a%20b%E2%82%AC%E2%82x%41%zz%"), "a b€%E2%82xA%zz%")
+        XCTAssertEqual(Array(EmlConverter.htmlToText("<p>a&nbsp;\u{301}b</p>").unicodeScalars), Array("a \u{301}b".unicodeScalars))
     }
 }
 

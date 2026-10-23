@@ -1,4 +1,5 @@
-// .NET number conversions the Markup readers rely on, so lengths and sizes come out as in Filee.
+// .NET number conversions the Markup readers rely on, so lengths and sizes come out as in Filee, and their other
+// shared helpers.
 
 import Foundation
 
@@ -93,5 +94,44 @@ enum MarkupConvert {
             i += 1
         }
         return output
+    }
+
+    /// `new Uri(path).AbsoluteUri` for an absolute macOS path: "file://" and the path with characters outside the URI
+    /// path set percent-encoded as UTF-8, without Unicode normalization (Foundation's file URLs decompose Hangul).
+    /// .NET also unescapes some "%XX" sequences in the name ("%41", or "%20" when another "%" is stray) and escapes
+    /// characters outside RFC 3987's ranges twice ("\u{80}" → "%25C2%2580"), so its link misses such files; here every
+    /// "%" and character is escaped once.
+    static func fileUri(_ path: String) -> String {
+        var result = "file://"
+        for byte in path.utf8 {
+            switch byte {
+            case UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "0")...UInt8(ascii: "9"):
+                result.unicodeScalars.append(Unicode.Scalar(byte))
+            case UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "_"), UInt8(ascii: "~"), UInt8(ascii: "!"), UInt8(ascii: "$"),
+                 UInt8(ascii: "&"), UInt8(ascii: "'"), UInt8(ascii: "("), UInt8(ascii: ")"), UInt8(ascii: "*"), UInt8(ascii: "+"),
+                 UInt8(ascii: ","), UInt8(ascii: ";"), UInt8(ascii: "="), UInt8(ascii: ":"), UInt8(ascii: "@"), UInt8(ascii: "/"),
+                 UInt8(ascii: "["), UInt8(ascii: "]"):
+                result.unicodeScalars.append(Unicode.Scalar(byte))
+            default:
+                result += String(format: "%%%02X", byte)
+            }
+        }
+        return result
+    }
+
+    /// Runs `work` on a thread with a 16 MB stack and waits for it: the readers recurse per nesting level, and deep
+    /// input would exhaust the stack of a pool thread (smaller than .NET's), which ends the helper.
+    static func onLargeStack(_ work: @escaping () throws -> Void) throws {
+        final class Outcome: @unchecked Sendable { var error: Error? }
+        let outcome = Outcome()
+        let done = DispatchSemaphore(value: 0)
+        let thread = Thread {
+            do { try work() } catch { outcome.error = error }
+            done.signal()
+        }
+        thread.stackSize = 16 * 1024 * 1024
+        thread.start()
+        done.wait()
+        if let error = outcome.error { throw error }
     }
 }

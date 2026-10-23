@@ -104,7 +104,8 @@ final class HtmlReader {
 
         let sink = Sink()
         if let body = document.body {
-            try onLargeStack {
+            // The walk recurses per element level (up to `maxDepth`).
+            try MarkupConvert.onLargeStack {
                 try reader.children(body, sink, Context(format: HCharFormat(), align: nil, indent: 0, listLevel: 0, item: nil,
                                                         heading: 0, pre: false, firstLine: nil))
             }
@@ -121,22 +122,6 @@ final class HtmlReader {
         let language = document.documentElement?.getAttribute("lang") ?? document.documentElement?.getAttribute("xml:lang")
         return HtmlContent(blocks: sink.blocks, title: title.isEmpty ? nil : title,
                            language: language.flatMap { $0.allSatisfy(\.isWhitespace) ? nil : $0 })
-    }
-
-    /// Runs the tree walk on a thread with a 16 MB stack: the walk recurses per element level, and deeply nested
-    /// pages (up to `maxDepth` levels) would exhaust the stack of a pool thread.
-    private static func onLargeStack(_ work: @escaping () throws -> Void) throws {
-        final class Outcome: @unchecked Sendable { var error: Error? }
-        let outcome = Outcome()
-        let done = DispatchSemaphore(value: 0)
-        let thread = Thread {
-            do { try work() } catch { outcome.error = error }
-            done.signal()
-        }
-        thread.stackSize = 16 * 1024 * 1024
-        thread.start()
-        done.wait()
-        if let error = outcome.error { throw error }
     }
 
     /// Removes bookmarks that no link points to (every element id becomes one while reading).
@@ -186,7 +171,8 @@ final class HtmlReader {
             return TextEncodings.decode(bytes, encoding: encoding)
         }
         if let text = String(data: bytes, encoding: .utf8) { return text }
-        return TextEncodings.decode(bytes, codePage: ansiCodePage)
+        // .NET's decoder: a CP949 lead byte takes the next byte, and an invalid pair is one "?".
+        return EmlCharsets.decode(ArraySlice(bytes), codePage: ansiCodePage)
     }
 
     /// The Windows ANSI code page of the user's language, as .NET's `CultureInfo.CurrentCulture.TextInfo.ANSICodePage`.
@@ -1053,7 +1039,7 @@ final class HtmlReader {
         try FileManager.default.createDirectoryIfNeeded(options.mediaFolder)
         embedded += 1
         let path = FilePath.combine(options.mediaFolder, "embedded-\(Self.guid())-\(embedded).\(ext)")
-        try data.write(to: URL(fileURLWithPath: path))
+        try FileManager.default.writeFile(path, data)
         return Self.usableImage(path, options.mediaFolder)
     }
 
@@ -1067,7 +1053,7 @@ final class HtmlReader {
             let target = FilePath.combine(mediaFolder, "\(FilePath.fileNameWithoutExtension(path))-\(guid()).png")
             do {
                 try FileManager.default.createDirectoryIfNeeded(mediaFolder)
-                try png.write(to: URL(fileURLWithPath: target))
+                try FileManager.default.writeFile(target, png) // keeps a Korean name composed (NFC)
             } catch {
                 return nil
             }

@@ -22,11 +22,14 @@ public final class MarkdownConverter: Converter {
         let markdown = TextEncodings.decodeText(try Data(contentsOf: URL(fileURLWithPath: step.inputPath)))
         progress?(0.3)
         guard let output = try step.output.allocate(step.to) else { return [] }
-        let content: String
-        switch step.to {
-        case "html": content = try Self.toHtml(markdown, FilePath.fullPath(step.inputPath), output)
-        case "txt": content = try Markdown.toPlainText(markdown, MarkdownReader.pipeline)
-        default: throw ConversionError(step.to)
+        var content = ""
+        // Parsing up to Markdig's depth limits, rendering and releasing the syntax tree recurse per level.
+        try MarkupConvert.onLargeStack {
+            switch step.to {
+            case "html": content = try Self.toHtml(markdown, FilePath.fullPath(step.inputPath), output)
+            case "txt": content = try Markdown.toPlainText(markdown, MarkdownReader.pipeline)
+            default: throw ConversionError(step.to)
+            }
         }
         try Task.checkCancellation()
         var data = Data(step.to == "txt" ? [0xEF, 0xBB, 0xBF] : [])
@@ -45,7 +48,7 @@ public final class MarkdownConverter: Converter {
         if !MarkupConvert.equalsOrdinalIgnoreCase(inputFolder, outputFolder) {
             // Relative image paths would break away from the Markdown file: point them at the original files.
             for image in document.inlineDescendants(Markdown.LinkInline.self) where image.isImage {
-                if let path = MarkdownReader.resolveImage(image.url, inputFolder) { image.url = URL(fileURLWithPath: path).absoluteString }
+                if let path = MarkdownReader.resolveImage(image.url, inputFolder) { image.url = MarkupConvert.fileUri(path) }
             }
         }
         let body = try Markdown.render(document, MarkdownReader.pipeline)

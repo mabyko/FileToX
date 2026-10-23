@@ -181,6 +181,25 @@ final class HtmlReaderTests: XCTestCase {
         XCTAssertEqual(text(paragraphs[6]), "쪽\u{0C}나눔") // libxml2 would drop the form feed
     }
 
+    func testCharacterReferencesAreReadAsHtml5ReadsThem() throws {
+        // Expected values: Filee's reader (AngleSharp) on the same text.
+        let content = try parse("""
+            <title>T &check; &copy 1</title>
+            <p>&copy 2020 &amp more &lt3 &notit; &notin; &AMP; &Amp; &copyx &fjlig; &NotEqualTilde;</p>
+            <p>&#65 &#x; &#0; &#x110000; &#128; &#1; x&;y</p>
+            <p><a href="?a=1&copy=2&copyx&copy 3&check;&amp&lt3">l</a></p>
+            <!-- &check; --><script>"&check;"</script><style>p::after { content: "&check;" }</style><p>AT&T &amp;check;</p>
+            """)
+
+        XCTAssertEqual(content.title, "T ✓ © 1")
+        let texts = paragraphs(content).map(text)
+        XCTAssertEqual(texts.count, 4)
+        XCTAssertEqual(Array(texts[0].unicodeScalars), Array("© 2020 & more <3 ¬it; ∉ & &Amp; ©x fj \u{2242}\u{338}".unicodeScalars))
+        XCTAssertEqual(texts[1], "A &#x; \u{FFFD} \u{FFFD} € \u{1} x&y")
+        XCTAssertEqual(HDocumentWalker.inlines(content.blocks).compactMap { ($0 as? HLink)?.target }, ["?a=1&copy=2&copyx© 3✓&&lt3"])
+        XCTAssertEqual(texts[3], "AT&T &check;")
+    }
+
     func testReadOptionsMapLinksAndIds() throws {
         let folder = try newFolder()
         let options = HtmlReadOptions(baseFolder: folder, mediaFolder: folder,
@@ -254,6 +273,10 @@ final class HtmlReaderTests: XCTestCase {
         XCTAssertTrue(HtmlReader.decode(TextEncodings.encode("<?xml version=\"1.0\" encoding=\"windows-1251\"?><html><body>\(russian)</body></html>", encoding: cp1251)).contains(russian))
         XCTAssertTrue(HtmlReader.decode(Data([0xFF, 0xFE]) + TextEncodings.encode("<p>\(korean)</p>", encoding: .utf16LittleEndian)).contains(korean))
         XCTAssertTrue(HtmlReader.decode(Data("<p>\(korean)</p>".utf8)).contains(korean)) // undeclared UTF-8
+        XCTAssertTrue(HtmlReader.decode(TextEncodings.encode("<p>\(korean)</p>", encoding: cp949)).contains(korean) || HtmlReader.ansiCodePage != 949)
+        if HtmlReader.ansiCodePage == 949 { // invalid UTF-8 without a charset: .NET's CP949 decoder (a lead byte takes the next byte)
+            XCTAssertEqual(HtmlReader.decode(Data("Caf\u{E9} cr\u{E8}me".unicodeScalars.map { UInt8($0.value) })), "Caf?cr?e")
+        }
     }
 
     func testXhtmlSelfClosedElementsDoNotSwallowThePage() throws {
@@ -326,6 +349,8 @@ final class HtmlCssTests: XCTestCase {
         XCTAssertEqual(CssValues.length("96px", 1000), 7200)
         XCTAssertEqual(CssValues.length("1in", 1000), 7200)
         XCTAssertNil(CssValues.length("auto", 1000))
+        XCTAssertEqual(HwpxUnits.parseLength("99999999999999999999999"), Int(Int32.max)) // saturates like .NET's (int)
+        XCTAssertEqual(HwpxUnits.parseLength("-99999999999999999999999pt"), Int(Int32.min))
         XCTAssertEqual(CssValues.fontSize("larger", 1000), 1200)
         XCTAssertEqual(CssValues.fontSize("1pt", 1000), 100)
         XCTAssertEqual(CssValues.fontSize("500pt", 1000), 20000)
@@ -345,6 +370,7 @@ final class HtmlCssTests: XCTestCase {
         XCTAssertEqual(style.get("TEXT-ALIGN"), "center")
         XCTAssertNil(style.get("display"))
         XCTAssertEqual(CssDeclarations.parse("color: red !important; COLOR: blue; :x; y:").get("color"), "blue")
+        XCTAssertEqual(CssDeclarations.parse("font-family: Τι\u{037E}; color: red").get("font-family"), "Τι\u{037E}") // only ";" splits
     }
 
     func testUnescapeDataStringKeepsInvalidEscapes() {

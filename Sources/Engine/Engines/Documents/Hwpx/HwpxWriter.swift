@@ -170,9 +170,12 @@ final class HwpxWriter {
                     $0 == "\t" || $0 == "\n" || $0 == "\r"
                         || ($0.value >= 0x20 && $0.value != 0xFFFE && $0.value != 0xFFFF)
                 }))
-        return clean.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "'", with: "&apos;")
+        // .literal: by default Foundation skips a "<" or "&" that a combining mark follows ("<\u{338}" is "≮").
+        return clean.replacingOccurrences(of: "&", with: "&amp;", options: .literal)
+            .replacingOccurrences(of: "<", with: "&lt;", options: .literal)
+            .replacingOccurrences(of: ">", with: "&gt;", options: .literal)
+            .replacingOccurrences(of: "\"", with: "&quot;", options: .literal)
+            .replacingOccurrences(of: "'", with: "&apos;", options: .literal)
     }
     private static func readEntry(_ zip: ZipReader, _ name: String) throws -> String {
         guard let e = zip.entry(named: name) else { throw ConversionError("Reference HWPX has no \(name).") }

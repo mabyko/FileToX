@@ -156,6 +156,7 @@ extension Markdown {
                     leaf.onProcessInlinesBegin(processor)
                     if leaf.processInlines {
                         processor.processInlineLeaf(leaf)
+                        if document.depthLimitExceeded { return }
                         if let previous = processor.previousContainerToReplace, let replacement = processor.newContainerToReplace {
                             if item.container === previous {
                                 item.container = replacement

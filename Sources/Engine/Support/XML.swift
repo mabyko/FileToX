@@ -122,6 +122,15 @@ public final class XElement {
     }
 
     public func descendants(_ name: XName) -> [XElement] { descendants().filter { $0.name == name } }
+
+    /// `Descendants(name).FirstOrDefault(predicate)`: document order, without walking past the first match.
+    public func firstDescendant(_ name: XName, where predicate: (XElement) -> Bool = { _ in true }) -> XElement? {
+        for case .element(let child) in nodes {
+            if child.name == name && predicate(child) { return child }
+            if let found = child.firstDescendant(name, where: predicate) { return found }
+        }
+        return nil
+    }
     public func descendantsAndSelf() -> [XElement] { [self] + descendants() }
     public func descendantsAndSelf(_ name: XName) -> [XElement] { descendantsAndSelf().filter { $0.name == name } }
 

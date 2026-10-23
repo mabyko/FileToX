@@ -19,18 +19,23 @@ final class MarkdownReader {
     private static let plain = HCharFormat()
     private static let codeFormat = HCharFormat(shade: "#F1F0F5")
     private let baseFolder: String
+    /// The footnotes being read (a reference to one of them is left out).
+    private var footnotes: Set<ObjectIdentifier> = []
 
     private init(_ baseFolder: String) { self.baseFolder = baseFolder }
 
     /// Parses Markdown text; relative image paths are resolved against `baseFolder` (the Markdown file's folder).
     static func read(_ markdown: String, _ baseFolder: String) throws -> HDocument {
-        let parsed = try Markdown.parse(markdown, pipeline)
-        let reader = MarkdownReader(baseFolder)
-        let section = HSection()
-        reader.blocks(parsed, &section.blocks, Context())
         let document = HDocument()
-        document.title = title(parsed)
-        document.sections.append(section)
+        // Parsing up to Markdig's depth limits (10 240 inline levels), reading nested emphasis and chains of footnotes,
+        // and releasing the syntax tree recurse per level: all of it runs on a large stack.
+        try MarkupConvert.onLargeStack {
+            let parsed = try Markdown.parse(markdown, pipeline)
+            let section = HSection()
+            MarkdownReader(baseFolder).blocks(parsed, &section.blocks, Context())
+            document.title = title(parsed)
+            document.sections.append(section)
+        }
         return document
     }
 
@@ -260,9 +265,12 @@ final class MarkdownReader {
                 italic.italic = true
                 output.append(HText(math.content.description, italic))
             case let footnote as Markdown.FootnoteLink:
-                if !footnote.isBackLink {
+                // A footnote referring to itself (directly or through others) would nest without end; Filee's reader
+                // overflows the stack and the helper dies. The inner reference is left out, like the "↩" back link.
+                if !footnote.isBackLink, footnotes.insert(ObjectIdentifier(footnote.footnote)).inserted {
                     let note = HNote(false)
                     blocks(footnote.footnote, &note.blocks, Context())
+                    footnotes.remove(ObjectIdentifier(footnote.footnote))
                     output.append(note)
                 } // else: the "↩" back link inside a footnote
             case let other as Markdown.ContainerInline:

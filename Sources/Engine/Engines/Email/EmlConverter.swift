@@ -180,7 +180,7 @@ final class EmlConverter: Converter {
         text = replace(lineBreakTag, text, "\n")
         text = replace(blockEndTag, text, "\n")
         text = replace(anyTag, text, "")
-        text = htmlDecode(text).replacingOccurrences(of: "\u{00A0}", with: " ")
+        text = htmlDecode(text).replacingOccurrences(of: "\u{00A0}", with: " ", options: .literal)
         let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n").map { EmlMime.trim(replace(spaceRun, $0, " ")) }
         return EmlMime.trim(replace(multipleBlankLines, lines.joined(separator: "\n"), "\n\n"))
     }

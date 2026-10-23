@@ -29,6 +29,44 @@ enum MarkupTestSupport {
         return data as Data
     }
 
+    // MARK: Conversion jobs
+
+    /// Every registered engine, as the helper builds them.
+    static func converters(excluding: [String] = []) -> [Converter] {
+        let data = FilePath.combine(NSTemporaryDirectory(), "ftx-markup-engines")
+        return EngineRegistry.createAll(EngineEnvironment(dataDirectory: data)).filter { !excluding.contains($0.id) }
+    }
+
+    static func preset(_ target: String, _ change: (inout Preset) -> Void = { _ in }) -> Preset {
+        var preset = Preset()
+        preset.targetFormat = target
+        change(&preset)
+        return preset
+    }
+
+    /// Runs one job through the real queue and engines (Filee's `EngineFixture.ConvertAsync`).
+    static func run(_ inputs: [String], _ preset: Preset, converters: [Converter] = converters()) async -> ConversionJob {
+        let queue = JobQueue(ConverterCatalog(converters), pdfMerger: EngineRegistry.findPdfMerger(converters),
+                             combiner: EngineRegistry.findFileCombiner(converters), tiffMerger: EngineRegistry.findTiffMerger(converters))
+        let job = ConversionJob(inputs, preset, "Test")
+        await queue.run(job)
+        return job
+    }
+
+    /// The single output of a job that must complete.
+    static func convert(_ input: String, _ target: String, file: StaticString = #filePath, line: UInt = #line) async throws -> String {
+        let job = await run([input], preset(target))
+        XCTAssertEqual(job.state, .completed, job.files.map { "\($0.errorKey ?? "") \($0.errorDetail ?? "")" }.joined(separator: "; "), file: file, line: line)
+        return try XCTUnwrap(job.outputs.count == 1 ? job.outputs.first : nil, "outputs: \(job.outputs)", file: file, line: line)
+    }
+
+    /// A Pandoc copy for tests: $FILETOX_PANDOC, the development copy of the FileToX checkout, or one on the Mac.
+    static func pandocFolder() -> String? {
+        let development = ProcessInfo.processInfo.environment["FILETOX_PANDOC"]
+            ?? "build/optional-engines/osx-arm64/pandoc"
+        return EngineEnvironment.folderWithPrograms("pandoc", development) ?? EngineEnvironment.systemCopyFolder("pandoc")
+    }
+
     // MARK: Canonical dump (same format as the harness' Dump class)
 
     static func dump(_ document: HDocument) -> String {

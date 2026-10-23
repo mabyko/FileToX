@@ -74,7 +74,8 @@ enum HwpxUnits {
         case "%": mm = n * 1.5
         default: mm = n * 25.4 / 96
         }
-        return Int((mm * perMm).rounded(.toNearestOrEven))
+        // (int)Math.Round saturates to the Int32 range in .NET; Int(_:) would trap on a huge length.
+        return Int(min(max((mm * perMm).rounded(.toNearestOrEven), Double(Int32.min)), Double(Int32.max)))
     }
 }
 
