@@ -63,7 +63,8 @@ public enum ImageSupport {
                 throw ConversionError("\(FilePath.fileName(path)) is not a readable SVG picture.")
             }
             var rect = CGRect(origin: .zero, size: CGSize(width: image.size.width * svgScale, height: image.size.height * svgScale))
-            guard let cg = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else {
+            // An identity CTM renders at the proposed pixel size; without it AppKit applies the screen's backing scale (2x).
+            guard let cg = image.cgImage(forProposedRect: &rect, context: nil, hints: [.ctm: NSAffineTransform()]) else {
                 throw ConversionError("Could not render \(FilePath.fileName(path)).")
             }
             return cg
