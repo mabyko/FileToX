@@ -131,19 +131,13 @@ enum ComicBook {
         for number in pageNumbers {
             try Task.checkCancellation()
             guard let page = document.page(at: number) else { continue }
-            let bounds = page.bounds(for: .mediaBox), scale = Double(dpi) / 72
-            let rotated = page.rotation % 180 != 0
-            let width = max(1, Int(((rotated ? bounds.height : bounds.width) * scale).rounded(.up)))
-            let height = max(1, Int(((rotated ? bounds.width : bounds.height) * scale).rounded(.up)))
-            guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { throw ConversionError("Could not render the PDF page.") }
-            context.setFillColor(CGColor(gray: 1, alpha: 1)); context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-            context.scaleBy(x: scale, y: scale)
-            page.draw(with: .mediaBox, to: context)
-            guard let image = context.makeImage() else { throw ConversionError("Could not render the PDF page.") }
+            // Filee uses the same PDFtoImage crop box, rotation and truncated pixel size
+            // for comic pages and raster output. Keep that geometry in one renderer.
+            let image = try PdfiumConverter.render(page, dpi: dpi)
             let file = FilePath.combine(folder, String(format: "%05d.jpg", pages.count + 1))
-            guard let destination = CGImageDestinationCreateWithURL(URL(fileURLWithPath: file) as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { throw ConversionError("Could not encode the PDF page.") }
-            CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: Double(quality) / 100] as CFDictionary)
-            if !CGImageDestinationFinalize(destination) { throw ConversionError("Could not encode the PDF page.") }
+            var frame = ImageFrame(image: image)
+            frame.properties[kCGImageDestinationLossyCompressionQuality] = ImageEncoder.jpegQuality(quality)
+            try ImageEncoder.save([frame], to: file, format: "jpg")
             pages.append(file); progress?(0.9 * Double(pages.count) / Double(max(1, pageNumbers.count)))
         }
         return pages
