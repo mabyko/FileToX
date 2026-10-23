@@ -283,7 +283,10 @@ extension ACad.DxfReader {
         case 75: p.scaledFit = try reader.valueAsShort
         case 76: p.shadePlotMode = try reader.valueAsShort
         case 77: p.shadePlotResolutionMode = try reader.valueAsShort
-        case 78: p.shadePlotDPI = try reader.valueAsShort
+        case 78:
+            let value = try reader.valueAsShort
+            if value < 100 { throw ACad.DxfException("The valid shade plot DPI values range from 100 to 23767.") }
+            p.shadePlotDPI = value
         case 147: p.standardScale = try reader.valueAsDouble
         case 7: p.styleSheet = rawString
         case 2: p.systemPrinterName = rawString
@@ -297,11 +300,11 @@ extension ACad.DxfReader {
         case 141: p.windowUpperLeftY = try reader.valueAsDouble
         case 142:
             let value = try reader.valueAsDouble
-            guard value > 0 else { throw ACad.DxfException("Value must be greater than zero") }
+            if value <= 0 { throw ACad.DxfException("Value must be greater than zero") }
             p.numeratorScale = value
         case 143:
             let value = try reader.valueAsDouble
-            guard value > 0 else { throw ACad.DxfException("Value must be greater than zero") }
+            if value <= 0 { throw ACad.DxfException("Value must be greater than zero") }
             p.denominatorScale = value
         case 333: p.shadePlotIDHandle = try reader.valueAsHandle
         default: return false
@@ -341,22 +344,101 @@ extension ACad.DxfReader {
         }
     }
 
+    /// `readMaterial`: a matrix is the next 16 groups (ACadSharp only asserts their codes in debug builds); the
+    /// group after it is read again unless it starts the next object (`checkObjectEnd`).
     private func readMaterial(_ material: ACad.Material) throws -> Bool {
-        switch reader.code {
-        case 5, 100, 102, 330, 1001:
-            return false
-        case 1:
-            material.name = rawString
-            return true
+        let code = reader.code
+        switch code {
         case 43, 47, 49, 142, 144, 147:
-            // 16 matrix values in a row.
-            let code = reader.code
-            for _ in 0..<16 where reader.code == code { try reader.readNext() }
-            lockPointer = true
-            return true
+            var values: [Double] = []
+            for _ in 0..<16 {
+                values.append(try reader.valueAsDouble)
+                try reader.readNext()
+            }
+            switch code {
+            case 43: material.diffuse.matrix = values
+            case 47: material.specular.matrix = values
+            case 49: material.reflection.matrix = values
+            case 142: material.opacityMap.matrix = values
+            case 144: material.bump.matrix = values
+            default: material.refraction.matrix = values
+            }
+            return reader.code == 0 ? true : try readMaterial(material)
         default:
-            return true
+            return mapped { try assignMaterial(material) }
         }
+    }
+
+    /// The `Material` class map.
+    private func assignMaterial(_ m: ACad.Material) throws -> Bool {
+        func factor() throws -> Double {
+            let value = try reader.valueAsDouble
+            guard !(value > 1 || value < 0 || value.isNaN) else {
+                throw ACad.DxfException("Specified argument was out of the range of valid values.")
+            }
+            return value
+        }
+        func byte() throws -> UInt8 { UInt8(truncatingIfNeeded: try reader.valueAsShort) }
+        switch reader.code {
+        case 90: m.ambientColor = ACad.Color.fromRgb24(try reader.valueAsInt)
+        case 40: m.ambientColorFactor = try factor()
+        case 70: m.ambientColorMethod = try byte()
+        case 272: m.bump.autoTransform = try byte()
+        case 143: m.bump.blendFactor = try reader.valueAsDouble
+        case 8: m.bump.fileName = rawString
+        case 179: m.bump.source = try byte()
+        case 270: m.bump.projection = try byte()
+        case 271: m.bump.tiling = try byte()
+        case 94: m.channelFlags = try reader.valueAsInt
+        case 2: m.description = rawString
+        case 75: m.diffuse.autoTransform = try byte()
+        // ACadSharp 3.8 converts colours only for codes 62, 90 and 420: 91 and 92 are read but not kept.
+        case 91, 92: break
+        case 41: m.diffuseColorFactor = try factor()
+        case 71: m.diffuseColorMethod = try byte()
+        case 42: m.diffuse.blendFactor = try reader.valueAsDouble
+        case 3: m.diffuse.fileName = rawString
+        case 72: m.diffuse.source = try byte()
+        case 73: m.diffuse.projection = try byte()
+        case 74: m.diffuse.tiling = try byte()
+        case 93: m.illuminationModel = try reader.valueAsInt
+        case 282: m.mode = Int32(try reader.valueAsShort)
+        case 1: m.name = rawString
+        case 140: m.opacity = try reader.valueAsDouble
+        case 178: m.opacityMap.autoTransform = try byte()
+        case 141: m.opacityMap.blendFactor = try reader.valueAsDouble
+        case 7: m.opacityMap.fileName = rawString
+        case 175: m.opacityMap.source = try byte()
+        case 176: m.opacityMap.projection = try byte()
+        case 177: m.opacityMap.tiling = try byte()
+        case 174: m.reflection.autoTransform = try byte()
+        case 48: m.reflection.blendFactor = try reader.valueAsDouble
+        case 6: m.reflection.fileName = rawString
+        case 171: m.reflection.source = try byte()
+        case 172: m.reflection.projection = try byte()
+        case 173: m.reflection.tiling = try byte()
+        case 468: m.reflectivity = try reader.valueAsDouble
+        case 276: m.refraction.autoTransform = try byte()
+        case 145: m.refractionIndex = try reader.valueAsDouble
+        case 146: m.refraction.blendFactor = try reader.valueAsDouble
+        case 9: m.refraction.fileName = rawString
+        case 273: m.refraction.source = try byte()
+        case 274: m.refraction.projection = try byte()
+        case 275: m.refraction.tiling = try byte()
+        case 149: m.selfIllumination = try reader.valueAsDouble
+        case 170: m.specular.autoTransform = try byte()
+        case 45: m.specularColorFactor = try factor()
+        case 76: m.specularColorMethod = try byte()
+        case 44: m.specularGlossFactor = try reader.valueAsDouble
+        case 46: m.specular.blendFactor = try reader.valueAsDouble
+        case 4: m.specular.fileName = rawString
+        case 77: m.specular.source = try byte()
+        case 78: m.specular.projection = try byte()
+        case 79: m.specular.tiling = try byte()
+        case 148: m.translucence = try reader.valueAsDouble
+        default: return false
+        }
+        return true
     }
 
     private func readSortentsTable() throws -> ACad.CadTemplate {

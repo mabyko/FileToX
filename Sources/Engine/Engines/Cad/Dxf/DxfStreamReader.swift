@@ -414,7 +414,7 @@ extension ACad {
         /// decimal exponent is below -4 or above 16, like "G17").
         static func netString(_ value: Double) -> String {
             if value.isNaN { return "NaN" }
-            if value.isInfinite { return value < 0 ? "-∞" : "∞" }
+            if value.isInfinite { return value < 0 ? "-Infinity" : "Infinity" }
             if value == 0 { return value.sign == .minus ? "-0" : "0" }
             // Swift's description is the shortest round-trip digit string; reformat it like .NET.
             var text = "\(value)"

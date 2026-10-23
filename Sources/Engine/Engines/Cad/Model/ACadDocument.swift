@@ -236,10 +236,15 @@ extension ACad {
             classes.resetClassNumbers()
         }
 
+        /// Objects removed from the registry without being detached (the old image reactors): ACadSharp keeps them
+        /// as reactors because their `Document` is still set.
+        private(set) var retiredHandles = Set<UInt64>()
+
         /// `UpdateImageReactors`: one IMAGEDEF_REACTOR per image, recreated.
         func updateImageReactors() {
             for reactor in objects.values.compactMap({ $0 as? ImageDefinitionReactor }) {
                 objects.removeValue(forKey: reactor.handle)
+                retiredHandles.insert(reactor.handle)
             }
             for image in objects.values.compactMap({ $0 as? RasterImage }) {
                 guard let definition = image.definition else { continue }

@@ -268,7 +268,7 @@ extension ACad {
         let proxyClassId: Int32 = 499
         var binaryData: Data?
         var data: Data?
-        var version: Version = .unknown
+        var version: Version = .mc0_0
 
         var classId: Int32 { Int32(dxfClass?.classNumber ?? 0) }
         var drawingFormat: Int32 { Int32(version.rawValue) | (maintenanceVersion << 16) }

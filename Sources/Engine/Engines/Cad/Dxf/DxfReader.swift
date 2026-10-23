@@ -440,7 +440,7 @@ extension ACad {
 
         private func readCommonTableEntryCodes(_ template: CadTableEntryTemplate) throws -> Bool {
             switch reader.code {
-            case 2: template.entry.name = reader.valueAsString
+            case 2: try template.entry.setName(reader.valueAsString)
             case 70: template.entry.flags = Int16(bitPattern: try reader.valueAsUShort)
             case 100: break
             default: return try readCommonCodes(template)
@@ -651,7 +651,7 @@ extension ACad {
             let style = template.cadObject as! TextStyle
             switch reader.code {
             case 2:
-                if !reader.valueAsString.isEmpty { style.name = reader.valueAsString }
+                if !reader.valueAsString.isEmpty { try style.setName(reader.valueAsString) }
             case 3: style.filename = rawString
             case 4: style.bigFontFilename = rawString
             case 40: style.height = try reader.valueAsDouble

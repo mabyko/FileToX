@@ -255,7 +255,12 @@ extension ACad.DxfReader {
             case 11, 21, 31: e.majorAxisEndPoint[axis(reader.code)] = try reader.valueAsDouble
             case 210, 220, 230: e.normal[axis(reader.code)] = try reader.valueAsDouble
             case 39: e.thickness = try reader.valueAsDouble
-            case 40: e.radiusRatio = try reader.valueAsDouble
+            case 40:
+                let value = try reader.valueAsDouble
+                if value <= 0 || value > 1 {
+                    throw ACad.DxfException("Radius ratio must be a value between 0 (not included) and 1.")
+                }
+                e.radiusRatio = value
             case 41: e.startParameter = try reader.valueAsDouble
             case 42: e.endParameter = try reader.valueAsDouble
             default: return false

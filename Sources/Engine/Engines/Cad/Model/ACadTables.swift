@@ -175,15 +175,15 @@ extension ACad {
         static let styleOverrideEntryName = "DSTYLE"
         static func makeDefault() -> DimensionStyle { DimensionStyle(name: defaultName) }
 
-        var alternateDimensioningSuffix = ""
+        var alternateDimensioningSuffix = "[]"
         var alternateUnitDecimalPlaces: Int16 = 3
         var alternateUnitDimensioning = false
         var alternateUnitFormat: Int16 = 2 // LinearUnitFormat.Decimal
         var alternateUnitRounding = 0.0
         var alternateUnitScaleFactor = 25.4
         var alternateUnitToleranceDecimalPlaces: Int16 = 3
-        var alternateUnitToleranceZeroHandling: UInt8 = 3 // SuppressZeroFeetAndInches
-        var alternateUnitZeroHandling: UInt8 = 3
+        var alternateUnitToleranceZeroHandling: UInt8 = 0 // SuppressZeroFeetAndInches
+        var alternateUnitZeroHandling: UInt8 = 0
         var angularDecimalPlaces: Int16 = 0
         var angularUnit: Int16 = 0 // DecimalDegrees
         var angularZeroHandling: UInt8 = 0 // DisplayAll
@@ -222,7 +222,7 @@ extension ACad {
         var lineTypeExt2: LineType?
         var minusTolerance = 0.0
         var plusTolerance = 0.0
-        var postFix = ""
+        var postFix = "<>"
         var rounding = 0.0
         var scaleFactor = 1.0
         var separateArrowBlocks = false

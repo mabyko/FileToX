@@ -320,13 +320,21 @@ extension ACad {
         override var objectName: String { DxfFileToken.objectPlotSettings }
         override var subclassMarker: String { DxfSubclassMarker.plotSettings }
 
-        func dxfClass() -> DxfClass {
+        func dxfClass() -> DxfClass { plotSettingsClass() }
+
+        /// Layouts re-implement the interface with their own class.
+        func plotSettingsClass() -> DxfClass {
             DxfClass(DxfSubclassMarker.plotSettings, DxfFileToken.objectPlotSettings, dwgVersion: Version.ac1015.rawValue,
                      itemClassId: 499, maintenance: 42, proxyFlags: ProxyFlags.none)
         }
     }
 
     final class Layout: PlotSettings {
+        override func plotSettingsClass() -> DxfClass {
+            DxfClass(DxfSubclassMarker.layout, DxfFileToken.objectLayout, dwgVersion: 0, itemClassId: 499, maintenance: 0,
+                     proxyFlags: ProxyFlags.none)
+        }
+
         static let modelLayoutName = "Model"
         static let paperLayoutName = "Layout1"
 
@@ -643,9 +651,59 @@ extension ACad {
         }
     }
 
-    /// Materials are not drawn or written to DXF; they are kept by name for the class counts and the DWG writer.
+    /// `Material`: render materials (written by the DWG writer, not by the DXF writer).
     final class Material: NonGraphicalObject, DxfClassDefined {
+        static let byBlockName = "ByBlock", byLayerName = "ByLayer", globalName = "Global"
+        /// `Matrix4.Identity`, 16 values in `Matrix4(double[])` order.
+        static let identity: [Double] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+
+        /// `MaterialMap`: the values every map channel has.
+        struct MapChannel {
+            /// `AutoTransformMethodFlags`: no auto transform.
+            var autoTransform: UInt8 = 1
+            var blendFactor = 1.0
+            var fileName: String?
+            /// `MapSource`: use image file.
+            var source: UInt8 = 1
+            var matrix = Material.identity
+            /// `ProjectionMethod`: planar.
+            var projection: UInt8 = 1
+            /// `TilingMethod`: tile.
+            var tiling: UInt8 = 1
+        }
+
+        var ambientColor = Color.byBlock
+        var ambientColorFactor = 1.0
+        /// `ColorMethod`: current.
+        var ambientColorMethod: UInt8 = 0
+        var bump = MapChannel()
+        /// `MaterialChannelFlags`: use diffuse.
+        var channelFlags: Int32 = 1
+        var description: String?
+        var diffuse = MapChannel()
+        var diffuseColor = Color.byBlock
+        var diffuseColorFactor = 1.0
+        var diffuseColorMethod: UInt8 = 0
+        /// `MaterialIlluminationModel`: Blinn shader.
+        var illuminationModel: Int32 = 0
+        /// `MaterialMode`: realistic.
+        var mode: Int32 = 0
+        var opacity = 1.0
+        var opacityMap = MapChannel()
+        var reflection = MapChannel()
+        var reflectivity = 0.0
+        var refraction = MapChannel()
+        var refractionIndex = 1.0
+        var selfIllumination = 0.0
+        var specular = MapChannel()
+        var specularColor = Color.byBlock
+        var specularColorFactor = 1.0
+        var specularColorMethod: UInt8 = 0
+        var specularGlossFactor = 0.5
+        var translucence = 0.0
+
         override var objectName: String { DxfFileToken.objectMaterial }
+        override var objectType: ObjectType { .unlisted }
         override var subclassMarker: String { DxfSubclassMarker.material }
 
         func dxfClass() -> DxfClass {
@@ -659,8 +717,10 @@ extension ACad {
     final class Group: NonGraphicalObject {
         var description = ""
         var entities: [Entity] = []
-        var isUnnamed = false
         var selectable = true
+
+        /// An automatically named group (null, white space or a "*" name).
+        var isUnnamed: Bool { name.unicodeScalars.allSatisfy(\.properties.isWhitespace) || name.hasPrefix("*") }
 
         override var objectName: String { DxfFileToken.tableGroup }
         override var objectType: ObjectType { .group }
@@ -708,9 +768,26 @@ extension ACad {
 
     final class BookColor: NonGraphicalObject, DxfClassDefined {
         var color = Color.byBlock
-        /// "COLOR$BOOK".
-        var colorName: String { name.components(separatedBy: "$").last ?? name }
-        var bookName: String { name.contains("$") ? String(name.split(separator: "$", maxSplits: 1)[0]) : "" }
+        var colorName: String?
+        var bookName: String?
+
+        /// "BOOK$COLOR" from the two names; a name with a '$' sets both, any other name only the colour name.
+        override var name: String {
+            get {
+                guard let colorName, !colorName.isEmpty else { return "" }
+                return "\(bookName ?? "")$\(colorName)"
+            }
+            set {
+                if newValue.contains("$") {
+                    super.name = newValue
+                    let parts = newValue.components(separatedBy: "$")
+                    bookName = parts.first
+                    colorName = parts.last
+                } else {
+                    colorName = newValue
+                }
+            }
+        }
 
         override var objectName: String { DxfFileToken.objectDBColor }
         override var subclassMarker: String { DxfSubclassMarker.dbColor }
@@ -785,9 +862,9 @@ extension ACad {
     final class Scale: NonGraphicalObject, DxfClassDefined {
         static let defaultName = "1:1"
 
-        var drawingUnits = 1.0
+        var drawingUnits = 0.0
         var isUnitScale = false
-        var paperUnits = 1.0
+        var paperUnits = 0.0
         var scaleFactor: Double { paperUnits / drawingUnits }
 
         init(name: String, paper: Double, drawing: Double, isUnit: Bool) {
@@ -821,10 +898,21 @@ extension ACad {
         }
 
         weak var blockOwner: BlockRecord?
-        var sorters: [Sorter] = []
+        private(set) var sorters: [Sorter] = []
 
         override var objectName: String { DxfFileToken.objectSortEntsTable }
         override var subclassMarker: String { DxfSubclassMarker.sortentsTable }
+
+        func add(_ entity: Entity, sortHandle: UInt64) {
+            sorters.append(Sorter(sortHandle: sortHandle, entity: entity))
+        }
+
+        /// `GetEnumerator`: every enumeration sorts the list in place with `List<T>.Sort()`, which is unstable for
+        /// equal sort handles, so the order of a later enumeration can differ from the first.
+        func enumerate() -> [Sorter] {
+            netIntroSort(&sorters) { $0.sortHandle < $1.sortHandle }
+            return sorters
+        }
 
         func dxfClass() -> DxfClass {
             DxfClass(DxfSubclassMarker.sortentsTable, DxfFileToken.objectSortEntsTable, dwgVersion: Version.ac1014.rawValue,
@@ -889,7 +977,7 @@ extension ACad {
             var index: Int32 = 0
             var lineColor = Color.byBlock
             var lineType: LineType?
-            var lineWeight: LineWeight = .byLayer
+            var lineWeight: LineWeight = .w0
             /// `LeaderLinePropertOverrideFlags` (93).
             var overrideFlags: Int32 = 0
             var pathType: Int16 = 0
@@ -968,4 +1056,93 @@ extension ACad {
                      itemClassId: 499, maintenance: 0, proxyFlags: ProxyFlags.eraseAllowed | ProxyFlags.disablesProxyWarningDialog)
         }
     }
+}
+
+/// `GenericArraySortHelper<T>.IntrospectiveSort` (.NET 8 `List<T>.Sort()` for `IComparable<T>` items), ported exactly
+/// so that items with equal keys end up in the same order as in ACadSharp.
+func netIntroSort<T>(_ keys: inout [T], _ less: (T, T) -> Bool) {
+    guard keys.count > 1 else { return }
+    func swapIfGreater(_ i: Int, _ j: Int) {
+        if less(keys[j], keys[i]) { keys.swapAt(i, j) }
+    }
+    func insertionSort(_ lo: Int, _ hi: Int) {
+        var i = lo
+        while i < hi {
+            let t = keys[i + 1]
+            var j = i
+            while j >= lo && less(t, keys[j]) {
+                keys[j + 1] = keys[j]
+                j -= 1
+            }
+            keys[j + 1] = t
+            i += 1
+        }
+    }
+    func downHeap(_ lo: Int, _ start: Int, _ n: Int) {
+        var i = start
+        let d = keys[lo + i - 1]
+        while i <= n >> 1 {
+            var child = 2 * i
+            if child < n && less(keys[lo + child - 1], keys[lo + child]) { child += 1 }
+            if !less(d, keys[lo + child - 1]) { break }
+            keys[lo + i - 1] = keys[lo + child - 1]
+            i = child
+        }
+        keys[lo + i - 1] = d
+    }
+    func heapSort(_ lo: Int, _ n: Int) {
+        var i = n >> 1
+        while i >= 1 { downHeap(lo, i, n); i -= 1 }
+        i = n
+        while i > 1 {
+            keys.swapAt(lo, lo + i - 1)
+            downHeap(lo, 1, i - 1)
+            i -= 1
+        }
+    }
+    func pickPivotAndPartition(_ lo: Int, _ length: Int) -> Int {
+        let last = lo + length - 1, middle = lo + ((length - 1) >> 1)
+        swapIfGreater(lo, middle)
+        swapIfGreater(lo, last)
+        swapIfGreater(middle, last)
+        let nextToLast = lo + length - 2
+        let pivot = keys[middle]
+        keys.swapAt(middle, nextToLast)
+        var left = lo, right = nextToLast
+        while left < right {
+            while left < nextToLast { left += 1; if !less(keys[left], pivot) { break } }
+            while right > lo { right -= 1; if !less(pivot, keys[right]) { break } }
+            if left >= right { break }
+            keys.swapAt(left, right)
+        }
+        if left != nextToLast { keys.swapAt(left, nextToLast) }
+        return left - lo
+    }
+    func introSort(_ lo: Int, _ length: Int, _ depth: Int) {
+        var depthLimit = depth
+        var partitionSize = length
+        while partitionSize > 1 {
+            if partitionSize <= 16 {
+                if partitionSize == 2 {
+                    swapIfGreater(lo, lo + 1)
+                } else if partitionSize == 3 {
+                    swapIfGreater(lo, lo + 1)
+                    swapIfGreater(lo, lo + 2)
+                    swapIfGreater(lo + 1, lo + 2)
+                } else {
+                    insertionSort(lo, lo + partitionSize - 1)
+                }
+                return
+            }
+            if depthLimit == 0 {
+                heapSort(lo, partitionSize)
+                return
+            }
+            depthLimit -= 1
+            let p = pickPivotAndPartition(lo, partitionSize)
+            introSort(lo + p + 1, partitionSize - (p + 1), depthLimit)
+            partitionSize = p
+        }
+    }
+    introSort(0, keys.count, 2 * ((Int.bitWidth - 1 - keys.count.leadingZeroBitCount) + 1))
 }

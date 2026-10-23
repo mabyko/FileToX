@@ -264,7 +264,8 @@ extension ACad {
         /// `BackgroundFillFlags` (90).
         var backgroundFillFlags: Int32 = 0
         var backgroundScale = 1.5
-        var backgroundTransparency = Transparency.byLayer
+        /// A default `Transparency` (opaque).
+        var backgroundTransparency = Transparency(0)
         var columnData = TextColumnData()
         /// `DrawingDirectionType` (72).
         var drawingDirection: Int16 = 1
@@ -546,7 +547,12 @@ extension ACad {
     }
 
     /// `Mesh` (subdivision mesh).
-    final class Mesh: Entity {
+    final class Mesh: Entity, DxfClassDefined {
+        func dxfClass() -> DxfClass {
+            DxfClass(DxfSubclassMarker.mesh, DxfFileToken.entityMesh, dwgVersion: 0, itemClassId: 498, maintenance: 0,
+                     proxyFlags: ProxyFlags.none)
+        }
+
         struct Edge {
             var start: Int32
             var end: Int32
@@ -566,7 +572,7 @@ extension ACad {
 
     /// 3DSOLID, REGION and BODY (`ModelerGeometry`): the ACIS data is kept as read.
     class ModelerGeometry: Entity {
-        var modelerFormatVersion: Int16 = 1
+        var modelerFormatVersion: Int16 = 0
         /// SAT text lines (DXF 1 / 3 codes or decoded DWG data).
         var proprietaryData = ""
         /// SAB binary data (R2007+ DWG).
@@ -616,7 +622,7 @@ extension ACad {
     final class HatchGradientPattern {
         struct GradientColor {
             var value = 0.0
-            var color = Color.byLayer
+            var color = Color.byBlock
         }
 
         var enabled = false
@@ -876,7 +882,12 @@ extension ACad {
         override var subclassMarker: String { DxfSubclassMarker.angular3PointDimension }
     }
 
-    final class DimensionArc: Dimension {
+    final class DimensionArc: Dimension, DxfClassDefined {
+        func dxfClass() -> DxfClass {
+            DxfClass(DxfSubclassMarker.arcDimension, DxfFileToken.entityArcDimension, dwgVersion: Version.ac1018.rawValue,
+                     itemClassId: 498, maintenance: 0, proxyFlags: ProxyFlags.eraseAllowed | ProxyFlags.disablesProxyWarningDialog)
+        }
+
         var center = XYZ.zero
         var endAngle = 0.0
         var firstPoint = XYZ.zero
@@ -966,7 +977,12 @@ extension ACad {
         }
     }
 
-    final class MultiLeader: Entity {
+    final class MultiLeader: Entity, DxfClassDefined {
+        func dxfClass() -> DxfClass {
+            DxfClass(DxfSubclassMarker.multiLeader, DxfFileToken.entityMultiLeader, dwgVersion: Version.mc0_0.rawValue,
+                     itemClassId: 499, maintenance: 0, proxyFlags: ProxyFlags.eraseAllowed | ProxyFlags.disablesProxyWarningDialog)
+        }
+
         /// `MultiLeader.BlockAttribute`.
         struct BlockAttribute {
             var attributeDefinition: AttributeDefinition?
@@ -1109,7 +1125,8 @@ extension ACad {
         var clipMode: UInt8 = 0
         var clippingState = false
         /// `ClipType` (71): 1 rectangular, 2 polygonal.
-        var clipType: Int16 = 1
+        /// Polygonal for more than two boundary vertices, else rectangular.
+        var clipType: Int16 { clipBoundaryVertices.count > 2 ? ClipType.polygonal : ClipType.rectangular }
         var contrast: UInt8 = 50
         var definition: ImageDefinition?
         var definitionReactor: ImageDefinitionReactor?
@@ -1122,18 +1139,37 @@ extension ACad {
         var vVector = XYZ.axisY
     }
 
-    final class RasterImage: CadWipeoutBase {
+    final class RasterImage: CadWipeoutBase, DxfClassDefined {
+        func dxfClass() -> DxfClass {
+            DxfClass(DxfSubclassMarker.rasterImage, DxfFileToken.entityImage, dwgVersion: 20, itemClassId: 498, maintenance: 0,
+                     proxyFlags: ProxyFlags.eraseAllowed | ProxyFlags.transformAllowed | ProxyFlags.colorChangeAllowed | ProxyFlags.layerChangeAllowed
+                                | ProxyFlags.linetypeChangeAllowed | ProxyFlags.linetypeScaleChangeAllowed | ProxyFlags.visibilityChangeAllowed
+                                | ProxyFlags.r13FormatProxy, application: "ISM")
+        }
+
         override var objectName: String { DxfFileToken.entityImage }
         override var subclassMarker: String { DxfSubclassMarker.rasterImage }
     }
 
-    final class Wipeout: CadWipeoutBase {
+    final class Wipeout: CadWipeoutBase, DxfClassDefined {
+        func dxfClass() -> DxfClass {
+            DxfClass(DxfSubclassMarker.wipeout, DxfFileToken.entityWipeout, dwgVersion: Version.ac1015.rawValue, itemClassId: 498,
+                     maintenance: 0, proxyFlags: ProxyFlags.eraseAllowed | ProxyFlags.transformAllowed | ProxyFlags.colorChangeAllowed | ProxyFlags.layerChangeAllowed
+                                | ProxyFlags.linetypeChangeAllowed | ProxyFlags.linetypeScaleChangeAllowed | ProxyFlags.visibilityChangeAllowed
+                                | ProxyFlags.r13FormatProxy, application: "WipeOut")
+        }
+
         override var objectName: String { DxfFileToken.entityWipeout }
         override var subclassMarker: String { DxfSubclassMarker.wipeout }
     }
 
     /// PDFUNDERLAY (`UnderlayEntity<PdfUnderlayDefinition>`).
-    final class PdfUnderlay: Entity, Orientable {
+    final class PdfUnderlay: Entity, Orientable, DxfClassDefined {
+        func dxfClass() -> DxfClass {
+            DxfClass(DxfSubclassMarker.pdfReference, DxfFileToken.entityPdfUnderlay, dwgVersion: 26, itemClassId: 498,
+                     maintenance: 0, proxyFlags: 4095)
+        }
+
         var clipBoundaryVertices: [XY] = []
         var contrast: UInt8 = 100
         var definition: PdfUnderlayDefinition?
@@ -1199,7 +1235,7 @@ extension ACad {
         var maintenanceVersion: Int32 = 0
         var originalDataFormatDxf = false
         var proxyClassId: Int32 = 498
-        var version: Version = .unknown
+        var version: Version = .mc0_0
         var binaryData = Data()
         var data = Data()
 

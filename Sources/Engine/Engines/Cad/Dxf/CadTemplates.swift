@@ -903,10 +903,13 @@ extension ACad {
             for handle in handles {
                 if let template: CadEntityTemplate = builder.objectTemplate(handle) {
                     template.build(builder)
-                    if group.entities.contains(where: { $0 === template.entity }) {
+                    // Group.Add: both in the same document; the group becomes a reactor of the entity (again if
+                    // the file already lists it).
+                    if group.document !== template.entity.document {
                         builder.notify("Entity with handle \(handle) could not be added to group \(group.handle)")
                     } else {
                         group.entities.append(template.entity)
+                        template.entity.addReactor(group.handle)
                     }
                 } else {
                     builder.notify("Entity with handle \(handle) not found for group \(group.handle)")
@@ -948,7 +951,7 @@ extension ACad {
             }
             for (sort, entityHandle) in values {
                 if let entity: Entity = builder.tryGetObject(entityHandle) {
-                    table.sorters.append(.init(sortHandle: sort ?? 0, entity: entity))
+                    table.add(entity, sortHandle: sort ?? 0)
                 } else {
                     builder.notify("Entity in SortEntitiesTable \(table.handle) not found \(entityHandle.map(String.init) ?? "")")
                 }
