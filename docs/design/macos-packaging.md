@@ -113,6 +113,7 @@ Filee MIT 고지와 외부 구성요소 고지를 번들에 포함한다. MIT는
 - .NET runtime, Magick.NET/ImageMagick와 delegate libraries, PDFium/PDFtoImage, Skia/HarfBuzz, PDFsharp 및 managed 의존성은 각 패키지의 고지를 보존한다. ImageMagick delegate에는 LGPL 구성요소도 있다.
 - 기본 `rhwp`는 MIT, `7zz`는 LGPL 및 실제 mac archive에 포함된 기타 고지를 보존한다. 원본의 Windows `7z.dll` 설명을 macOS 바이너리의 검증된 고지처럼 복사하지 않는다.
 - Swift helper에 정적 링크하는 LibRaw 0.22.2는 CDDL-1.0으로 사용한다. `docs/upstream/LibRaw.LICENSE`와 `LibRaw.THIRD-PARTY-NOTICES.md`(LibRaw COPYRIGHT, DCB/FBDD BSD, X3F BSD, Adobe DNG SDK MIT, 소스 위치)를 `Tools/stage-bundled-engines.sh`가 helper의 `Resources/Notices`에 넣는다.
+- Swift helper에 정적 링크하는 libjpeg-turbo 3.2.0(libjpeg API 라이브러리, SIMD 없음)은 IJG 라이선스로 사용한다. 바이너리 배포 문서에 "this software is based in part on the work of the Independent JPEG Group"을 밝혀야 하므로 README 세 언어와 `docs/upstream/libjpeg-turbo.THIRD-PARTY-NOTICES.md`(IJG 라이선스 전문, 소스 위치)에 적고, 이 파일과 `libjpeg-turbo.LICENSE`(upstream `LICENSE.md`)를 `Tools/stage-bundled-engines.sh`가 helper의 `Resources/Notices`에 넣는다. 원본에서 뺀 파일은 `Vendor/libjpeg-turbo/README.FileToX.md`에 적는다(IJG 조건 1).
 - 선택 설치하는 Pandoc·calibre·LibreOffice 등은 설치 화면과 설치된 엔진 폴더에 해당 고지를 보존한다. FFmpeg는 선택한 배포 빌드에 따라 라이선스가 달라지므로 Windows GPL 빌드 설명을 macOS 시스템 FFmpeg에 그대로 적용하지 않는다.
 - Avalonia·SharpHook·Windows Explorer DLL·Inno Setup·테스트 전용 Open XML SDK는 helper에 포함하지 않는다. Noto·Material Design Icons 등은 SwiftUI UI에 실제로 포함한 경우에만 해당 자산 고지를 추가한다.
 

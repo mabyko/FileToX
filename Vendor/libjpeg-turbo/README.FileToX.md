@@ -37,6 +37,8 @@ DNG and Kodak JPEG RAW files.
 - No SIMD (`WITH_SIMD` undefined): the build needs no NASM or GAS, and the C code paths give the same files as the
   C# helper's ImageMagick. Measured: 90 encodings (six pictures × 15 qualities, gray and colour) and the C# helper's
   video-frame JPEGs are byte-identical.
+- Cost (2026-10-23, Apple silicon, clean `swift build -c release --product FileToXEngine` with packages already
+  fetched): 124 s → 126 s; the helper executable grows by 466 KB (12.30 → 12.77 MB) including LibRaw's JPEG paths.
 
 ## Updating
 

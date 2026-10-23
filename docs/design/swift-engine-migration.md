@@ -26,7 +26,7 @@
 
 | 엔진 id | C# 의존 | Swift 대체 | 난이도 |
 | --- | --- | --- | --- |
-| `magick` | Magick.NET(ImageMagick) | ImageIO·CoreGraphics·vImage. ImageIO가 쓰지 못하는 형식(PSB 읽기·쓰기, XCF 읽기, PPM 계열 세부 형식, ICO 크기 지정, TIFF 압축 방식)은 Swift 코덱으로 보완. 카메라 RAW는 LibRaw(4절) | 중 — **WebP·JPEG XL 쓰기는 4절** |
+| `magick` | Magick.NET(ImageMagick) | ImageIO·CoreGraphics, JPEG 쓰기는 libjpeg-turbo, 크기 조정은 ImageMagick 방식 Swift 이식. ImageIO가 쓰지 못하는 형식(PSB 읽기·쓰기, XCF 읽기, PPM 계열 세부 형식, ICO 크기 지정, TIFF 압축 방식)은 Swift 코덱으로 보완. 카메라 RAW는 LibRaw(4절) | 중 — **WebP·JPEG XL 쓰기는 4절** |
 | `pdfsharp` | PDFsharp | CoreGraphics PDF context·PDFKit(이미지→PDF, PDF 쪽 범위·분할, 합치기) | 중 |
 | `pdfium` | PDFtoImage(PDFium)·SkiaSharp | PDFKit/CGPDF 렌더링 + 이미지 인코더 | 하 |
 | `pdf-text` | PdfPig | PDFKit 문자·위치 정보 | 중 |
@@ -64,10 +64,16 @@
 - DWG: 읽기와 쓰기 모두 Swift로 이식한다. 생성한 DWG는 Swift 읽기로 되읽고, 기존 C# helper(ACadSharp 읽기)로도 읽혀 비교한다. AutoCAD·ODA에서 여는 확인은 이 환경에서 할 수 없으므로 남은 위험으로 둔다.
 - WebP·JPEG XL 쓰기: SwiftPM으로 Google libwebp 1.6.0과 libjxl 0.10.4를 소스 빌드해 쓴다(`SDWebImage/libwebp-Xcode`, `SDWebImage/libjxl-Xcode`, 버전 고정). 첫 빌드에서 패키지를 내려받는다.
 - SVG: macOS 내장 렌더러에 CSS·`tspan` 전처리를 더한다.
-- 카메라 RAW: C# 앱과 같은 색을 낸다. C# 앱은 ImageMagick 7.1.2-32 Q8의 DNG 코더로 LibRaw 0.22.2를 썼고, Apple CIRAWFilter는 가장 잘 맞춘 설정도 평균 ΔE00 2.7 차이가 났다. 그래서 LibRaw 0.22.2를 CDDL-1.0으로 소스 포함해 빌드하고(`Vendor/LibRaw`, libjpeg 없음), ImageMagick과 같은 호출 순서·설정으로 현상한다(`Vendor/LibRaw/FileToX/develop.c`). 공개 표본 10개 중 LibRaw가 여는 8개는 C# 출력과 픽셀이 같다. 손실 압축 DNG(libjpeg 필요)와 LibRaw가 모르는 카메라는 LibRaw처럼 맞춘 CIRAWFilter로 대신 현상하고 stderr에 남긴다(손실 DNG 2개: ΔE00 1.6). 고지는 `docs/upstream/LibRaw.*`이며 helper의 `Resources/Notices`에 들어간다.
+- 카메라 RAW: C# 앱과 같은 색을 낸다. C# 앱은 ImageMagick 7.1.2-32 Q8의 DNG 코더로 LibRaw 0.22.2를 썼고, Apple CIRAWFilter는 가장 잘 맞춘 설정도 평균 ΔE00 2.7 차이가 났다. 그래서 LibRaw 0.22.2를 CDDL-1.0으로 소스 포함해 빌드하고(`Vendor/LibRaw`, 아래 libjpeg-turbo로 `USE_JPEG`), ImageMagick과 같은 호출 순서·설정으로 현상한다(`Vendor/LibRaw/FileToX/develop.c`). 공개 표본 10개(손실 압축 DNG 2개 포함)가 모두 C# 출력과 픽셀이 같다. LibRaw가 모르는 카메라만 LibRaw처럼 맞춘 CIRAWFilter로 대신 현상하고 stderr에 남긴다. 고지는 `docs/upstream/LibRaw.*`이며 helper의 `Resources/Notices`에 들어간다.
 - HWP/HWPX → TXT·MD·HTML: 공개 HWP 문서 20개로 Unhwp(A), rhwp 직접 내보내기(B), "rhwp로 HWPX 변환 + 이식한 Filee 읽기·작성기"(C)를 비교했다. C가 구조·그림·가독성에서 가장 낫고 HWP 3.x도 처리한다(A는 실패). 결정: C를 쓰고, 수식은 Unhwp의 수식→LaTeX 변환기(MIT)만 Swift로 옮겨 기존처럼 LaTeX로 낸다. 비교에서 나온 C의 문제(그림 실패, 목록 들여쓰기, 중첩 표·캡션·제목·머리말 누락, BMP 재압축, 셀 줄바꿈)를 수정하고 같은 표본으로 재검증했다. 결과·동작 변경·남은 차이는 [r3 구현·비교 보고서](swift-hwp-export-r3.md)에 있다.
 
 - JPEG 2000 쓰기: ImageIO가 손실 품질 설정을 무시한다(q100 무손실은 정상). 결정: 수용하고 제한으로 기록한다.
+
+**결정(2026-10-23, JPEG 쓰기·크기 조정):** C# 출력과 같게 만든다.
+
+- JPEG 쓰기: C# helper의 ImageMagick 7.1.2-32 Q8이 쓴 libjpeg-turbo 3.2.0(`Magick.Native` 문자열로 확인)을 소스 포함해 빌드한다(`Vendor/libjpeg-turbo`, IJG 라이선스, SIMD 없음 — C 경로로도 C# 파일과 같다). `Vendor/libjpeg-turbo/FileToX/encode.c`가 ImageMagick `coders/jpeg.c`의 `WriteJPEGImage`를 Filee 설정대로 따른다: `jpeg_set_quality`(품질 미지정 92), 품질 90 이상 4:4:4·미만 libjpeg 기본 4:2:0, 품질 90 이하 빠른 정수 DCT(`JDCT_IFAST`), 기준선(progressive 아님), Huffman 표 최적화, 모든 화소가 R=G=B면 1성분 회색, JPEG 원본의 샘플링 계수 유지(`jpeg:sampling-factor` 속성), ImageMagick이 읽은 해상도·단위를 JFIF에(EXIF/TIFF 태그 우선, PNG pHYs·BMP는 px/cm, JFIF 그대로), EXIF·ICC·XMP 순서의 APP 표지. ImageMagick으로 JPEG를 쓰던 곳(이미지 변환·PDF/SVG/CAD 래스터 출력, PDF에 넣는 JPEG, 전자책 그림 변환)이 이것을 쓴다. C#이 Skia로 JPEG를 쓰던 곳(만화 PDF 쪽, PDF 스캔 쪽)은 ImageIO로 둔다. 같은 화소에서 ImageMagick(C# helper의 `Magick.Native`)과 바이트가 같다: 그림 6개 × 품질 15개, C# 동영상 프레임 JPEG 3개.
+- 크기 조정: ImageMagick `ResizeImage`(Q8)를 Swift로 옮긴다(`MagickResize`): 필터 선택(Lanczos, 알파·팔레트·확대면 Mitchell, ICNS는 명시한 Lanczos), SincFast·CubicBC, 지지 폭·blur, 가로/세로 처리 순서, 정규화·알파 가중, 단계 사이와 결과의 8비트 반올림, 그리고 C# helper를 컴파일한 clang이 합친 곱셈-덧셈(FMA). 무작위 그림 84건·명시 Lanczos 16건·C# ICO 프레임에서 표본이 같다. 회색 PNG·팔레트 그림은 ImageMagick에서 PseudoClass라 Mitchell이 된다.
+- 남은 차이: JPEG *읽기*는 ImageIO(ImageMagick은 libjpeg)라 JPEG 원본은 화소가 조금 다르다(시험 그림 35–59 dB); 원본 주석(COM)·IPTC·CMYK JPEG 출력은 옮기지 않았다; Grayscale 옵션 뒤 정사각형 ICO 크기 조정은 Mitchell(ImageMagick은 Lanczos)이다.
 
 그 밖에 PDF 텍스트 배치(PdfPig→PDFKit), HTML 파싱(AngleSharp→libxml2), Markdown 확장(Markdig→Swift 파서)은 결과가 미세하게 달라질 수 있어 비교 검증으로 확인한다. 앱에 연결되지 않은 Filee 기능(앱 내 엔진 다운로드 `EngineInstaller`, 감시 폴더 실행 `FolderWatcher`)은 설정 데이터만 보존하고 실행 코드는 옮기지 않는다.
 
