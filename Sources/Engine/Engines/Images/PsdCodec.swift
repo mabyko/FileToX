@@ -1,7 +1,9 @@
 // Photoshop documents for the image engine. ImageIO reads PSD and PSB composites but writes only PSD, so both are
 // written here the way ImageMagick wrote them: one layer holding the picture (with its transparency) and the RLE
-// composite. Files saved without "maximize compatibility" have no real composite; like ImageMagick, the visible layers
-// are then composited (normal blending, layer opacity and offsets; 8-bit RGB and grayscale).
+// composite, its colours matted on white where transparent as Photoshop stores them. Composites with transparency are
+// read here too, with ImageMagick's white unblending (ImageIO darkens semi-transparent pixels). Files saved without
+// "maximize compatibility" have no real composite; like ImageMagick, the visible layers are then composited (normal
+// blending, layer opacity and offsets; 8-bit RGB and grayscale).
 
 import CoreGraphics
 import Foundation
@@ -80,8 +82,15 @@ enum PsdCodec {
         out.bytes(layerInfo.data)
         out.u32(0) // global layer mask info
 
-        // Composite image data: RLE, all channels.
-        out.bytes(rle(planes, width: width, height: height, large: large, withCompression: true))
+        // Composite image data: RLE, all channels; colours matted on white where transparent, as Photoshop stores them.
+        var composite = planes
+        if alpha {
+            for i in 0..<width * height {
+                let a = Int(planes[colorChannels][i])
+                for c in 0..<colorChannels { composite[c][i] = UInt8((Int(planes[c][i]) * a + 255 * (255 - a) + 127) / 255) }
+            }
+        }
+        out.bytes(rle(composite, width: width, height: height, large: large, withCompression: true))
         try Data(out.data).write(to: URL(fileURLWithPath: path))
     }
 
@@ -130,6 +139,108 @@ enum PsdCodec {
             output += source[start..<i]
         }
         return output
+    }
+
+    // ───────────────────────── Reading the composite ─────────────────────────
+
+    /// The composite of an 8/16-bit RGB or grayscale document whose first extra channel is its transparency (negative
+    /// layer count), unblended from white like ImageMagick's CorrectPSDAlphaBlend; nil for anything else.
+    static func transparentComposite(_ path: String) throws -> ImageFrame? {
+        guard let data = FileManager.default.contents(atPath: path) else { return nil }
+        var reader = Reader(data: [UInt8](data))
+        guard reader.bytes(4) == Array("8BPS".utf8) else { return nil }
+        let large = reader.u16() == 2
+        reader.skip(6)
+        let channels = reader.u16(), height = reader.u32(), width = reader.u32(), depth = reader.u16(), mode = reader.u16()
+        let colorChannels = mode == 1 ? 1 : 3
+        guard mode == 1 || mode == 3, depth == 8 || depth == 16, channels > colorChannels, width > 0, height > 0, width * height <= 1 << 30 else { return nil }
+        reader.skip(reader.u32()) // colour mode data
+        let resourcesLength = reader.u32()
+        let resourcesEnd = reader.position + resourcesLength
+        var icc: Data?
+        var dpi: (x: Double, y: Double)?
+        while reader.position + 12 <= resourcesEnd {
+            guard reader.bytes(4) == Array("8BIM".utf8) else { break }
+            let id = reader.u16()
+            let nameLength = reader.u8()
+            reader.skip(nameLength + (nameLength + 1) % 2)
+            let size = reader.u32()
+            let start = reader.position
+            if id == 0x040F, size > 0, start + size <= reader.data.count {
+                icc = Data(reader.data[start..<start + size])
+            } else if id == 0x03ED, size >= 16 {
+                let x = Double(reader.u32()) / 65536, xUnit = reader.u16()
+                reader.skip(2)
+                let y = Double(reader.u32()) / 65536
+                let factor = xUnit == 2 ? 2.54 : 1
+                if x > 0 { dpi = (x * factor, (y > 0 ? y : x) * factor) }
+            }
+            reader.position = start + size + size % 2
+        }
+        reader.position = resourcesEnd
+        let sectionLength = large ? reader.u64() : reader.u32()
+        let compositeStart = reader.position + sectionLength
+        guard sectionLength > 0 else { return nil }
+        _ = large ? reader.u64() : reader.u32() // layer info length
+        guard reader.i16() < 0 else { return nil } // the first alpha channel is the composite's transparency
+        reader.position = compositeStart
+        let compression = reader.u16()
+        let bytesPerSample = depth / 8
+        let rowBytes = width * bytesPerSample
+        var planes = [[UInt8]](repeating: [], count: colorChannels + 1)
+        switch compression {
+        case 0:
+            for c in 0...colorChannels {
+                let start = reader.position + c * rowBytes * height
+                guard start + rowBytes * height <= reader.data.count else { return nil }
+                planes[c] = Array(reader.data[start..<start + rowBytes * height])
+            }
+        case 1:
+            let counts = (0..<channels * height).map { _ in large ? reader.u32() : reader.u16() }
+            for c in 0...colorChannels {
+                var plane = [UInt8](repeating: 0, count: rowBytes * height)
+                for y in 0..<height {
+                    let end = reader.position + counts[c * height + y]
+                    var x = 0
+                    while reader.position < end && x < rowBytes {
+                        let control = reader.u8()
+                        if control < 128 {
+                            for _ in 0...control where reader.position < end { let v = UInt8(reader.u8()); if x < rowBytes { plane[y * rowBytes + x] = v }; x += 1 }
+                        } else if control > 128 {
+                            let v = UInt8(reader.position < end ? reader.u8() : 0)
+                            for _ in 0..<(257 - control) { if x < rowBytes { plane[y * rowBytes + x] = v }; x += 1 }
+                        }
+                    }
+                    reader.position = end
+                }
+                planes[c] = plane
+            }
+        default:
+            return nil
+        }
+        // 8-bit straight RGBA (16-bit samples keep their high byte, as ImageMagick Q8 does), unblended from white.
+        var samples = [UInt8](repeating: 0, count: width * height * 4)
+        for i in 0..<width * height {
+            let a = Double(planes[colorChannels][i * bytesPerSample]) / 255
+            for c in 0..<3 {
+                let value = Double(planes[colorChannels == 1 ? 0 : c][i * bytesPerSample])
+                samples[i * 4 + c] = a > 0 && a < 1 ? UInt8(min(255, max(0, ((value - (1 - a) * 255) / a).rounded()))) : UInt8(value)
+            }
+            samples[i * 4 + 3] = planes[colorChannels][i * bytesPerSample]
+        }
+        let gray = colorChannels == 1
+        var space: CGColorSpace = gray ? CGColorSpaceCreateDeviceGray() : CGColorSpace(name: CGColorSpace.sRGB)!
+        if let icc, let profile = CGColorSpace(iccData: icc as CFData), profile.model == (gray ? .monochrome : .rgb) { space = profile }
+        var frame: ImageFrame
+        if gray {
+            var pairs = [UInt8](repeating: 0, count: width * height * 2)
+            for i in 0..<width * height { (pairs[i * 2], pairs[i * 2 + 1]) = (samples[i * 4], samples[i * 4 + 3]) }
+            frame = ImageFrame(image: ImagePixels.make(pairs, width, height, components: 2, space: space, alpha: true, premultiplied: false))
+        } else {
+            frame = ImageFrame(image: ImagePixels.make(samples, width, height, components: 4, space: space, alpha: true, premultiplied: false))
+        }
+        frame.dpi = dpi
+        return frame
     }
 
     // ───────────────────────── Reading layers ─────────────────────────

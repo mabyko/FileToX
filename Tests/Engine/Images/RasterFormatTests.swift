@@ -187,3 +187,18 @@ final class RasterFormatTests: XCTestCase {
         XCTAssertEqual((result.properties[0][kCGImagePropertyOrientation] as? Int) ?? 1, 1)
     }
 }
+
+extension RasterFormatTests {
+    func testSemiTransparentPixelsSurvivePsdAndPsb() async throws {
+        let source = FilePath.combine(dir, "semi.png")
+        try ImageEncoder.save([ImageFrame(image: GraphicsTestKit.solid(8, 4, (200, 40, 40, 128)))], to: source, format: "png")
+        for target in ["psd", "psb"] {
+            let document = try await GraphicsTestKit.convert(engine, source, to: target)
+            // Photoshop's convention: the composite is matted on white where transparent.
+            let back = try await GraphicsTestKit.convert(engine, document[0], to: "png", name: "semi_\(target)_back")
+            let pixel = GraphicsTestKit.pixel(try GraphicsTestKit.decode(back[0]).frames[0], 2, 2)
+            XCTAssertEqual(pixel.a, 128, target)
+            XCTAssertTrue(abs(pixel.r - 200) <= 2 && abs(pixel.g - 40) <= 2 && abs(pixel.b - 40) <= 2, "\(target): \(pixel)")
+        }
+    }
+}

@@ -50,9 +50,13 @@ enum ImageReader {
         let animation = (fileProperties[kCGImagePropertyGIFDictionary] ?? fileProperties[kCGImagePropertyWebPDictionary]) as? [CFString: Any]
         let loops = (animation?[kCGImagePropertyGIFLoopCount] ?? animation?[kCGImagePropertyWebPLoopCount]) as? NSNumber
 
-        if format == "psd" || format == "psb", let composite = try PsdCodec.layerComposite(path) {
+        if format == "psd" || format == "psb" {
             // Saved without "maximize compatibility": the file has no real composite; ImageMagick builds it from the layers.
-            return [composite]
+            // With transparency, ImageMagick unblends the white matte Photoshop puts under the composite.
+            if var composite = try PsdCodec.layerComposite(path) ?? PsdCodec.transparentComposite(path) {
+                if let metadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil) { composite.properties[ImageFrame.metadataKey] = metadata }
+                return [composite]
+            }
         }
 
         var frames: [ImageFrame] = []
