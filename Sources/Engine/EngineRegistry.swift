@@ -27,6 +27,7 @@ public enum EngineRegistry {
         converters.append(PdfTextConverter())
         converters.append(EmlConverter())
         converters.append(FfmpegConverter())
+        converters.append(CadConverter())
         converters.append(EbookConverter())
         converters.append(PandocConverter())
         converters.append(GhostscriptConverter())
