@@ -15,8 +15,10 @@ public enum EngineRegistry {
         converters.append(SpreadsheetConverter())
         converters.append(OoxmlConverter())
         converters.append(HwpxConverter())
+        converters.append(ArchiveConverter())
         converters.append(FontConverter())
         converters.append(DocxWriterConverter())
+        converters.append(FfmpegConverter())
         converters.append(LibreOfficeConverter(environment))
         return converters
     }
