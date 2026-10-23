@@ -389,8 +389,8 @@ extension ACad {
     var modelSpaceOrthographicLeftDOrigin: XYZ = .zero
     var modelSpaceOrthographicRightDOrigin: XYZ = .zero
     var modelSpaceOrthographicTopDOrigin: XYZ = .zero
-    var modelSpaceXAxis: XYZ = .zero
-    var modelSpaceYAxis: XYZ = .zero
+    var modelSpaceXAxis: XYZ = .axisX // ModelSpaceUcs.XAxis
+    var modelSpaceYAxis: XYZ = .axisY
     var northDirection: Double = 0.0
     var numberOfSplineSegments: Int16 = 8
     var objectSnapMode: UInt16 = 4133
@@ -412,8 +412,8 @@ extension ACad {
     var paperSpaceOrthographicRightDOrigin: XYZ = .zero
     var paperSpaceOrthographicTopDOrigin: XYZ = .zero
     var paperSpaceUcsOrigin: XYZ = .zero
-    var paperSpaceUcsXAxis: XYZ = .zero
-    var paperSpaceUcsYAxis: XYZ = .zero
+    var paperSpaceUcsXAxis: XYZ = .axisX // PaperSpaceUcs.XAxis
+    var paperSpaceUcsYAxis: XYZ = .axisY
     var plotStyleMode: Int16 = 0
     var pointDisplayMode: Int16 = 0
     var pointDisplaySize: Double = 0.0
