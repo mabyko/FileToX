@@ -21,6 +21,7 @@ public final class EbookConverter: Converter {
     public init() {}
     public func status() -> EngineStatus { .available(detail: "EPUB, MOBI / AZW3, FB2, HTMLZ, TXTZ, CBZ / CBR / CB7 / CBT / CBC, AZW4", version: EngineVersions.builtIn + " · libxml2") }
     public func convert(_ step: ConversionStep, progress: ProgressHandler?) async throws -> [String] {
+        try Task.checkCancellation()
         progress?(0.05)
         let work = try EbookFiles.newFolder(step.workDirectory, "ebook")
         if Self.comics.contains(step.from) || step.from == "pdf" { return try await Self.comic(step, work, progress) }

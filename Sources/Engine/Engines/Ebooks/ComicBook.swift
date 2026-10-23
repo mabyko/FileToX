@@ -10,6 +10,7 @@ enum ComicBook {
     static func extractPages(_ path: String, _ format: String, _ folder: String) async throws -> [String] {
         if format == "cbc" {
             let comics = try await extractArchive(path, EbookFiles.newFolder(folder, "cbc")) { FilePath.extension($0).lowercased() == ".cbz" || FilePath.fileName($0).lowercased() == "comics.txt" }
+            // Filee renames extracted entries, so CBC reading lists keep its existing failure behavior.
             let list = comics.first { FilePath.fileName($0).lowercased() == "comics.txt" }
             var books = comics.filter { $0 != list }
             if let list {

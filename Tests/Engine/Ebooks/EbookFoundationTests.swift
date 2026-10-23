@@ -246,6 +246,17 @@ final class EbookFoundationTests: EbookTestCase {
             XCTAssertEqual(try ZipReader(path: output).entries.map(\.name), ["001.png", "002.jpg", "003.png"])
         }
     }
+    func testPreCancelledPrintReplicaDoesNotWriteAnOutput() async throws {
+        let input = try save("replica.azw4", EbookBuilders.printReplica(Data("%PDF-1.7".utf8)))
+        let destination = path("cancelled"), work = folder!
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            let step = ConversionStep(inputPath: input, from: "azw4", to: "pdf", preset: Preset(), output: EbookTestOutput(destination), workDirectory: work)
+            return try await EbookConverter().convert(step, progress: nil)
+        }
+        do { _ = try await task.value; XCTFail("expected cancellation") } catch is CancellationError {}
+        XCTAssertFalse(FileManager.default.fileExists(destination + ".pdf"))
+    }
     func testCalibreProgressAndTail() {
         let values = EbookProgressBox()
         for line in [" 34% Running transforms", "100% done", "999% limit", "noise"] { CalibreConverter.reportProgress(line, { values.add($0) }) }

@@ -108,6 +108,21 @@ with Host(manifest["host"], copies=manifest.get("copies"), scratch=manifest_path
             XCTAssertLessThan(error, 6, "PDFKit / PDFium mean color difference")
         }
     }
+    func testPlainTextBookPackagesAgainstInstalledCSharp() async throws {
+        let txt = try save("plain.txt", Data("First paragraph has <xml> & Unicode 한글.\nSame paragraph.\n\nSecond paragraph.\n".utf8))
+        let formats = ["epub", "htmlz", "txtz"]
+        let results = try await baseline(formats.map { ["id": $0, "input": txt, "target": $0] })
+        for format in formats {
+            let native = try await convert(txt, "txt", format), cs = try output(XCTUnwrap(results[format]))
+            let a = try ZipReader(path: native), b = try ZipReader(path: cs)
+            XCTAssertEqual(a.entries.map(\.name), b.entries.map(\.name), format)
+            for entry in a.entries {
+                let lhs = try a.data(for: entry), rhs = try XCTUnwrap(b.data(named: entry.name))
+                if entry.name.hasSuffix(".txt") || entry.name.hasSuffix(".css") { XCTAssertEqual(lhs, rhs, "\(format): \(entry.name)") }
+                else { XCTAssertEqual(canonical(String(decoding: lhs, as: UTF8.self)), canonical(String(decoding: rhs, as: UTF8.self)), "\(format): \(entry.name)") }
+            }
+        }
+    }
     func testStandaloneOutputsAgainstInstalledCSharp() async throws {
         let txt = try save("book.txt", Data("Hello from Filee.\n\nSecond paragraph with 한글 & XML <characters>.".utf8))
         let cbz = try EbookBuilders.cbz(folder)
