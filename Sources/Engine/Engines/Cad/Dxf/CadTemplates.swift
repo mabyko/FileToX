@@ -79,24 +79,33 @@ extension ACad {
             return nil
         }
 
-        /// `getEntitiesCollection`: a DWG entity chain from `first` to `end` (next-entity links, else handle + 1).
-        func entitiesCollection(_ builder: CadDocumentBuilder, first: UInt64, end: UInt64) -> [Entity] {
-            var result: [Entity] = []
-            var template: CadEntityTemplate? = builder.objectTemplate(first)
+        /// `getEntitiesCollection`: a DWG entity chain from `first` to `end` (next-entity links, else handle + 1). The C#
+        /// casts of the templates and objects throw on a mismatch, which fails the reading (`builder.fail`).
+        func entitiesCollection<T: Entity>(_ builder: CadDocumentBuilder, first: UInt64, end: UInt64, as _: T.Type = Entity.self) -> [T] {
+            var result: [T] = []
+            func entityTemplate(_ handle: UInt64) -> CadEntityTemplate? {
+                guard let found: CadTemplate = builder.objectTemplate(handle) else { return nil }
+                guard let template = found as? CadEntityTemplate else {
+                    builder.fail("Unable to cast object of type 'ACadSharp.IO.Templates.\(type(of: found))' to type 'ACadSharp.IO.Templates.CadEntityTemplate'.")
+                    return nil
+                }
+                return template
+            }
+            var template = entityTemplate(first)
             if template == nil {
                 builder.notify("Leading entity with handle \(first) not found.")
-                template = builder.objectTemplate(end)
+                template = entityTemplate(end)
             }
             var guardCount = 0
-            while let t = template, let entity = t.cadObject as? Entity {
+            while let t = template {
+                guard let entity = t.cadObject as? T else {
+                    builder.fail("Unable to cast object of type 'ACadSharp.Entities.\(type(of: t.cadObject))' to type 'ACadSharp.Entities.\(T.self)'.")
+                    break
+                }
                 result.append(entity)
                 guardCount += 1
                 if t.cadObject.handle == end || guardCount > 10_000_000 { break }
-                if let next = t.nextEntity {
-                    template = builder.objectTemplate(next)
-                } else {
-                    template = builder.objectTemplate(t.cadObject.handle + 1)
-                }
+                template = entityTemplate(t.nextEntity ?? t.cadObject.handle + 1)
             }
             return result
         }
@@ -198,7 +207,7 @@ extension ACad {
                 insert.attributes.seqend = seqend
             }
             if let first = firstAttributeHandle {
-                for case let attribute as AttributeEntity in entitiesCollection(builder, first: first, end: endAttributeHandle ?? first) {
+                for attribute in entitiesCollection(builder, first: first, end: endAttributeHandle ?? first, as: AttributeEntity.self) {
                     insert.attributes.add(attribute)
                 }
             } else {
@@ -257,7 +266,7 @@ extension ACad {
             super.buildCore(builder)
             if let seqend: Seqend = builder.tryGetObject(seqendHandle) { setSeqend(seqend) }
             if let first = firstVertexHandle {
-                for vertex in entitiesCollection(builder, first: first, end: lastVertexHandle ?? first) { addVertex(builder, vertex) }
+                for vertex in entitiesCollection(builder, first: first, end: lastVertexHandle ?? first, as: Vertex.self) { addVertex(builder, vertex) }
             } else if let mesh = cadObject as? PolyfaceMesh {
                 for handle in ownedObjectsHandlers {
                     if let e: Entity = builder.tryGetObject(handle) { addPolyfaceMeshVertex(builder, mesh, e) }

@@ -138,7 +138,10 @@ final class CadTests: XCTestCase {
     }
 
     func testKoreanTextInPre2007DwgIsDecoded() throws {
-        throw XCTSkip("needs the DWG writer and reader ports (an AC1018 DWG with code page 949)")
+        // Filee writes this drawing with ACadSharp's DwgWriter (AC1018, code page kcs5601); the Swift writer only writes
+        // AC1032 like CadFile, so the DWG is a fixture made by the C# baseline.
+        let dwg = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/korean_AC1018.dwg").path
+        XCTAssertEqual(try CadFile.read(dwg, "dwg").entities.compactMap { $0 as? ACad.TextEntity }.map(\.value), [CadBuilder.koreanText])
     }
 
     func testDamagedFilesFailWithAClearMessage() async throws {
