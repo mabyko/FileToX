@@ -175,7 +175,7 @@ extension ACad {
             try readReactorsAndDictionaryHandle(template)
         }
 
-        private func readEntityMode(_ template: CadEntityTemplate) throws {
+        func readEntityMode(_ template: CadEntityTemplate) throws {
             let entity = template.entity
             // Entmode BB entity mode
             template.entityMode = try objectReader.read2Bits()
