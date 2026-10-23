@@ -123,6 +123,23 @@ final class OoxmlVariantTests: OfficeTestCase {
         XCTAssertEqual(checked, 30)
         XCTAssertEqual(OoxmlConverter().edges.count, 30)
     }
+
+    func testWordVariantsPreserveJpegBytesAndDirectoryEntries() throws {
+        let base = try ZipReader(path: package("docx"))
+        let input = path("pictures.docx"), zip = try ZipWriter(path: input)
+        for entry in base.entries { try zip.add(entry.name, data: base.data(for: entry)) }
+        let jpeg = try EbookBuilders.picture(12, 8, true)
+        try zip.addDirectory("word/media/empty/")
+        try zip.add("word/media/photo.jpg", data: jpeg)
+        try zip.close()
+        for target in ["docm", "dotx", "dotm"] {
+            let output = path("pictures." + target)
+            try OoxmlConverter.rewrite(input, output, target)
+            let result = try ZipReader(path: output)
+            XCTAssertEqual(try result.data(named: "word/media/photo.jpg"), jpeg, target)
+            XCTAssertTrue(result.entry(named: "word/media/empty/")?.isDirectory == true, target)
+        }
+    }
     func testMacroFreeTargetsRemoveAllMacroPartsAndKeepExternalRelationships() throws {
         for (from, to) in [("docm", "docx"), ("dotm", "dotx"), ("xlsm", "xlsx"), ("pptm", "pptx")] {
             let input = try package(from, true)

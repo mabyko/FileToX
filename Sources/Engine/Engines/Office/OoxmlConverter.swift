@@ -148,8 +148,12 @@ final class OoxmlConverter: Converter {
             updatedWorkbook = (main, try xmlBytes(workbook))
         }
         let zip = try ZipWriter(path: output)
-        for entry in source.entries where !removed.contains(entry.name.lowercased()) && !entry.isDirectory {
+        for entry in source.entries where !removed.contains(entry.name.lowercased()) {
             try Task.checkCancellation()
+            if entry.isDirectory {
+                try zip.addDirectory(entry.name)
+                continue
+            }
             if entry.name == updatedWorkbook?.0 { continue }  // .NET ZipArchive.Update appends the replaced workbook.
             try zip.add(entry.name, data: try replacements[entry.name] ?? source.data(for: entry))
         }

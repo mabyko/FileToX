@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Focused self-checks: python3 -I Tools/engine-compare/test_harness.py."""
 import copy
+import base64
+import gzip
+import json
+import tarfile
 from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hostwire import Host, ProtocolError, RPCError
@@ -12,6 +17,7 @@ from corpus import png, zip_write
 from fingerprint import fingerprint, native
 from compare import compare_case, compare_output
 from run import generate_cases
+from semantic import xml_text, document_text, generated_calibre_cover, rst_dimensions
 
 FAKE = '''#!{python} -I
 import json, os, pathlib, sys
@@ -138,6 +144,111 @@ class HarnessTests(unittest.TestCase):
         a, b = different("archive", {"entries": [{"name": "a.txt", "sha256": "a"}]})
         b["metadata"]["entries"][0]["sha256"] = "b"
         self.assertEqual(compare_output(a, b, None, None, thresholds)[0], "FAIL")
+
+    def test_pax_header_names_and_gzip_timestamps_do_not_hide_member_changes(self):
+        def archive(pid, payload, name="a.txt"):
+            record = b"19 comment=process\n"
+            pax = tarfile.TarInfo(f"./PaxHeaders.{pid}/a.txt")
+            pax.type = tarfile.XHDTYPE; pax.size = len(record)
+            member = tarfile.TarInfo(name); member.size = len(payload)
+            data = pax.tobuf() + record.ljust(512, b"\0") + member.tobuf() + payload.ljust(512, b"\0") + b"\0" * 1024
+            path = self.root / f"{pid}.tgz"
+            path.write_bytes(gzip.compress(data, mtime=pid))
+            return path
+        a, b = archive(1, b"hello"), archive(22, b"hello")
+        def captured(path):
+            return {"kind": "archive", "sha256": str(path), "metadata": {"entries": [{"name": "a.tar", "sha256": str(path)}]}}
+        thresholds = {"psnr": 30, "ssim": .95, "text": .95}
+        self.assertEqual(compare_output(captured(a), captured(b), a, b, thresholds)[0], "PASS")
+        for path in (archive(33, b"wrong"), archive(44, b"hello", "renamed.txt")):
+            self.assertEqual(compare_output(captured(a), captured(path), a, path, thresholds)[0], "FAIL")
+
+    def test_generated_xml_metadata_is_scoped_and_content_remains_strict(self):
+        a = '<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier>urn:uuid:11111111-1111-1111-1111-111111111111</dc:identifier><dc:title>Title</dc:title></package>'
+        b = a.replace("11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222")
+        self.assertEqual(xml_text(a), xml_text(b))
+        self.assertNotEqual(xml_text(a), xml_text(b.replace("Title", "Lost")))
+        user = '<body>11111111-1111-1111-1111-111111111111</body>'
+        self.assertNotEqual(xml_text(user), xml_text(user.replace("1111", "2222")))
+        core = '<core xmlns:d="http://purl.org/dc/terms/"><d:created>2026-01-01</d:created></core>'
+        self.assertEqual(xml_text(core, "docProps/core.xml"), xml_text(core.replace("2026", "2027"), "docProps/core.xml"))
+        self.assertNotEqual(xml_text(core, "body.xml"), xml_text(core.replace("2026", "2027"), "body.xml"))
+        settings = '<c:config-item xmlns:c="urn:oasis:names:tc:opendocument:xmlns:config:1.0" c:name="RsidRoot">123</c:config-item>'
+        self.assertEqual(xml_text(settings, "settings.xml"), xml_text(settings.replace("123", "456"), "settings.xml"))
+        self.assertNotEqual(xml_text(settings.replace("RsidRoot", "ZoomValue"), "settings.xml"), xml_text(settings.replace("RsidRoot", "ZoomValue").replace("123", "456"), "settings.xml"))
+
+    def test_rst_dimensions_tolerate_dpi_rounding_but_not_resizing(self):
+        a = "image:: picture.jpg :width: 0.99986in :height: 0.66653in"
+        b = "image:: picture.jpg :width: 1in :height: 0.66667in"
+        left, right, deltas = rst_dimensions(a, b)
+        self.assertEqual(left, right)
+        self.assertLess(max(deltas), .011)
+        self.assertIsNone(rst_dimensions(a, b.replace("1in", "2in"))[2])
+
+    def test_indexed_tga_palette_uses_bgr_samples(self):
+        indexed = bytearray(18)
+        indexed[1] = 1; indexed[2] = 1; indexed[5] = 1; indexed[7] = 32
+        indexed[12] = 1; indexed[14] = 1; indexed[16] = 8; indexed[17] = 32
+        truecolor = bytearray(indexed)
+        truecolor[1] = 0; truecolor[2] = 2; truecolor[5] = 0; truecolor[7] = 0; truecolor[16] = 32
+        a, b = self.root / "indexed.tga", self.root / "truecolor.tga"
+        a.write_bytes(indexed + bytes([200, 150, 100, 255, 0]))
+        b.write_bytes(truecolor + bytes([200, 150, 100, 255]))
+        scores = native("compare", a, b)
+        self.assertTrue(scores["sameGeometry"])
+        self.assertEqual(scores["frames"][0]["psnr"], 99)
+
+    def test_embedded_zip_images_use_pixels_and_reject_geometry_and_colour_loss(self):
+        a, b, small, dark = [self.root / name for name in ("a.png", "b.png", "small.png", "dark.png")]
+        png(a); png(b); png(small, 32, 16); png(dark, alpha=False)
+        # An ancillary PNG chunk changes bytes without changing a pixel.
+        import struct, zlib
+        chunk = b"tEXt" + b"comment\0different encoder"
+        payload = struct.pack(">I", len(chunk) - 4) + chunk + struct.pack(">I", zlib.crc32(chunk))
+        b.write_bytes(b.read_bytes()[:-12] + payload + b.read_bytes()[-12:])
+        thresholds = {"psnr": 30, "ssim": .95, "text": .95}
+        left = self.root / "a.docx"; zip_write(left, {"word/media/image.png": a.read_bytes()})
+        for source, status in ((b, "WARN"), (small, "FAIL"), (dark, "FAIL")):
+            right = self.root / "b.docx"; zip_write(right, {"word/media/image.png": source.read_bytes()})
+            result = compare_output(fingerprint(left), fingerprint(right), left, right, thresholds)
+            self.assertEqual(result[0], status, result)
+
+    def test_inline_html_fb2_and_rtf_keep_picture_payloads_for_comparison(self):
+        payload = b"picture samples"; data = base64.b64encode(payload).decode()
+        html, pictures = document_text(f'<p>Keep me</p><img src="data:image/png;base64,{data}">', ".html")
+        self.assertIn("Keep me", html); self.assertEqual(pictures, [("image/png", payload)])
+        fb2 = '<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0"><body><p>Keep me</p></body><binary id="img1" content-type="image/png">' + data + '</binary></FictionBook>'
+        text, pictures = document_text(fb2, ".fb2")
+        self.assertIn("Keep me", text); self.assertEqual(pictures, [("image/png", payload)])
+        text, pictures = document_text(r'{\rtf1 Keep me {\pict\pngblip\picw10\pich10 ' + payload.hex() + '}}', ".rtf")
+        self.assertIn("Keep me", text); self.assertEqual(pictures, [("image/png", payload)])
+
+    def test_calibre_cover_marker_is_not_enough_to_accept_different_pixels(self):
+        comment = b"Generated cover: calibre 9.15.0"
+        cover = b"\xff\xd8\xff\xfe" + (len(comment) + 2).to_bytes(2, "big") + comment + b"\xff\xda"
+        self.assertTrue(generated_calibre_cover(cover))
+        self.assertFalse(generated_calibre_cover(b"ordinary file " + comment))
+        from compare import picture_below_threshold
+        scores = {"frames": [{"psnr": 10, "ssim": .1}]}
+        thresholds = {"psnr": 30, "ssim": .95}
+        self.assertTrue(picture_below_threshold(scores, thresholds))
+        scores["generatedCoverTextMatches"] = True
+        self.assertFalse(picture_below_threshold(scores, thresholds))
+
+    def test_media_container_volatility_requires_identical_packets_and_timing(self):
+        a = {"kind": "media", "sha256": "a", "metadata": {"duration": 1, "streams": [{"codec_name": "opus"}]}}
+        b = copy.deepcopy(a); b["sha256"] = "b"
+        thresholds = {"psnr": 30, "ssim": .95, "text": .95}
+        with patch("compare.media_packets", return_value={"packets": [{"data_hash": "same", "pts": 0}]}):
+            self.assertEqual(compare_output(a, b, self.root / "a.ogg", self.root / "b.ogg", thresholds)[0], "PASS")
+        with patch("compare.media_packets", side_effect=[{"packets": ["a"]}, {"packets": ["b"]}]):
+            self.assertEqual(compare_output(a, b, self.root / "a.ogg", self.root / "b.ogg", thresholds)[0], "WARN")
+        from compare import media_packets
+        probe = {"packets": [{"data_hash": "same", "pts": 0}], "streams": [{"tags": {"file_package_umid": "random", "title": "Keep me"}}]}
+        with patch("compare.command", return_value=json.dumps(probe).encode()):
+            value = media_packets(self.root / "a.mxf")
+        self.assertEqual(value["streams"][0]["tags"], {"title": "Keep me"})
+        self.assertEqual(value["packets"], probe["packets"])
 
 
 if __name__ == "__main__":

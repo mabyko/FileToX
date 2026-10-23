@@ -102,6 +102,34 @@ hashes equal; media codecs/stream count, geometry/audio properties equal and
 duration within 2%; font table tags/glyph count equal. Tune `--psnr`, `--ssim`,
 `--text-ratio` when a deliberate implementation change needs another tolerance.
 
+Comparison also works with older captured fingerprints: normalization reads the
+retained artifacts without rewriting either run. TAR comparisons read through
+gzip/bzip2/xz and PAX headers, comparing member names/types/link targets/content
+instead of hashing an inner TAR's volatile PAX header names and checksums. ZIP
+package XML is canonicalized; generated OPF/NCX/FB2 UUIDs, creation/modification
+dates in document metadata, DrawingML field UUIDs and ODF revision IDs are scoped
+to their metadata fields. User text, titles, links, media parts and member names
+remain significant.
+RST image dimensions use the same 1pt tolerance as PDF page dimensions, so DPI
+quantization such as `0.99986in` versus `1in` does not fail a short text document.
+
+Changed embedded raster pictures in ZIP documents, HTML data URLs, FB2 binaries
+and RTF pict groups use the same decoded geometry, frame count, PSNR and SSIM
+checks as standalone images. Metrics retain each picture's scores. Calibre
+randomly chooses a generated cover's theme/layout; only JPEGs with its explicit
+COM marker, identical geometry, and identical nonempty Vision OCR results can
+receive WARN for that volatility despite different pixels. Other pictures keep
+the image thresholds. OCR disagreement remains FAIL. The native inspector
+expands ImageMagick's indexed TGA palettes before ImageIO decoding to avoid
+ImageIO's red/blue palette swap.
+
+Media with matching structure is additionally checked using FFprobe packet data
+hashes, timing and codec extradata. Identical encoded payloads receive PASS when
+only container IDs/dates differ (including Matroska/Ogg/MXF); different packets
+remain WARN. Pixel format and frame rate are checked alongside stream geometry.
+Unsupported binary books/documents remain WARN; this is not proof of content
+equivalence. A smaller output needs inspection or readback, even when WARN.
+
 Limits: global SSIM is not windowed SSIM. Empty-text PDFs compare geometry only;
 media checks structure rather than perceptual audio/video quality, and font
 metadata does not compare glyph outlines. Unsupported decoders explicitly WARN
@@ -115,5 +143,8 @@ python3 -I Tools/engine-compare/compare.py "$BASE/run-optional" "$BASE/run-optio
 
 The self-check covers strict stdout, IDs, fast completion, EOF/shutdown, normalized
 text, archive hashes, image geometry/scores, strict states, and capped-plan coverage.
+It also checks PAX/gzip volatility against real member loss, scoped XML metadata,
+embedded-image colour/geometry loss, inline picture extraction, TGA palette order,
+generated-cover guards, and strict media packet/timing comparisons.
 Only tools are committed; corpus, native binaries, output artifacts and reports
 remain under ignored `build/`.

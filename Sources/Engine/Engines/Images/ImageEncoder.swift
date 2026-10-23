@@ -237,6 +237,7 @@ enum ImageEncoder {
             CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: loops]] as CFDictionary)
         }
         for frame in frames {
+            let image = format == "gif" ? ImagePixels.gifImage(frame.image) : frame.image
             var properties = frame.properties.filter { !privateKeys.contains($0.key) }
             if let dpi = frame.dpi, dpi.x > 0, dpi.y > 0 {
                 properties[kCGImagePropertyDPIWidth] = dpi.x
@@ -251,14 +252,22 @@ enum ImageEncoder {
             }
             if format != "tiff" { properties[kCGImagePropertyTIFFDictionary] = nil }
             if let metadata = frame.properties[ImageFrame.metadataKey], CFGetTypeID(metadata as CFTypeRef) == CGImageMetadataGetTypeID() {
-                CGImageDestinationAddImageAndMetadata(destination, frame.image, encoderMetadata(metadata as! CGImageMetadata, frame.dpi),
+                CGImageDestinationAddImageAndMetadata(destination, image, encoderMetadata(metadata as! CGImageMetadata, frame.dpi),
                                                       properties as CFDictionary)
             } else {
-                CGImageDestinationAddImage(destination, frame.image, properties as CFDictionary)
+                CGImageDestinationAddImage(destination, image, properties as CFDictionary)
             }
         }
         guard CGImageDestinationFinalize(destination) else {
             throw ConversionError("Could not write \(FilePath.fileName(path)) as \(format.uppercased()).")
+        }
+        if format == "gif", let first = frames.first, frames.count > 1, data.length >= 10 {
+            // ImageMagick uses the first frame's logical screen even when subsequent
+            // page rectangles are larger. ImageIO chooses their union, changing video
+            // dimensions when this GIF is the intermediate of a PDF → video route.
+            let size = [UInt8(first.image.width & 255), UInt8(first.image.width >> 8 & 255),
+                        UInt8(first.image.height & 255), UInt8(first.image.height >> 8 & 255)]
+            data.replaceBytes(in: NSRange(location: 6, length: 4), withBytes: size)
         }
         try FileManager.default.writeFile(path, data as Data)
     }

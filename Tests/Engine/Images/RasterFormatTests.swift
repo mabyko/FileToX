@@ -189,16 +189,55 @@ final class RasterFormatTests: XCTestCase {
 }
 
 extension RasterFormatTests {
-    func testSemiTransparentPixelsSurvivePsdAndPsb() async throws {
+    func testPsdAndPsbCompositeSamplesMatchFileeWriter() async throws {
         let source = FilePath.combine(dir, "semi.png")
         try ImageEncoder.save([ImageFrame(image: GraphicsTestKit.solid(8, 4, (200, 40, 40, 128)))], to: source, format: "png")
+        let expected = GraphicsTestKit.pixel(try GraphicsTestKit.decode(source).frames[0], 2, 2)
         for target in ["psd", "psb"] {
             let document = try await GraphicsTestKit.convert(engine, source, to: target)
-            // Photoshop's convention: the composite is matted on white where transparent.
-            let back = try await GraphicsTestKit.convert(engine, document[0], to: "png", name: "semi_\(target)_back")
-            let pixel = GraphicsTestKit.pixel(try GraphicsTestKit.decode(back[0]).frames[0], 2, 2)
+            // ImageIO's PSD decoder applies alpha to the stored channel samples.
+            // Filee writes straight samples; adding a white matte changed these
+            // displayed values. Our white-unblending reader masks that difference.
+            let pixel = GraphicsTestKit.pixel(try GraphicsTestKit.decode(document[0]).frames[0], 2, 2)
             XCTAssertEqual(pixel.a, 128, target)
-            XCTAssertTrue(abs(pixel.r - 200) <= 2 && abs(pixel.g - 40) <= 2 && abs(pixel.b - 40) <= 2, "\(target): \(pixel)")
+            XCTAssertTrue(abs(pixel.r - expected.r * 128 / 255) <= 2
+                          && abs(pixel.g - expected.g * 128 / 255) <= 2
+                          && abs(pixel.b - expected.b * 128 / 255) <= 2, "\(target): \(pixel)")
         }
+    }
+
+    func testPhotoshopWhiteMattedCompositeIsUnblended() throws {
+        for large in [false, true] {
+            let path = FilePath.combine(dir, large ? "photoshop.psb" : "photoshop.psd")
+            // Stored Photoshop samples: red 200 / green-blue 40 over white at alpha 128.
+            let image = GraphicsTestKit.solid(8, 4, (227, 147, 147, 128))
+            try PsdCodec.write(ImageFrame(image: image), to: path, large: large)
+            let frame = try XCTUnwrap(PsdCodec.transparentComposite(path))
+            let pixel = GraphicsTestKit.pixel(frame.image, 2, 2)
+            XCTAssertEqual(pixel.a, 128)
+            XCTAssertTrue(abs(pixel.r - 200) <= 2 && abs(pixel.g - 40) <= 2 && abs(pixel.b - 40) <= 2, "\(pixel)")
+        }
+    }
+
+    func testGifTransparencyUsesTheFileeHalfAlphaThreshold() throws {
+        let pixels: [UInt8] = [255, 0, 0, 0, 255, 0, 0, 127, 255, 0, 0, 128, 255, 0, 0, 255]
+        let image = ImagePixels.make(pixels, 4, 1, components: 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, alpha: true, premultiplied: false)
+        let file = FilePath.combine(dir, "threshold.gif")
+        try ImageEncoder.save([ImageFrame(image: image)], to: file, format: "gif")
+        let decoded = try GraphicsTestKit.decode(file).frames[0]
+        XCTAssertEqual((0..<4).map { GraphicsTestKit.pixel(decoded, $0, 0).a }, [0, 0, 255, 255])
+        XCTAssertGreaterThan(GraphicsTestKit.pixel(decoded, 2, 0).r, 250)
+    }
+
+    func testGifLogicalScreenKeepsFirstPageGeometry() throws {
+        let file = FilePath.combine(dir, "pages.gif")
+        let frames = [ImageFrame(image: GraphicsTestKit.solid(150, 100, (255, 0, 0, 255))),
+                      ImageFrame(image: GraphicsTestKit.solid(100, 150, (0, 255, 0, 255)))]
+        try ImageEncoder.save(frames, to: file, format: "gif")
+        let data = [UInt8](try Data(contentsOf: URL(fileURLWithPath: file)))
+        XCTAssertEqual(Array(data[6..<10]), [150, 0, 100, 0])
+        // Frame rectangles remain intact, including the taller second page.
+        let decoded = try GraphicsTestKit.decode(file)
+        XCTAssertEqual(decoded.frames.count, 2)
     }
 }

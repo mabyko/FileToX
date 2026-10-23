@@ -3,14 +3,47 @@ import ImageIO
 import CoreGraphics
 import PDFKit
 import CryptoKit
+import Vision
 
 enum InspectError: Error { case invalid(String) }
 
 func source(_ path: String) throws -> CGImageSource {
+    // ImageIO swaps red/blue when reading ImageMagick's 32-bit indexed TGA
+    // palette. Expand that palette to a truecolour TGA before decoding it.
+    if let input = try? Data(contentsOf: URL(fileURLWithPath: path)), input.count >= 18,
+       input[1] == 1, input[2] == 1, input[7] == 32, input[16] == 8 {
+        let count = Int(input[5]) | Int(input[6]) << 8
+        let base = Int(input[3]) | Int(input[4]) << 8
+        let width = Int(input[12]) | Int(input[13]) << 8
+        let height = Int(input[14]) | Int(input[15]) << 8
+        let palette = 18 + Int(input[0]), start = palette + count * 4
+        if count > 0, width > 0, height > 0, width * height <= 100_000_000, start + width * height <= input.count {
+            var data = Data(input.prefix(18))
+            data[0] = 0; data[1] = 0; data[2] = 2; data[16] = 32
+            for at in 3...7 { data[at] = 0 }
+            for index in input[start..<start + width * height] {
+                let item = Int(index) - base
+                guard (0..<count).contains(item) else { throw InspectError.invalid("Invalid TGA palette index") }
+                data.append(input[palette + item * 4..<palette + item * 4 + 4])
+            }
+            if let value = CGImageSourceCreateWithData(data as CFData, nil) { return value }
+        }
+    }
     guard let value = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else {
         throw InspectError.invalid("ImageIO cannot read this image")
     }
     return value
+}
+
+func recognizedText(_ path: String) throws -> [String] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.recognitionLanguages = ["en-US", "ko-KR"]
+    let src = try source(path)
+    guard let image = CGImageSourceCreateImageAtIndex(src, 0, nil) else { throw InspectError.invalid("Cannot decode image") }
+    let handler = VNImageRequestHandler(cgImage: image, options: [:])
+    try handler.perform([request])
+    return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
 }
 
 func pixels(_ source: CGImageSource, _ index: Int) throws -> (Int, Int, [UInt8]) {
@@ -96,6 +129,7 @@ do {
     switch args[1] {
     case "image": result = try imageInfo(args[2])
     case "pdf": result = try pdfInfo(args[2])
+    case "ocr": result = ["text": try recognizedText(args[2])]
     case "compare":
         guard args.count == 4 else { throw InspectError.invalid("compare needs two paths") }
         result = try compareImages(args[2], args[3])
