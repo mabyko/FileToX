@@ -109,6 +109,19 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(try HwpxAssert.xml(hwpx).descendants(HwpxAssert.hp + "tbl").count, 1)
     }
 
+    func testMarkdownToHwpxEscapesMarkupCharactersBeforeCombiningMarks() async throws {
+        let md = FilePath.combine(try MarkupTestSupport.newFolder(), "marks.md")
+        let text = "less <\u{338} than, R&\u{301}D, \"\u{1F3FB}, '\u{301} and >\u{20D2}"
+        try Data(text.utf8).write(to: URL(fileURLWithPath: md))
+
+        let hwpx = try await MarkupTestSupport.convert(md, "hwpx")
+
+        try HwpxAssert.validPackage(hwpx) // every XML part parses
+        let document = try HwpxReader.read(hwpx, FilePath.combine(FilePath.directoryName(md)!, "readback"))
+        let read = document.sections.map { HDocumentWalker.inlines($0.blocks).compactMap { ($0 as? HText)?.text }.joined() }.joined()
+        XCTAssertEqual(Array(read.unicodeScalars), Array(text.unicodeScalars))
+    }
+
     func testMarkdownToPdfWithBuiltInEngines() async throws {
         guard RhwpConverter.locate() != nil else { throw XCTSkip("rhwp not found (bundled engine)") }
         let pdf = try await MarkupTestSupport.convert(try writeSample(try MarkupTestSupport.newFolder()), "pdf")
