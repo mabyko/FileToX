@@ -208,6 +208,7 @@ extension ACad {
         var defaultEntry: CadObject?
 
         override var objectName: String { DxfFileToken.objectDictionaryWithDefault }
+        override var objectType: ObjectType { .unlisted }
         override var subclassMarker: String { DxfSubclassMarker.dictionaryWithDefault }
 
         func dxfClass() -> DxfClass {

@@ -432,8 +432,8 @@ extension ACad.DxfReader {
         switch reader.code {
         case 11, 21, 31: m.alignmentPoint[axis(reader.code)] = try reader.valueAsDouble
         case 71: m.attachmentPoint = try reader.valueAsShort
-        case 63: m.backgroundColor = try color(index: reader.valueAsShort)
-        case 421: m.backgroundColor = ACad.Color.fromRgb24(try reader.valueAsInt)
+        // [DxfCodeValue(63, 421, 430)]: the map's Color setter only handles 62 / 420, so these are consumed unset.
+        case 63, 421, 430: break
         case 90: m.backgroundFillFlags = try reader.valueAsInt
         case 45: m.backgroundScale = try reader.valueAsDouble
         case 441: m.backgroundTransparency = ACad.Transparency.fromAlphaValue(try reader.valueAsInt)
@@ -1650,8 +1650,8 @@ extension ACad.DxfReader {
             return mapped {
                 let i = axis(r.code)
                 switch r.code {
-                case 63: v.ambientLightColor = try color(index: r.valueAsShort)
-                case 421: v.ambientLightColor = ACad.Color.fromRgb24(try r.valueAsInt)
+                // [DxfCodeValue(63, 421, 431)]: consumed unset, as the map's Color setter only handles 62 / 420.
+                case 63, 421, 431: break
                 case 44: v.backClipPlane = try r.valueAsDouble
                 case 141: v.brightness = try r.valueAsDouble
                 case 10, 20, 30: v.center[i] = try r.valueAsDouble

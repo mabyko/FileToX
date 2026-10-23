@@ -749,8 +749,8 @@ extension ACad {
             case 282: v.defaultLighting = UInt8(truncatingIfNeeded: try r.valueAsShort)
             case 141: v.brightness = try r.valueAsDouble
             case 142: v.contrast = try r.valueAsDouble
-            case 63: v.ambientColor = try color(index: r.valueAsShort)
-            case 421: v.ambientColor = Color.fromRgb24(try r.valueAsInt)
+            // [DxfCodeValue(63, 421, 431)]: the map's Color setter only handles 62 / 420, so these are consumed unset.
+            case 63, 421, 431: break
             case 345: template.namedUcsHandle = try r.valueAsHandle
             case 346: template.baseUcsHandle = try r.valueAsHandle
             default: return false
