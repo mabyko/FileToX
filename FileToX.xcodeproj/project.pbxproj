@@ -37,6 +37,7 @@
 		1516F8F865A569467C889E71 /* CodecLibraries.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9503CF807D9789A4E86BA4C0 /* CodecLibraries.swift */; };
 		1566D48842448900904E0A5F /* CoverArtTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1379D6E39F6BA495858CED4A /* CoverArtTests.swift */; };
 		1687C3F61EA222E850AC7951 /* FormatRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = E578E9E22F242284186174C0 /* FormatRegistry.swift */; };
+		16DC10554D10C0F2E996EFD2 /* JpegEncoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFD50FE93970FF7DC504BD55 /* JpegEncoderTests.swift */; };
 		1703DD5964460742CAB018CB /* FileToXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76AF946CDC0B29C440098FF8 /* FileToXApp.swift */; };
 		176EC6C96DA12E66514AB152 /* EbookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74797D670F64B7B88DE0A9D6 /* EbookTests.swift */; };
 		181DF0995414089383170D66 /* exif_gps.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7FEEADF33F0763677155CA63 /* exif_gps.cpp */; };
@@ -51,6 +52,7 @@
 		1BF574B7D56182EEBA6D1BFB /* fp_dng.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4985968057021D82FC5645CA /* fp_dng.cpp */; };
 		1C23CB22DB79F13A86A1C5DE /* HDocumentAssert+Comparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3294F8AEBD5B94A958BD025E /* HDocumentAssert+Comparer.swift */; };
 		1C2CAD54BC609D983FB5EB67 /* MarkdownPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B29D07FF73FC23F8879A132 /* MarkdownPipeline.swift */; };
+		1C532D74790DBFC998300E92 /* CJpegTurbo in Frameworks */ = {isa = PBXBuildFile; productRef = 98D01498BCF72F0C410675DD /* CJpegTurbo */; };
 		1CB727878C237AFE43AB99E6 /* IcnsConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB86987610FFDE75779034C8 /* IcnsConverter.swift */; };
 		1D3DC3E00A6C41D425583360 /* MarkdownHtmlRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 061B6529A7987395FC8E3FB7 /* MarkdownHtmlRenderer.swift */; };
 		1DAF7082A6D9C460A2429BE1 /* ArchiveExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB221B28DCC924ACB6980A97 /* ArchiveExtractor.swift */; };
@@ -94,6 +96,7 @@
 		32375479825AA23547728359 /* aspect_ratio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 984002F2CD2F007BBCF1A091 /* aspect_ratio.cpp */; };
 		3297EC7F69A11C4E40E82C24 /* HostContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67AB9252827BAB17A3D3DEDE /* HostContractTests.swift */; };
 		32ABCDE58F626C80D3BABC44 /* DocumentTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 189B508B0CE4BA0968AADBA9 /* DocumentTestSupport.swift */; };
+		32B06E82DD215296221592C8 /* CJpegTurbo in Frameworks */ = {isa = PBXBuildFile; productRef = 23FFF27419E8D1A724C7E2D7 /* CJpegTurbo */; };
 		32BACCF5F0CA7FE8DA3265C7 /* EmlCharsets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F9859C772A1CECCE8AA0ED /* EmlCharsets.swift */; };
 		3303860680C4A67EA2073BDF /* ApplicationPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46F930A94FA44A8CCE2BF709 /* ApplicationPreferencesTests.swift */; };
 		3381318451F9241E32A16BBE /* EbookBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3945A489641941BE18E1F683 /* EbookBuilders.swift */; };
@@ -104,6 +107,7 @@
 		35CE5AF757A5B14E03D78FC1 /* cameralist.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 70D4D139EBEFED5F40380237 /* cameralist.cpp */; };
 		36061C05DE569C44E2B001D9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 90AB179F6E7C561D7812ED19 /* Assets.xcassets */; };
 		363026D663CC9197E82B330B /* EmlMime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A250494AB16EF0D3C14C2D9E /* EmlMime.swift */; };
+		36F1E8725405E9E0881179F6 /* JpegEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71FAEAB9324C4FC5509EE8B /* JpegEncoder.swift */; };
 		37BF0E854F24BFBA97DBFB9F /* Workbook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40579DB7EA25EB5F88A1315D /* Workbook.swift */; };
 		37CC82ACCC75F84446A64977 /* EmlCorpusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 417D6C4822F441D31164A543 /* EmlCorpusTests.swift */; };
 		3A9BA1DF2F96ECA289BEB079 /* dngsdk_glue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = CE83B7E00DFBA9E9E5CDA218 /* dngsdk_glue.cpp */; };
@@ -207,6 +211,7 @@
 		6EFF05CD08ACE9CF7B3E37A6 /* CffFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FE1D9B93D92F58B8FCB8422 /* CffFont.swift */; };
 		6F491A91B498429E54614168 /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F40FD1DDFDF2D79C0B8CDD7A /* LocalizationTests.swift */; };
 		7020CBF2ABE2DE993B45B5DA /* xtrans_demosaic.cpp in Sources */ = {isa = PBXBuildFile; fileRef = F8DCFB6607B5372DD114FC4F /* xtrans_demosaic.cpp */; };
+		709F8A85B4ADD6370692892F /* CJpegTurbo in Frameworks */ = {isa = PBXBuildFile; productRef = DFC03BD86A2913ED0E070489 /* CJpegTurbo */; };
 		71248D151C305ACE61743812 /* NetpbmCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 570E433A04B5D854A6AEFD38 /* NetpbmCodec.swift */; };
 		716C594B42036F46D3D9D80D /* MarkdownCharacterTables.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1476CE92181CC461CFE549C /* MarkdownCharacterTables.swift */; };
 		7233F97300618951895F9950 /* XhtmlWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFFE02A092FB28EC4272F93E /* XhtmlWriter.swift */; };
@@ -239,6 +244,7 @@
 		83F1AD08768B4D03B5310CC1 /* kodak_decoders.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 03F769249ECE3FE26FB93AC0 /* kodak_decoders.cpp */; };
 		86BF4B2E43A2F2FB4AB1A484 /* rawspeed_glue.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 034809503A669AD4A2514911 /* rawspeed_glue.cpp */; };
 		86F3C5CB34D9985A4E2A2985 /* PdfiumConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C5838A8DDFCA7B148D9B97A /* PdfiumConverter.swift */; };
+		87107778DD248029F5DAEA1A /* MagickResize.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF5D7812FD5AA4DC03A50C75 /* MagickResize.swift */; };
 		875AC037E15454B1ACC6F98F /* libFileToXEngineKit.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2776875E8E4666891990176B /* libFileToXEngineKit.a */; };
 		87A1ACDF59AF83099C4ED44C /* FontTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE66D12D714962B4CBC7F1C5 /* FontTests.swift */; };
 		890DBBEDDD9ACBC8456A79DB /* brotli in Frameworks */ = {isa = PBXBuildFile; productRef = ECD5593B357FE68BB20A23C1 /* brotli */; };
@@ -301,6 +307,7 @@
 		ACDC121D2A75A49A78FDB8B7 /* ImagePixels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD31260DF1C466D815CF1C0 /* ImagePixels.swift */; };
 		ADE0917ED94083542448EA4B /* xls-record-baseline.json in Resources */ = {isa = PBXBuildFile; fileRef = DB6734865EC3B8AB8ED21DC6 /* xls-record-baseline.json */; };
 		AE97C25C3CA8D6E84E303837 /* sony.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A395A7531C98039C08532227 /* sony.cpp */; };
+		AFB8FF327EC1FC19D4686863 /* MagickResizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3247B49CCB0CD4CFBE95A686 /* MagickResizeTests.swift */; };
 		B0B1E77E46BAEA3EC76E2DF8 /* Converter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43021F073D79589409C04F7F /* Converter.swift */; };
 		B0E494028C0E3960E32FCCEE /* postprocessing_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E6F61B172FE94B20F2165832 /* postprocessing_utils.cpp */; };
 		B21939BE173C9C5B614994E7 /* JobQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C37C2A86F8FBF2B278525FE /* JobQueue.swift */; };
@@ -594,6 +601,7 @@
 		30681A0176CAED9F1D1A90B3 /* MarkdownBlockProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownBlockProcessor.swift; sourceTree = "<group>"; };
 		30892B18D99D645339A42E8E /* ArchivePacker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchivePacker.swift; sourceTree = "<group>"; };
 		30BCD62FC0097334347CE0AF /* StagingJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagingJournal.swift; sourceTree = "<group>"; };
+		3247B49CCB0CD4CFBE95A686 /* MagickResizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagickResizeTests.swift; sourceTree = "<group>"; };
 		3294F8AEBD5B94A958BD025E /* HDocumentAssert+Comparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HDocumentAssert+Comparer.swift"; sourceTree = "<group>"; };
 		3296D3E2A27F5DE7912C77C7 /* HwpxWriter+Body.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HwpxWriter+Body.swift"; sourceTree = "<group>"; };
 		3350F78390B17BEF81D0AA51 /* FileToXEngineTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FileToXEngineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -885,6 +893,7 @@
 		E0CC4447CEC418F33650E063 /* HuffCdic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HuffCdic.swift; sourceTree = "<group>"; };
 		E0FB58DF8DB7125F6A168AFD /* DocumentFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentFixtures.swift; sourceTree = "<group>"; };
 		E1AAE83A2BF75C630E9EB259 /* FileDropTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropTests.swift; sourceTree = "<group>"; };
+		E1AF1BB746431F44AC8EBED6 /* libjpeg-turbo */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "libjpeg-turbo"; path = "Vendor/libjpeg-turbo"; sourceTree = SOURCE_ROOT; };
 		E1CB810AC6E9FACE5BB02D38 /* losslessjpeg.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = losslessjpeg.h; sourceTree = "<group>"; };
 		E27B5E9AE177F41808721549 /* adobepano.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = adobepano.cpp; sourceTree = "<group>"; };
 		E2C7DCA42FC6976BFB6782FB /* VectorConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VectorConverter.swift; sourceTree = "<group>"; };
@@ -910,6 +919,8 @@
 		EDD31260DF1C466D815CF1C0 /* ImagePixels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePixels.swift; sourceTree = "<group>"; };
 		EDFDA9E827D44D6B75394AA0 /* dcraw_defs.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = dcraw_defs.h; sourceTree = "<group>"; };
 		EF4A43BA5B60E04A103B5483 /* EngineHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineHost.swift; sourceTree = "<group>"; };
+		EF5D7812FD5AA4DC03A50C75 /* MagickResize.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagickResize.swift; sourceTree = "<group>"; };
+		EFD50FE93970FF7DC504BD55 /* JpegEncoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JpegEncoderTests.swift; sourceTree = "<group>"; };
 		EFE77D96AB627AE9105C16E1 /* SevenZip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SevenZip.swift; sourceTree = "<group>"; };
 		F00E0FB8982620F0814327D6 /* IcnsFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IcnsFile.swift; sourceTree = "<group>"; };
 		F03D569C974F81F7C2902999 /* HtmlCorpusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HtmlCorpusTests.swift; sourceTree = "<group>"; };
@@ -928,6 +939,7 @@
 		F60A7235B6CA462E19FDB6AA /* SelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfTest.swift; sourceTree = "<group>"; };
 		F60B7A0FB683F6A91C309C92 /* EbookRouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EbookRouteTests.swift; sourceTree = "<group>"; };
 		F678F33A336817E9C64008EC /* ext_preprocess.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ext_preprocess.cpp; sourceTree = "<group>"; };
+		F71FAEAB9324C4FC5509EE8B /* JpegEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JpegEncoder.swift; sourceTree = "<group>"; };
 		F8160BC5FFD3BBA30BAFEE73 /* RoutePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutePlannerTests.swift; sourceTree = "<group>"; };
 		F835F75A69A54E92E875D924 /* PandocAstReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PandocAstReader.swift; sourceTree = "<group>"; };
 		F8DCFB6607B5372DD114FC4F /* xtrans_demosaic.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = xtrans_demosaic.cpp; sourceTree = "<group>"; };
@@ -951,6 +963,7 @@
 				0657C0314A00B9567F80B2DC /* libwebp in Frameworks */,
 				64AB5AE8650EB3A6BF642D5C /* libjxl in Frameworks */,
 				890DBBEDDD9ACBC8456A79DB /* brotli in Frameworks */,
+				709F8A85B4ADD6370692892F /* CJpegTurbo in Frameworks */,
 				783222ED5A29FEA3F4D1056A /* libxml2.tbd in Frameworks */,
 				58E4544216A811146A8BD447 /* libz.tbd in Frameworks */,
 			);
@@ -963,6 +976,7 @@
 				C7B222EC95F246340449E92F /* libwebp in Frameworks */,
 				46E4BF650C054D71DA5C713F /* libjxl in Frameworks */,
 				A50B0CFF49E6E28E3F2C3FF9 /* brotli in Frameworks */,
+				32B06E82DD215296221592C8 /* CJpegTurbo in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -976,6 +990,7 @@
 				6010730FD3148AD354C8856D /* libwebp in Frameworks */,
 				A111A74A8D054F9E1EA227AC /* libjxl in Frameworks */,
 				3D25CD9182561CA7F0296AA7 /* brotli in Frameworks */,
+				1C532D74790DBFC998300E92 /* CJpegTurbo in Frameworks */,
 				1E98D11EEB8F4B4738A53BCC /* libxml2.tbd in Frameworks */,
 				6C090FEE1AD9CE1CC5A25FA4 /* libz.tbd in Frameworks */,
 			);
@@ -1501,6 +1516,14 @@
 			path = Host;
 			sourceTree = "<group>";
 		};
+		5E876F1A57615824D6AA89EB /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				E1AF1BB746431F44AC8EBED6 /* libjpeg-turbo */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
 		62F96D0FE1397B8F48246CCE /* decompressors */ = {
 			isa = PBXGroup;
 			children = (
@@ -1864,6 +1887,7 @@
 				AB2F0C4ABA1F44489810B3E2 /* Engine */,
 				58104E181838F55C3270A996 /* EngineMain */,
 				0AF68D641D75DEE11EB9512D /* LibRaw */,
+				5E876F1A57615824D6AA89EB /* Packages */,
 				1A562ECEC5A995C8533FA931 /* Platform */,
 				0E1D89675AC0F3EB692DE051 /* Resources */,
 				7B2715F947B77347FE06DBBC /* Sources */,
@@ -2012,7 +2036,9 @@
 				F531B6C765CBD4D1B24210FB /* ImageEncoder.swift */,
 				EDD31260DF1C466D815CF1C0 /* ImagePixels.swift */,
 				72D53DD15BB968A330949FFA /* ImageReader.swift */,
+				F71FAEAB9324C4FC5509EE8B /* JpegEncoder.swift */,
 				F22A858139709EE8718E9524 /* MagickImageConverter.swift */,
+				EF5D7812FD5AA4DC03A50C75 /* MagickResize.swift */,
 				570E433A04B5D854A6AEFD38 /* NetpbmCodec.swift */,
 				519BF30F7DDABEE0F18C8280 /* PsdCodec.swift */,
 				6DD2E65C3AC0E5BEA94167BD /* WebpJxlEncoders.swift */,
@@ -2053,6 +2079,8 @@
 				3B4AC92BD1A823B439F192B6 /* GraphicsTestKit.swift */,
 				DD034B74F1973F5774EB0949 /* IcnsTests.swift */,
 				F5ADA09A00AF22D6BC5CAF56 /* ImageEngineTests.swift */,
+				EFD50FE93970FF7DC504BD55 /* JpegEncoderTests.swift */,
+				3247B49CCB0CD4CFBE95A686 /* MagickResizeTests.swift */,
 				AA473E2B24627A8EA5EE4710 /* RasterFormatTests.swift */,
 			);
 			path = Images;
@@ -2102,6 +2130,7 @@
 				02D996A23A90C00D82ADDFB4 /* libwebp */,
 				E9B779AF4E29615ED5499F1F /* libjxl */,
 				ECD5593B357FE68BB20A23C1 /* brotli */,
+				DFC03BD86A2913ED0E070489 /* CJpegTurbo */,
 			);
 			productName = FileToXEngineTests;
 			productReference = 3350F78390B17BEF81D0AA51 /* FileToXEngineTests.xctest */;
@@ -2142,6 +2171,7 @@
 				0AD3A698F543AA1F99D4EE0D /* libwebp */,
 				FC48B070C1C986F25E90D517 /* libjxl */,
 				E4BB925C2C53549B01797F2D /* brotli */,
+				23FFF27419E8D1A724C7E2D7 /* CJpegTurbo */,
 			);
 			productName = FileToXEngineKit;
 			productReference = 2776875E8E4666891990176B /* libFileToXEngineKit.a */;
@@ -2168,6 +2198,7 @@
 				B3A074F7E7C884F1F0A94AF3 /* libwebp */,
 				F760F46E558D10C145FA5825 /* libjxl */,
 				6D270E3473C62453D4D296C7 /* brotli */,
+				98D01498BCF72F0C410675DD /* CJpegTurbo */,
 			);
 			productName = FileToXEngine;
 			productReference = 71EEB7DE2FCE6CA2D0AC54FF /* FileToXEngine.app */;
@@ -2221,6 +2252,7 @@
 			packageReferences = (
 				408D0F57F5E7B5BB7BFECE0C /* XCRemoteSwiftPackageReference "libjxl-Xcode" */,
 				78219A6AC7EF43ECE0BC66AD /* XCRemoteSwiftPackageReference "libwebp-Xcode" */,
+				44516100BC6D7BF43966FE24 /* XCLocalSwiftPackageReference "Vendor/libjpeg-turbo" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 05291C73B5B17BC91F723AE7 /* Products */;
@@ -2414,10 +2446,12 @@
 				1A4D2C2B3872069A0BC9F9DE /* ImageReader.swift in Sources */,
 				B9DF6EF3C016CA376CA2AB0C /* ImageSupport.swift in Sources */,
 				B21939BE173C9C5B614994E7 /* JobQueue.swift in Sources */,
+				36F1E8725405E9E0881179F6 /* JpegEncoder.swift in Sources */,
 				4716129B1542FA6F435DC272 /* LibreOfficeConverter.swift in Sources */,
 				54BD6990CA8477B315160E2A /* Localizer.swift in Sources */,
 				30055027897C59DFB7B1FBC8 /* LzipReader.swift in Sources */,
 				D192C6AF92B5C5F311BCB982 /* MagickImageConverter.swift in Sources */,
+				87107778DD248029F5DAEA1A /* MagickResize.swift in Sources */,
 				5FC5B79E3484A1A513D4B556 /* MarkdownAlertTitles.swift in Sources */,
 				EE97C4F815C37AC06904CE5A /* MarkdownBlockParsers.swift in Sources */,
 				2F206FF3DB6C1E54B56580A3 /* MarkdownBlockProcessor.swift in Sources */,
@@ -2555,7 +2589,9 @@
 				828C506E7D5AD24D2CBA4E8B /* ImageEngineTests.swift in Sources */,
 				BCBCA36C1B437D4582E69F90 /* JobQueueStagingTests.swift in Sources */,
 				473F6BDB4D67903115D996DC /* JobQueueTests.swift in Sources */,
+				16DC10554D10C0F2E996EFD2 /* JpegEncoderTests.swift in Sources */,
 				F723396CE05F68906B50CDCB /* LibreOfficeFormatTests.swift in Sources */,
+				AFB8FF327EC1FC19D4686863 /* MagickResizeTests.swift in Sources */,
 				CC3F8AE2C4B3DA69DB12CE84 /* MarkdownConformanceData.swift in Sources */,
 				61A8496C1452B2F8EAA83986 /* MarkdownConformanceTests.swift in Sources */,
 				7FD7196EEE83720B7C994A2B /* MarkdownCorpusComparisonTests.swift in Sources */,
@@ -2799,11 +2835,14 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					LIBRAW_NODLL,
 					USE_ZLIB,
+					USE_JPEG,
 				);
 				GCC_WARN_INHIBIT_ALL_WARNINGS = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(SRCROOT)/Vendor/LibRaw",
 					"$(SRCROOT)/Vendor/LibRaw/FileToX/include",
+					"$(SRCROOT)/Vendor/libjpeg-turbo/src",
+					"$(SRCROOT)/Vendor/libjpeg-turbo/FileToX/config",
 				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2948,11 +2987,14 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					LIBRAW_NODLL,
 					USE_ZLIB,
+					USE_JPEG,
 				);
 				GCC_WARN_INHIBIT_ALL_WARNINGS = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(SRCROOT)/Vendor/LibRaw",
 					"$(SRCROOT)/Vendor/LibRaw/FileToX/include",
+					"$(SRCROOT)/Vendor/libjpeg-turbo/src",
+					"$(SRCROOT)/Vendor/libjpeg-turbo/FileToX/config",
 				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -3319,6 +3361,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		44516100BC6D7BF43966FE24 /* XCLocalSwiftPackageReference "Vendor/libjpeg-turbo" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "Vendor/libjpeg-turbo";
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		408D0F57F5E7B5BB7BFECE0C /* XCRemoteSwiftPackageReference "libjxl-Xcode" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -3349,15 +3398,27 @@
 			package = 78219A6AC7EF43ECE0BC66AD /* XCRemoteSwiftPackageReference "libwebp-Xcode" */;
 			productName = libwebp;
 		};
+		23FFF27419E8D1A724C7E2D7 /* CJpegTurbo */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CJpegTurbo;
+		};
 		6D270E3473C62453D4D296C7 /* brotli */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 408D0F57F5E7B5BB7BFECE0C /* XCRemoteSwiftPackageReference "libjxl-Xcode" */;
 			productName = brotli;
 		};
+		98D01498BCF72F0C410675DD /* CJpegTurbo */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CJpegTurbo;
+		};
 		B3A074F7E7C884F1F0A94AF3 /* libwebp */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 78219A6AC7EF43ECE0BC66AD /* XCRemoteSwiftPackageReference "libwebp-Xcode" */;
 			productName = libwebp;
+		};
+		DFC03BD86A2913ED0E070489 /* CJpegTurbo */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CJpegTurbo;
 		};
 		E4BB925C2C53549B01797F2D /* brotli */ = {
 			isa = XCSwiftPackageProductDependency;

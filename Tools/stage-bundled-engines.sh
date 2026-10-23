@@ -31,7 +31,8 @@ while IFS= read -r -d '' file; do
     fi
 done < <(find "$source" -type f -print0)
 cp "$root/Resources/Filee.LICENSE" "$notices/Filee.LICENSE"
-# LibRaw is compiled into the helper (CDDL-1.0: its licence and notices ship with the binary).
+# LibRaw and libjpeg-turbo are compiled into the helper (their licences and notices ship with the binary).
 cp "$root/docs/upstream/LibRaw.LICENSE" "$root/docs/upstream/LibRaw.THIRD-PARTY-NOTICES.md" "$notices/"
 cp "$root/docs/upstream/PDFium.LICENSE" "$root/docs/upstream/PDFium.THIRD-PARTY-NOTICES.md" "$notices/"
+cp "$root/docs/upstream/libjpeg-turbo.LICENSE" "$root/docs/upstream/libjpeg-turbo.THIRD-PARTY-NOTICES.md" "$notices/"
 echo "Bundled engines staged: $destination"

@@ -1,4 +1,4 @@
-// Camera RAW: FileToX's LibRaw shim and ImageReader's Core Image fallback on generated DNGs, and an opt-in comparison
+// Camera RAW: FileToX's LibRaw shim on generated DNGs (lossy ones through libjpeg-turbo), and an opt-in comparison
 // with the C# helper. FILETOX_RAW_SAMPLES=<folder> holding samples/<id>/<id>.<raw extension> and the C# helper's PNG of
 // each sample as out/cs/<id>.png (the 2026-10 measurement in /tmp/ftx-raw) converts every sample with the "magick"
 // engine and wants the C# pixels exactly, except for files LibRaw can't develop here (Core Image fallback).
@@ -56,19 +56,19 @@ final class CameraRawTests: XCTestCase {
         XCTAssertGreaterThan(bottom.b, bottom.r + 60, "\(bottom)")
     }
 
-    func testLossyDngFallsBackToCoreImage() async throws {
+    func testLossyDngIsDevelopedByLibRawWithLibjpeg() async throws {
         let path = try dng(.lossy)
-        // This LibRaw has no libjpeg: it refuses lossy DNGs, and ImageReader hands them to Core Image.
+        // LibRaw built with USE_JPEG (libjpeg-turbo), like ImageMagick's: lossy DNGs no longer need Core Image.
         var image = FTXRawImage()
-        let error = ftx_libraw_develop(path, &image)
-        XCTAssertEqual(String(cString: ftx_libraw_strerror(error)), "Unsupported file format or not RAW file")
+        XCTAssertEqual(ftx_libraw_develop(path, &image), 0)
+        free(image.pixels)
 
         let output = try await GraphicsTestKit.convert(engine, path, to: "png")
         let result = try GraphicsTestKit.decode(output[0])
-        XCTAssertEqual([result.width, result.height], [40, 60]) // Core Image turns it upright itself
+        XCTAssertEqual([result.width, result.height], [40, 60]) // turned upright by AutoOrient
         XCTAssertFalse(ImagePixels.hasAlpha(result.frames[0]))
         let top = GraphicsTestKit.pixel(result.frames[0], 20, 10), bottom = GraphicsTestKit.pixel(result.frames[0], 20, 50)
-        // LibRaw-style auto-brightness: the brightest channel reaches white.
+        // LibRaw's auto-brightness: the brightest channel reaches white.
         XCTAssertGreaterThan(top.r, 240, "\(top)")
         XCTAssertLessThan(max(top.g, top.b), 100, "\(top)")
         XCTAssertGreaterThan(bottom.b, 240, "\(bottom)")

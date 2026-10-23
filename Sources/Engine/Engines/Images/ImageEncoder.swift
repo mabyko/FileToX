@@ -1,7 +1,7 @@
 // Port of Filee.Engines/Magick/ImageEncoder.cs: applies preset ImageOptions and writes frames in the requested format.
 // Used by MagickImageConverter and by every engine that writes raster images (PDF pages, SVG, CAD, ICNS, Ghostscript).
-// ImageMagick is replaced by ImageIO for the formats this Mac encodes, libwebp / libjxl for WebP and JPEG XL, and Swift
-// codecs for Netpbm and PSD/PSB.
+// ImageMagick is replaced by ImageIO for the formats this Mac encodes, libjpeg-turbo set up like ImageMagick for JPEG,
+// libwebp / libjxl for WebP and JPEG XL, Swift codecs for Netpbm and PSD/PSB, and ImageMagick's resize ported to Swift.
 
 import CoreGraphics
 import Foundation
@@ -26,8 +26,13 @@ struct ImageFrame {
     static let icoSizesKey = "FileToXIcoSizes" as CFString
     /// Lossless WebP requested (`ImageOptions.webpLossless`).
     static let losslessKey = "FileToXLossless" as CFString
-    /// Preset quality 1…100 for the WebP and JPEG XL encoders (ImageMagick's `image.Quality`).
+    /// Preset quality 1…100 for the JPEG, WebP and JPEG XL encoders (ImageMagick's `image.Quality`).
     static let qualityKey = "FileToXQuality" as CFString
+    /// Sampling factors of a JPEG source, [h, v] per component (ImageMagick's "jpeg:sampling-factor" property).
+    static let jpegSamplingKey = "FileToXJpegSampling" as CFString
+    /// Resolution as the file stored it, [x, y, unit] with unit 1 = per inch, 2 = per centimetre (ImageMagick's
+    /// `resolution` and `units`, which the JPEG writer copies into JFIF). `dpi` holds the same in inches.
+    static let resolutionKey = "FileToXResolution" as CFString
 }
 
 enum ImageEncoder {
@@ -124,9 +129,10 @@ enum ImageEncoder {
         let (width, height) = (frame.image.width, frame.image.height)
         switch options.resize {
         case .percent where options.resizePercent > 0 && options.resizePercent != 100:
-            let scale = Double(options.resizePercent) / 100
-            frame.image = ImagePixels.resized(frame.image, width: max(1, Int((Double(width) * scale + 0.5).rounded(.down))),
-                                              height: max(1, Int((Double(height) * scale + 0.5).rounded(.down))))
+            // ParseMetaGeometry of "N%".
+            let percent = Double(options.resizePercent)
+            frame.image = ImagePixels.resized(frame.image, width: max(1, Int(percent * Double(width) / 100.0 + 0.5)),
+                                              height: max(1, Int(percent * Double(height) / 100.0 + 0.5)))
         case .longEdge where options.longEdge > 0 && (width > options.longEdge || height > options.longEdge):
             // Only shrink images larger than the box, never upscale (ImageMagick's ">" geometry).
             let scale = min(Double(options.longEdge) / Double(width), Double(options.longEdge) / Double(height))
@@ -138,7 +144,10 @@ enum ImageEncoder {
 
         if options.grayscale { frame.image = ImagePixels.grayscale(frame.image) }
 
-        if let dpi = options.dpi, dpi > 0 { frame.dpi = (Double(dpi), Double(dpi)) }
+        if let dpi = options.dpi, dpi > 0 {
+            frame.dpi = (Double(dpi), Double(dpi))
+            frame.properties[ImageFrame.resolutionKey] = nil
+        }
 
         if !options.keepMetadata {
             frame.properties[ImageFrame.metadataKey] = nil
@@ -152,7 +161,7 @@ enum ImageEncoder {
         let quality = min(max(options.quality, 1), 100)
         switch targetFormat {
         case "jpg":
-            frame.properties[kCGImageDestinationLossyCompressionQuality] = jpegQuality(quality)
+            frame.properties[ImageFrame.qualityKey] = quality
         case "avif":
             // ImageIO's AVIF encoder rejects 1.0.
             frame.properties[kCGImageDestinationLossyCompressionQuality] = min(Double(quality) / 100, 0.99)
@@ -216,6 +225,10 @@ enum ImageEncoder {
             try WebpEncoder.write(frames, to: path, animation: frames.count > 1)
         case "jxl":
             try JpegXlEncoder.write(first, to: path)
+        // A frame that carries an ImageIO quality is written by ImageIO: Filee encoded those pictures with Skia, not
+        // ImageMagick (comic pages and PDF scans, see ComicBook.renderPdf and PdfDocumentReader).
+        case "jpg" where first.properties[kCGImageDestinationLossyCompressionQuality] == nil:
+            try JpegEncoder.write(first, to: path)
         default:
             try writeImageIO(frames, to: path, format: format)
         }
@@ -289,7 +302,7 @@ enum ImageEncoder {
     }
 
     private static let privateKeys: Set<CFString> = [ImageFrame.metadataKey, ImageFrame.loopCountKey, ImageFrame.icoSizesKey, ImageFrame.losslessKey,
-                                                     ImageFrame.qualityKey]
+                                                     ImageFrame.qualityKey, ImageFrame.jpegSamplingKey, ImageFrame.resolutionKey]
 
     /// Sets the EXIF orientation of the frame and of its metadata.
     private static func setOrientation(_ frame: inout ImageFrame, _ orientation: Int) {
@@ -302,7 +315,8 @@ enum ImageEncoder {
     }
 
     /// ImageIO quality (0…1) that gives about the IJG/ImageMagick JPEG quality `quality` (1…100): ImageIO's own
-    /// scale is far steeper (0.65 is IJG 90). Measured from the quantization tables ImageIO writes.
+    /// scale is far steeper (0.65 is IJG 90). Measured from the quantization tables ImageIO writes. Only for the JPEGs
+    /// Filee wrote with Skia; ImageMagick's JPEGs go through `JpegEncoder`.
     /// shortcut: one table for every macOS; re-measure if Apple changes its JPEG encoder.
     static func jpegQuality(_ quality: Int) -> Double {
         jpegQualities[min(max(quality, 1), 100) - 1]

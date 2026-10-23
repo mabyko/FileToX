@@ -114,11 +114,9 @@ final class PdfSharpConverter: Converter, PdfMerger {
     /// everything else is embedded losslessly (Core Graphics compresses it with Flate).
     private static func encodeForPdf(_ frame: ImageFrame, sourceFormat: String, _ options: ImageOptions) throws -> CGImage {
         guard sourceFormat == "jpg", !ImagePixels.hasAlpha(frame.image) else { return frame.image }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil) else { return frame.image }
-        CGImageDestinationAddImage(destination, frame.image,
-                                   [kCGImageDestinationLossyCompressionQuality: ImageEncoder.jpegQuality(max(options.quality, 85))] as CFDictionary)
-        guard CGImageDestinationFinalize(destination), let provider = CGDataProvider(data: data),
+        var encoded = frame
+        encoded.properties[ImageFrame.qualityKey] = min(max(options.quality, 85), 100)
+        guard let data = try? JpegEncoder.encode(encoded), let provider = CGDataProvider(data: data as CFData),
               let jpeg = CGImage(jpegDataProviderSource: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else {
             return frame.image
         }

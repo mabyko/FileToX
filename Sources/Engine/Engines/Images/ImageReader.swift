@@ -51,6 +51,8 @@ enum ImageReader {
         default: [0]
         }
         let fileProperties = CGImageSourceCopyProperties(source, nil) as? [CFString: Any] ?? [:]
+        // ImageMagick's "jpeg:sampling-factor", which its JPEG writer reuses.
+        let sampling = format == "jpg" ? (try? Data(contentsOf: URL(fileURLWithPath: path))).flatMap(JpegEncoder.samplingFactors) : nil
         let animation = (fileProperties[kCGImagePropertyGIFDictionary] ?? fileProperties[kCGImagePropertyWebPDictionary]) as? [CFString: Any]
         let loops = (animation?[kCGImagePropertyGIFLoopCount] ?? animation?[kCGImagePropertyWebPLoopCount]) as? NSNumber
 
@@ -72,6 +74,8 @@ enum ImageReader {
             }
             let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
             var frame = ImageFrame(image: image, delay: delay(properties), dpi: storedDpi(properties, format: format))
+            if let resolution = storedResolution(properties, format: format) { frame.properties[ImageFrame.resolutionKey] = resolution }
+            if let sampling { frame.properties[ImageFrame.jpegSamplingKey] = sampling }
             if let orientation = properties[kCGImagePropertyOrientation] as? NSNumber, orientation.intValue != 1 {
                 frame.properties[kCGImagePropertyOrientation] = orientation.intValue
             }
@@ -84,8 +88,8 @@ enum ImageReader {
 
     /// Camera RAW developed by LibRaw exactly as the C# helper's ImageMagick did (Filee: camera white balance, sRGB, AHD,
     /// auto-brightness, then 8 bits), so the colours are the same. The picture comes as stored, with its orientation for
-    /// ApplyOptions' AutoOrient. Files LibRaw can't develop (lossy DNG: this build has no libjpeg; cameras LibRaw doesn't
-    /// know) go to Core Image's RAW pipeline set up to look like LibRaw.
+    /// ApplyOptions' AutoOrient. Files LibRaw can't develop (cameras LibRaw doesn't know) go to Core Image's RAW pipeline
+    /// set up to look like LibRaw.
     private static func readRaw(_ path: String) throws -> ImageFrame {
         var raw = FTXRawImage()
         let error = ftx_libraw_develop(path, &raw)
@@ -225,6 +229,38 @@ enum ImageReader {
     /// The resolution ImageMagick reads from the file, in pixels per inch; nil when it has none (or no unit).
     /// PNG pHYs in metres, BMP pixels per metre, PSD resolution info, TIFF XResolution with its unit, and for JPEG the
     /// EXIF (or JFIF) value with the EXIF (or JFIF) unit: a value without any unit counts as none.
+    /// The resolution ImageMagick reads, [x, y, unit] (unit 0 = undefined, 1 = per inch, 2 = per centimetre), for the
+    /// JFIF header of a JPEG written from it: EXIF/TIFF tags first (its SyncResolutionFromProperties), else PNG's pHYs
+    /// and BMP's header in pixels per centimetre, JFIF as stored, PSD's resolution in inches.
+    static func storedResolution(_ properties: [CFString: Any], format: String) -> [Double]? {
+        func number(_ value: Any?) -> Double? { (value as? NSNumber)?.doubleValue }
+        let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
+        if let x = number(tiff?[kCGImagePropertyTIFFXResolution]), let y = number(tiff?[kCGImagePropertyTIFFYResolution]) {
+            let unit = (tiff?[kCGImagePropertyTIFFResolutionUnit] as? NSNumber)?.intValue ?? 2
+            return [x, y, unit == 2 ? 1 : unit == 3 ? 2 : 0]
+        }
+        switch format {
+        case "png":
+            let png = properties[kCGImagePropertyPNGDictionary] as? [CFString: Any]
+            guard let x = number(png?[kCGImagePropertyPNGXPixelsPerMeter]), x > 0 else { return nil }
+            return [x / 100, (number(png?[kCGImagePropertyPNGYPixelsPerMeter]) ?? x) / 100, 2]
+        case "jpg":
+            let jfif = properties[kCGImagePropertyJFIFDictionary] as? [CFString: Any]
+            guard let x = number(jfif?[kCGImagePropertyJFIFXDensity]), let y = number(jfif?[kCGImagePropertyJFIFYDensity]) else { return nil }
+            return [x, y, number(jfif?[kCGImagePropertyJFIFDensityUnit]) ?? 0]
+        case "bmp":
+            // ImageIO reports pixels per metre × 0.0254; ImageMagick keeps pixels per metre / 100.
+            guard let x = number(properties[kCGImagePropertyDPIWidth]), x > 0 else { return nil }
+            let y = number(properties[kCGImagePropertyDPIHeight]) ?? x
+            return [(x / 0.0254).rounded() / 100, (y / 0.0254).rounded() / 100, 2]
+        case "psd", "psb":
+            guard let x = number(properties[kCGImagePropertyDPIWidth]), x > 0 else { return nil }
+            return [x, number(properties[kCGImagePropertyDPIHeight]) ?? x, 1]
+        default:
+            return nil
+        }
+    }
+
     static func storedDpi(_ properties: [CFString: Any], format: String) -> (x: Double, y: Double)? {
         func number(_ value: Any?) -> Double? { (value as? NSNumber)?.doubleValue }
         let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any]

@@ -31,6 +31,12 @@ All paths below are relative to the named worktree, unless absolute.
 | Original artifacts, corrected comparator | 83 | 235 | 531 | 68 |
 | First fixed helper | 75 | 243 | 531 | 60 |
 | Final helper (`cd35b98`) | **73** | **244** | **532** | **58** |
+| JPEG/resize parity (`feat/jpeg-resize-parity`) | **67** | **233** | **549** | **52** |
+
+The last row is a later replay of the same corpus, cases and engine paths with the helper of branch
+`feat/jpeg-resize-parity` (libjpeg-turbo JPEG writing and ImageMagick's resize, see the two "resolved" sections
+below). Evidence in worktree `t3-4b2d90a6`: `build/engine-compare/candidate-jpeg-final`,
+`comparison-jpeg-final/report.json` and `build/jpeg-parity/final-delta.txt` (every changed case, before → after).
 
 The final non-CAD result is **58 FAIL / 244 WARN / 532 PASS** across 834 cases.
 All 849 conversions were replayed, with **zero harness errors and zero inspection
@@ -69,7 +75,7 @@ marks a measured backend difference whose quantitative acceptance is still open.
 | TAR/PAX, XML IDs/dates, embedded image bytes, container IDs, TGA inspection, RST DPI | Incidental bytes were compared as content. | a | Normalize and add negative harness checks in `7b1393f`. |
 | GIF alpha/canvas, PSD/PSB composites, comic geometry/quality, OOXML directories, SNB indentation | Port implementation diverged from Filee. | c | Fix in the four engine commits below, with regression tests. |
 | 43 PDF raster cases | PDFKit/CoreGraphics versus PDFium/Skia. | b? | Retain strict FAIL; request a rendering-parity decision. |
-| Six JPEG and three ICO cases | Native chroma/quantization and resize filters. | b? | Retain strict FAIL; request encoding/resize acceptance. |
+| Six JPEG and three ICO cases | Native chroma/quantization and resize filters. | c (resolved) | JPEG written with libjpeg-turbo like ImageMagick, resize ported from ImageMagick: five of the nine now byte- or decode-identical, three JPEGs remain on the Skia/PDF-raster route. |
 | Three SVG raster cases and JP2 quality differences | Backend/quality choices already recorded in the migration decisions. | b | Record scores and retain raw statuses; no new choice required. |
 | Three image-to-markup cases | C# output lacks referenced assets; Swift preserves the images and changes layout/alt details. | c (reference) / b | Retain captured discrepancy; hand layout/alt evidence to the Markup owner. |
 | Generated Calibre covers | Random themes/layouts; one first-fixed cover is a bilingual OCR false positive. | a / b | Normalize only when marker, geometry and nonempty OCR agree; document the visually verified strict-guard exception. |
@@ -105,8 +111,11 @@ Focused XCTest coverage:
 
 The retained full replay had **58 non-CAD FAILs**: 43 PDF raster cases, six JPEG
 cases, three ICO cases, three SVG cases and three image-to-markup resource cases.
-The PDFium follow-up below resolves all 43 PDF raster FAILs; the other 15 cases
-were outside that focused replay. The
+The PDFium follow-up below resolves all 43 PDF raster FAILs, and the JPEG/resize
+parity work resolves the six JPEG and three ICO cases; the two were measured on
+separate branches, so the combined replay after merging is recorded in the final
+ledger. Expected remaining non-CAD FAILs: the three Skia-encoded PDF-page JPEGs,
+three SVG and three image-to-markup cases. The
 Calibre OCR and SNB subsections retain evidence from the first fixed run, but
 neither remains FAIL in the final run.
 
@@ -239,11 +248,31 @@ six byte-identical outputs also receive 99/1 here.
 | `auto-123-txt-to-webp` | 36.319 | 0.893130 | 99.000 | 1.000000 | PASS |
 | `builtin-to-cbz` | 34.894 | 0.912828 | 58.403 | 0.999782 | WARN |
 
-### ImageIO JPEG encoding
+### ImageIO JPEG encoding — resolved
 
-**Classification:** native encoding difference; acceptance pending.
-**Decision needed:** accept the chroma/quantization difference, or require a
-different JPEG encoding policy/backend. Keep the six cases at FAIL meanwhile.
+**Resolved (2026-10-23, `feat/jpeg-resize-parity`):** decision "match ImageMagick". JPEG is written by
+libjpeg-turbo 3.2.0 (the version inside the C# helper's Magick.Native) set up like ImageMagick 7.1.2-32's
+`WriteJPEGImage` with Filee's settings ([migration decisions](swift-engine-migration.md)).
+
+| Case | Before | After |
+| --- | --- | --- |
+| `auto-032-flv-to-jpg` | FAIL 27.393 dB / 0.999092 | **PASS, byte-identical** |
+| `auto-045-mkv-to-jpg` | FAIL 27.393 dB / 0.999092 | **PASS, byte-identical** |
+| `auto-079-wmv-to-jpg` | FAIL 27.580 dB / 0.999108 | **PASS, byte-identical** |
+| `auto-043-m4v-to-cbz` | FAIL 28.027 dB / 0.993090 | FAIL 28.027 dB / 0.993090 |
+| `auto-045-mkv-to-hwpx` | FAIL 27.914 dB / 0.993128 | FAIL 27.914 dB / 0.993128 |
+| `auto-076-webm-to-hwpx` | FAIL 27.920 dB / 0.993238 | FAIL 27.920 dB / 0.993238 |
+
+The three remaining cases are not ImageMagick JPEGs: their route is video → PDF → CBZ/HWPX, and the embedded
+picture is a PDF page that Filee rendered with PDFium and encoded with **Skia** (`ComicBook.RenderPdf` at the preset
+quality, `PdfDocumentReader`'s scan at 85). The C# files show it: IJG tables of quality 90/85 with 4:2:0 sampling
+and optimized Huffman tables, which ImageMagick would have written 4:4:4 at 90. By decision these Skia JPEGs stay
+on ImageIO; they belong with the PDF raster group below (the page pixels differ too). The other ImageMagick JPEG
+routes also improved: twelve preset/option JPEG cases (`builtin-to-jpg`, `option-*`) went WARN → PASS byte-identical,
+`builtin-jpg-70` 39.848 → 46.066 dB (its JPEG XL source is decoded by ImageIO, not libjxl).
+The only lower scores are `auto-012-txt-to-jpg` and `auto-113-odt-to-jpg` (36.323 → 36.291 and 36.316 → 36.285 dB,
+still FAIL on SSIM 0.89): ImageMagick's encoding now applied to PDFKit pages that differ from PDFium's. Calibre
+cases with generated covers changed randomly in both directions, as in earlier replays.
 
 Cases: `auto-032-flv-to-jpg`, `auto-043-m4v-to-cbz`,
 `auto-045-mkv-to-hwpx`, `auto-045-mkv-to-jpg`,
@@ -256,10 +285,27 @@ differ. The output sizes are 8,440 versus 6,355 bytes. Thus the size reduction
 alone does not show missing video frames or document content; the embedded JPEG
 in CBZ/HWPX triggers the same strict pixel test as standalone output.
 
-### vImage versus ImageMagick ICO resampling
+### vImage versus ImageMagick ICO resampling — resolved
 
-**Classification:** native resize-filter difference; acceptance pending.
-**Decision needed:** accept these icon results or require a closer filter.
+**Resolved (2026-10-23, `feat/jpeg-resize-parity`):** ImageMagick's `ResizeImage` (Q8) is ported to Swift
+(`MagickResize`, including its filter choice and clang's fused multiply-adds), and ICO padding, ICNS entries and
+alpha removal keep straight samples like ImageMagick. All three cases now decode identical to the C# icons in all
+six frames (99 dB / 1.0); they are WARN only because ImageIO's ICO container differs from ImageMagick's (PNG vs BMP
+entries).
+
+| Case | Before (16 px frame) | After (every frame) |
+| --- | --- | --- |
+| `auto-032-flv-to-ico` | FAIL 29.974 dB / 0.996098 | WARN 99 dB / 1.0 |
+| `auto-045-mkv-to-ico` | FAIL 29.974 dB / 0.996098 | WARN 99 dB / 1.0 |
+| `auto-079-wmv-to-ico` | FAIL 29.802 dB / 0.995891 | WARN 99 dB / 1.0 |
+
+Other resize routes: `option-resize-long-edge` and `option-resize-percent` 43.624 dB → identical pixels;
+`builtin-to-ico`, `option-ico-sizes`, `auto-061-psd-to-ico`, the video ICNS cases → identical pixels;
+`auto-011-cbz-to-ico` 32.552 → 46.088 dB, `auto-113-odt-to-ico` 35.166 → 53.362 dB (PDF-raster sources).
+`builtin-to-icns` and `auto-100-avif-to-icns` stay at 36.4 dB: their HEIC/AVIF sources decode differently in ImageIO
+and libheif (already 33 dB at the unresized 1024 px entry).
+
+The original analysis follows.
 
 Cases: `auto-032-flv-to-ico`, `auto-045-mkv-to-ico`,
 `auto-079-wmv-to-ico`. All retain six square frames at
