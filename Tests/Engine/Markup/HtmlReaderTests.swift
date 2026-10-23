@@ -163,6 +163,36 @@ final class HtmlReaderTests: XCTestCase {
         XCTAssertEqual(paragraphs(content).map(text), ["안", "밖"])
     }
 
+    func testTreeRepairsMatchHtml5() throws {
+        // Where libxml2's HTML 4 tree differs from HTML5 (AngleSharp in Filee), HtmlDom repairs it.
+        let content = try parse("""
+            <html><head><title>제목 <b>그대로</b></title><style>p { text-indent: 3em }</style></head>
+            글<dl><dd>하나<dd>둘</dl><picture><source srcset="x.png"><b>소스 뒤</b></picture>
+            <xmp>a <b>b</b> &amp;</xmp><p>줄</br>바꿈 &#150; <o:p>워드</o:p></p><pre>쪽\u{0C}나눔</pre>
+            """)
+
+        XCTAssertEqual(content.title, "제목 <b>그대로</b>") // <title> is text in HTML5
+        let paragraphs = paragraphs(content)
+        XCTAssertNil(paragraphs[0].format.firstLine) // no implied <p> picking up p rules
+        XCTAssertEqual(paragraphs.map { $0.format.left ?? 0 }.prefix(3), [0, 2000, 2000]) // dd closes dd
+        XCTAssertEqual(paragraphs.map(text).dropFirst(3).prefix(2), ["소스 뒤", "a <b>b</b> &amp;"])
+        XCTAssertEqual(paragraphs[5].inlines.filter { $0 is HLineBreak }.count, 1) // </br>
+        XCTAssertEqual(text(paragraphs[5]), "줄 바꿈 – 워드") // C1 reference as Windows-1252, o:p kept
+        XCTAssertEqual(text(paragraphs[6]), "쪽\u{0C}나눔") // libxml2 would drop the form feed
+    }
+
+    func testReadOptionsMapLinksAndIds() throws {
+        let folder = try newFolder()
+        let options = HtmlReadOptions(baseFolder: folder, mediaFolder: folder,
+                                      mapLink: { $0.hasPrefix("#") ? "ch2.xhtml" + $0 : nil },
+                                      mapId: { $0 == "skip" ? nil : "c1-" + $0 })
+        let content = try HtmlReader.parse(##"<p id="a">A <a href="#b">내부</a> <a href="http://x">외부</a></p><p id="skip">B</p>"##, options)
+        let inlines = HDocumentWalker.inlines(content.blocks)
+        XCTAssertEqual(inlines.compactMap { ($0 as? HBookmark)?.name }, ["c1-a"])
+        XCTAssertEqual(inlines.compactMap { ($0 as? HLink)?.target }, ["ch2.xhtml#b"])
+        XCTAssertEqual(paragraphs(content).map(text), ["A 내부 외부", "B"])
+    }
+
     func testPicturesFromFilesAndDataUrisLinksAndAnchors() throws {
         let folder = try newFolder()
         try FileManager.default.createDirectoryIfNeeded(FilePath.combine(folder, "img"))

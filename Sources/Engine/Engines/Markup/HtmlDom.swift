@@ -131,20 +131,32 @@ enum HtmlDom {
     /// Parses HTML text (already decoded) into a document. Never loads anything from the network.
     static func parse(_ html: String) -> Document {
         // HTML5 input preprocessing: CR LF and lone CR become LF.
-        let text = html.contains("\r") ? html.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n") : html
+        var text = rawText(html.contains("\r") ? html.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n") : html)
+        // libxml2 drops control characters XML does not allow (the form feeds of licence texts); HTML5 keeps them.
+        // They pass through as the noncharacters U+FDD0 + code and come back in `cleaned`.
+        if text.utf8.contains(where: { $0 < 0x20 && $0 != 0x09 && $0 != 0x0A && $0 != 0x0D && $0 != 0 }) {
+            text = String(String.UnicodeScalarView(text.unicodeScalars.map {
+                $0.value < 0x20 && $0.value != 0x09 && $0.value != 0x0A && $0.value != 0x0D && $0.value != 0 ? Unicode.Scalar(0xFDD0 + $0.value)! : $0
+            }))
+        }
         let options = Int32(HTML_PARSE_RECOVER.rawValue | HTML_PARSE_NONET.rawValue | HTML_PARSE_NOERROR.rawValue
             | HTML_PARSE_NOWARNING.rawValue | HTML_PARSE_NODEFDTD.rawValue | HTML_PARSE_IGNORE_ENC.rawValue
             | XML_PARSE_HUGE.rawValue)
         let bytes = Array(text.utf8)
         guard !bytes.isEmpty, bytes.count < Int(Int32.max), let context = htmlNewParserCtxt() else { return Document(nil) }
         defer { htmlFreeParserCtxt(context) }
-        // libxml2 drops an undeclared prefix from the element it creates ("mbp:pagebreak" becomes "pagebreak"): give
-        // the node the full name the tokenizer saw, as HTML5 parsers keep it.
         context.pointee.sax.pointee.startElement = { parser, name, attributes in
             xmlSAX2StartElement(parser, name, attributes)
-            guard let name, strchr(UnsafeRawPointer(name).assumingMemoryBound(to: CChar.self), 0x3A) != nil,
-                  let node = parser?.assumingMemoryBound(to: xmlParserCtxt.self).pointee.node else { return }
-            xmlNodeSetName(node, name)
+            guard let name, let context = parser?.assumingMemoryBound(to: xmlParserCtxt.self), let node = context.pointee.node else { return }
+            let tag = UnsafeRawPointer(name).assumingMemoryBound(to: CChar.self)
+            if strchr(tag, 0x3A) != nil {
+                // libxml2 drops an undeclared prefix ("mbp:pagebreak" becomes "pagebreak"); HTML5 keeps the full name.
+                xmlNodeSetName(node, name)
+            } else if strcmp(tag, "p") == 0, attributes == nil, let cursor = context.pointee.input?.pointee.cur,
+                      cursor.pointee != 0x3E, cursor.pointee != 0x2F {
+                // A <p> libxml2 opened for text outside any element (no tag ends at the cursor); HTML5 has none.
+                node.pointee._private = UnsafeMutableRawPointer(bitPattern: 1) // marks the implied <p> for convert()
+            }
         }
         let parsed = bytes.withUnsafeBufferPointer { buffer in
             buffer.baseAddress!.withMemoryRebound(to: CChar.self, capacity: buffer.count) {
@@ -183,7 +195,7 @@ enum HtmlDom {
                 child = text.pointee.next
             }
             let name = qualifiedName(current.pointee.name, current.pointee.ns).lowercased()
-            if !attributes.contains(where: { $0.name == name }) { attributes.append((name, windows1252Controls(value))) }
+            if !attributes.contains(where: { $0.name == name }) { attributes.append((name, cleaned(value))) }
             attribute = current.pointee.next
         }
         return Element(qualifiedName(node.pointee.name, node.pointee.ns).lowercased(), attributes)
@@ -198,12 +210,14 @@ enum HtmlDom {
             let parent = stack[stack.count - 1].1
             stack[stack.count - 1].0 = node.pointee.next
             switch node.pointee.type {
+            case XML_ELEMENT_NODE where node.pointee._private == UnsafeMutableRawPointer(bitPattern: 1): // implied <p>: keep only its content
+                stack.append((node.pointee.children, parent))
             case XML_ELEMENT_NODE:
                 let child = element(node)
                 parent.append(child)
                 stack.append((node.pointee.children, child))
             case XML_TEXT_NODE, XML_CDATA_SECTION_NODE:
-                let data = windows1252Controls(string(node.pointee.content))
+                let data = cleaned(string(node.pointee.content))
                 if !data.isEmpty { parent.append(Text(data)) }
             default:
                 break // comments, processing instructions
@@ -214,10 +228,37 @@ enum HtmlDom {
 
     // MARK: HTML5 repairs
 
+    /// The text of <title> (RCDATA) and <xmp> (RAWTEXT) is not markup in HTML5, and </br> is a line break.
+    private static func rawText(_ html: String) -> String {
+        guard ["<title", "<xmp", "</br"].contains(where: { html.range(of: $0, options: .caseInsensitive) != nil }) else { return html }
+        var result = endBreak.stringByReplacingMatches(in: html, range: NSRange(html.startIndex..., in: html), withTemplate: "<br>")
+        for (pattern, escapeAmpersands) in [(titleElement, false), (xmpElement, true)] {
+            for match in pattern.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed() {
+                guard let range = Range(match.range(at: 2), in: result) else { continue }
+                var content = String(result[range])
+                if escapeAmpersands { content = content.replacingOccurrences(of: "&", with: "&amp;") }
+                result.replaceSubrange(range, with: content.replacingOccurrences(of: "<", with: "&lt;"))
+            }
+        }
+        return result
+    }
+
+    private static let endBreak = try! NSRegularExpression(pattern: #"</br\s*>"#, options: .caseInsensitive)
+    private static let titleElement = try! NSRegularExpression(pattern: #"(<title\b[^>]*>)(.*?)(</title\s*>)"#, options: [.caseInsensitive, .dotMatchesLineSeparators])
+    private static let xmpElement = try! NSRegularExpression(pattern: #"(<xmp\b[^>]*>)(.*?)(</xmp\s*>)"#, options: [.caseInsensitive, .dotMatchesLineSeparators])
+
     private static func repair(_ root: Element) {
         moveAfterBodyContent(root)
         for element in [root] + root.descendants() {
             switch element.localName {
+            case "dd", "dt":
+                // A dd or dt start tag closes the open one (libxml2 nests them).
+                if let index = element.childNodes.firstIndex(where: { ["dd", "dt"].contains(($0 as? Element)?.localName ?? "") }) {
+                    moveOut(element, from: index)
+                }
+            case "source", "track", "wbr", "keygen":
+                // Void in HTML5; libxml2 (HTML 4) does not know them and nests what follows inside.
+                if !element.childNodes.isEmpty { moveOut(element, from: 0) }
             case "pre", "listing", "textarea":
                 // HTML5 drops a newline right after the start tag.
                 if let first = element.childNodes.first as? Text, first.data.hasPrefix("\n") {
@@ -233,6 +274,14 @@ enum HtmlDom {
                 break
             }
         }
+    }
+
+    /// Moves the children of `element` from `index` on to right after it.
+    private static func moveOut(_ element: Element, from index: Int) {
+        guard let parent = element.parent, let position = parent.childNodes.firstIndex(where: { $0 === element }) else { return }
+        var moved: [Node] = []
+        while element.childNodes.count > index { moved.append(element.remove(at: index)) }
+        parent.insert(moved, at: position + 1)
     }
 
     /// HTML5 puts everything after </body> or </html> into the body; libxml2 leaves it beside the body.
@@ -300,13 +349,16 @@ enum HtmlDom {
         parent.insert(fostered, at: index)
     }
 
-    /// U+0080–U+009F from numeric references (&#150;) mean the Windows-1252 characters in HTML5.
-    private static func windows1252Controls(_ text: String) -> String {
-        guard text.unicodeScalars.contains(where: { (0x80...0x9F).contains($0.value) }) else { return text }
+    /// Text as HTML5 reads it: U+0080–U+009F from numeric references (&#150;) are the Windows-1252 characters, and
+    /// the control characters passed through as U+FDD1–U+FDEF come back.
+    private static func cleaned(_ text: String) -> String {
+        guard text.unicodeScalars.contains(where: { (0x80...0x9F).contains($0.value) || (0xFDD1...0xFDEF).contains($0.value) }) else { return text }
         var result = String.UnicodeScalarView()
         for scalar in text.unicodeScalars {
             if (0x80...0x9F).contains(scalar.value), let mapped = c1Map[Int(scalar.value - 0x80)], let replacement = Unicode.Scalar(mapped) {
                 result.append(replacement)
+            } else if (0xFDD1...0xFDEF).contains(scalar.value), let control = Unicode.Scalar(scalar.value - 0xFDD0) {
+                result.append(control)
             } else {
                 result.append(scalar)
             }

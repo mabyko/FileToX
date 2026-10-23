@@ -181,7 +181,8 @@ final class HtmlReader {
 
         let head = String(String.UnicodeScalarView(bytes.prefix(4096).map { Unicode.Scalar($0) }))
         let declared = firstGroup(xmlEncoding, head) ?? firstGroup(metaCharset, head)
-        if let declared, !declared.lowercased().hasPrefix("utf-16"), let encoding = TextEncodings.encoding(name: declared) {
+        if let declared, !declared.lowercased().hasPrefix("utf-16"),
+           let encoding = euckrLabels.contains(declared.lowercased()) ? TextEncodings.encoding(codePage: 949) : TextEncodings.encoding(name: declared) {
             return TextEncodings.decode(bytes, encoding: encoding)
         }
         if let text = String(data: bytes, encoding: .utf8) { return text }
@@ -210,6 +211,12 @@ final class HtmlReader {
         default: return 1252
         }
     }
+
+    /// Labels browsers decode as windows-949 (WHATWG Encoding): .NET's EUC-KR (51949) and macOS's garble the CP949
+    /// syllables outside KS X 1001 that Korean pages labelled "euc-kr" use.
+    private static let euckrLabels: Set<String> = [
+        "cseuckr", "csksc56011987", "euc-kr", "iso-ir-149", "korean", "ks_c_5601-1987", "ks_c_5601-1989", "ksc5601", "ksc_5601", "windows-949",
+    ]
 
     private static func isXhtml(_ path: String) -> Bool {
         [".xhtml", ".xht", ".xml", ".opf"].contains(FilePath.extension(path).lowercased())
