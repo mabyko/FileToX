@@ -623,15 +623,35 @@ final class CadSvgCanvas: CadCanvas {
     // SkSVGDevice's clip counter; the C# renderer's first clip is cl_3 (canvas set-up accounts for the others).
     private var clipCount = 3
     private var gradientCount = 0
+    /// The device size: the canvas bounds rounded out to whole pixels.
+    private let deviceWidth: Int
+    private let deviceHeight: Int
 
     init(width: Float, height: Float) {
+        deviceWidth = Int(width.rounded(.up))
+        deviceHeight = Int(height.rounded(.up))
         out += "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n"
         startElement("svg")
         attribute("xmlns", "http://www.w3.org/2000/svg")
         attribute("xmlns:xlink", "http://www.w3.org/1999/xlink")
         // SkSVGCanvas::Make takes the bounds rounded out to whole pixels.
-        attribute("width", String(Int(width.rounded(.up))))
-        attribute("height", String(Int(height.rounded(.up))))
+        attribute("width", String(deviceWidth))
+        attribute("height", String(deviceHeight))
+    }
+
+    /// `SkCanvas::internalQuickReject`: true when the bounds (already inflated for the paint) are not finite or miss
+    /// the device clip bounds outset by one pixel; such draws never reach the SVG device.
+    private func quickReject(_ minX: Float, _ minY: Float, _ maxX: Float, _ maxY: Float) -> Bool {
+        if !(minX.isFinite && minY.isFinite && maxX.isFinite && maxY.isFinite) { return true }
+        var clip = (left: Float(0), top: Float(0), right: Float(deviceWidth), bottom: Float(deviceHeight))
+        if let canvasClip {
+            let b = canvasClip.path.asRect().map { ($0.left, $0.top, $0.right, $0.bottom) } ?? canvasClip.path.bounds
+            clip = (max(clip.left, b.0.rounded(.down)), max(clip.top, b.1.rounded(.down)),
+                    min(clip.right, b.2.rounded(.up)), min(clip.bottom, b.3.rounded(.up)))
+        }
+        let l = max(minX, clip.left - 1), r = min(maxX, clip.right + 1)
+        let t = max(minY, clip.top - 1), b = min(maxY, clip.bottom + 1)
+        return !(l < r && t < b)
     }
 
     /// Closes open groups and the root element (the device destructor) and returns the document.
@@ -653,6 +673,10 @@ final class CadSvgCanvas: CadCanvas {
 
     func drawPath(_ path: CadSkPath, _ paint: CadSkPaint) {
         if !path.isFinite { return }
+        let bounds = path.bounds
+        // SkStrokeRec::GetInflationRadius: half the width, times the miter limit for mitred joins.
+        let radius = paint.style == .fill ? 0 : paint.strokeWidth == 0 ? 1 : paint.strokeWidth / 2 * (paint.squareEnds ? 4 : 1)
+        if quickReject(bounds.minX - radius, bounds.minY - radius, bounds.maxX + radius, bounds.maxY + radius) { return }
         beginElement("path", paint, nil)
         attribute("d", path.svgString())
         if path.isEvenOdd { attribute("fill-rule", "evenodd") }
@@ -670,6 +694,12 @@ final class CadSvgCanvas: CadCanvas {
         let glyphs = typeface.glyphs(Array(text.utf16))
         if glyphs.isEmpty { return }
         let advances = typeface.advances(glyphs, size: size)
+        // The run's bounds (glyph boxes approximated by the advances and one em up and down) on the device.
+        let total = advances.reduce(0, +)
+        let corners = [(Float(0), -size), (total, -size), (Float(0), size), (total, size)].map { (x, y) in
+            (matrix.scaleX * x + matrix.skewX * y + matrix.transX, matrix.skewY * x + matrix.scaleY * y + matrix.transY)
+        }
+        if quickReject(corners.map(\.0).min()!, corners.map(\.1).min()!, corners.map(\.0).max()!, corners.map(\.1).max()!) { return }
         // SVGTextBuilder: glyphs back to characters, whitespace consolidated, positions of dropped glyphs skipped.
         var content = ""
         var xs = ""
@@ -728,6 +758,7 @@ final class CadSvgCanvas: CadCanvas {
     func drawCircle(_ center: CadSkPoint, radius: Float, _ paint: CadSkPaint) {
         let radius = max(radius, 0)
         let left = center.x - radius, top = center.y - radius, right = center.x + radius, bottom = center.y + radius
+        if quickReject(left, top, right, bottom) { return }
         beginElement("ellipse", paint, nil)
         attribute("cx", CadSkNumbers.scalar(Float((Double(left) + Double(right)) * 0.5)))
         attribute("cy", CadSkNumbers.scalar(Float((Double(top) + Double(bottom)) * 0.5)))

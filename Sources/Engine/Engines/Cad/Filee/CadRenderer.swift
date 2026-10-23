@@ -422,7 +422,9 @@ final class CadGraphicsCanvas: CadCanvas {
 
     func drawText(_ text: String, _ typeface: CadTypeface, size: Float, _ matrix: CadSkMatrix, _ paint: CadSkPaint) {
         let glyphs = typeface.glyphs(Array(text.utf16))
-        if glyphs.isEmpty { return }
+        // Skia rejects text whose placement is not finite.
+        let values = [matrix.scaleX, matrix.skewX, matrix.transX, matrix.skewY, matrix.scaleY, matrix.transY]
+        if glyphs.isEmpty || !values.allSatisfy(\.isFinite) { return }
         var positions: [CGPoint] = []
         var x: Float = 0
         for advance in typeface.advances(glyphs, size: size) {
@@ -441,6 +443,7 @@ final class CadGraphicsCanvas: CadCanvas {
 
     func drawCircle(_ center: CadSkPoint, radius: Float, _ paint: CadSkPaint) {
         let r = max(radius, 0)
+        if !(center.isFinite && r.isFinite) { return }
         context.setFillColor(cgColor(paint.color))
         context.fillEllipse(in: CGRect(x: CGFloat(center.x - r), y: CGFloat(center.y - r), width: CGFloat(2 * r), height: CGFloat(2 * r)))
     }
