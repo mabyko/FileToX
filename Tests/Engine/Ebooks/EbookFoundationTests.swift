@@ -63,6 +63,34 @@ final class EbookFoundationTests: EbookTestCase {
         XCTAssertEqual(MobiIndex.forwardVarint(Data([1, 0x82]), 0).value, 130)
         XCTAssertEqual(MobiIndex.forwardVarint(Data(), 0).consumed, 1)
     }
+    func testMobiIndexTagGroupsByteCountsAndCncxStrings() throws {
+        func primary() -> Data {
+            var record = Data(repeating: 0, count: 56)
+            record.replaceSubrange(0..<4, with: Data("INDX".utf8))
+            BinaryPrimitives.writeUInt32BigEndian(&record, 4, 56)
+            BinaryPrimitives.writeUInt32BigEndian(&record, 24, 1)
+            BinaryPrimitives.writeUInt32BigEndian(&record, 52, 1)
+            var tagx = Data("TAGX".utf8) + Data(repeating: 0, count: 8)
+            BinaryPrimitives.writeUInt32BigEndian(&tagx, 4, 28)
+            BinaryPrimitives.writeUInt32BigEndian(&tagx, 8, 1)
+            return record + tagx + Data([6, 2, 3, 0, 1, 1, 4, 0, 2, 1, 8, 0, 0, 0, 0, 1])
+        }
+        for byteCount in [false, true] {
+            let payload = Data([1, 48, byteCount ? 15 : 13]) + (byteCount ? Data([0x82]) : Data()) + Data([0x82, 0x88, 0x83, 0x80])
+            var record = Data(repeating: 0, count: 28)
+            record.replaceSubrange(0..<4, with: Data("INDX".utf8))
+            BinaryPrimitives.writeUInt32BigEndian(&record, 20, UInt32(28 + payload.count))
+            BinaryPrimitives.writeUInt32BigEndian(&record, 24, 1)
+            record += payload + Data("IDXT".utf8) + Data([0, 28])
+            let database = try PalmDatabase.open(EbookBuilders.palmDb("index", "BOOKMOBI", [primary(), record, Data([0x83, 97, 105, 100, 0])]))
+            var strings: [Int: String] = [:]
+            let entries = try MobiIndex.read(database, 0, &strings)
+            XCTAssertEqual(entries.count, 1); XCTAssertEqual(entries[0].key, "0")
+            XCTAssertEqual(entries[0].tag(6, 0), 2); XCTAssertEqual(entries[0].tag(6, 1), 8)
+            XCTAssertEqual(entries[0].tag(1), 3); XCTAssertEqual(entries[0].tag(2), 0); XCTAssertEqual(entries[0].tag(99), -1)
+            XCTAssertEqual(strings[0], "aid")
+        }
+    }
     func testMobiHeaderMetadataAndAllCompressionHeaders() throws {
         for compression in [1, 2, 17480] {
             let db = try PalmDatabase.open(EbookBuilders.mobi(Data("Ünïcödé 한글".utf8), [], EbookBuilders.MobiOptions(compression: compression, cover: 2, title: "Stormy Night", author: "One & Two")))
@@ -88,6 +116,7 @@ final class EbookFoundationTests: EbookTestCase {
         for name in ["../outside.txt", "inside/a.txt", "/inside/b.txt", "C:/bad.txt", "folder/../../escape.txt"] { try writer.add(name, text: name) }
         try writer.close(); let original = try Data(contentsOf: URL(fileURLWithPath: source)), target = path("extracted")
         try EbookFiles.extract(ZipReader(path: source), target)
+        XCTAssertEqual(EbookFiles.safePath("/", "inside"), "/inside")
         XCTAssertNil(EbookFiles.safePath(target, "../outside.txt")); XCTAssertNil(EbookFiles.safePath(target, "C:/bad"))
         XCTAssertEqual(EbookFiles.files(target).count, 2)
         XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: source)), original)
@@ -135,9 +164,53 @@ final class EbookFoundationTests: EbookTestCase {
         XCTAssertEqual(round.metadata.title, book.metadata.title); XCTAssertEqual(round.metadata.authors, book.metadata.authors)
         for expected in ["Первый", "Текст примечания.", "Строка стиха один", "Текст подглавы."] { XCTAssertTrue(text(round.document).contains(expected), expected) }
     }
+    func testBookTitleLanguageAndFb2XmlCleaning() throws {
+        let document = HDocument(), section = HSection(), heading = HParagraph(), paragraph = HParagraph()
+        document.sections.append(section); heading.headingLevel = 1; heading.inlines = [HText("첫 제목")]
+        paragraph.inlines = [HText("안녕하세요 \u{000B} <&> 😀", HCharFormat(bold: true, italic: true))]
+        section.blocks = [heading, paragraph]
+        let metadata = BookMetadata(), book = Book(document, metadata)
+        XCTAssertEqual(book.displayTitle("file.epub"), "첫 제목"); XCTAssertEqual(book.displayLanguage(), "ko")
+        document.title = " Document "; XCTAssertEqual(book.displayTitle("file.epub"), "Document")
+        metadata.title = " Metadata "; metadata.language = " en-US "
+        XCTAssertEqual(book.displayTitle("file.epub"), "Metadata"); XCTAssertEqual(book.displayLanguage(), "en-US")
+        let output = path("clean.fb2"); try Fb2Writer.write(book, output, "file.epub", folder)
+        let xml = try XDocument.load(output)
+        XCTAssertTrue(xml.root.value.contains("안녕하세요  <&> 😀")); XCTAssertFalse(xml.root.value.contains("\u{000B}"))
+        XCTAssertTrue(xml.root.descendants().contains { $0.name.localName == "strong" && $0.value.contains("😀") })
+    }
+    func testEpubPackageNavigationCoverDedupAndInsertionOrder() throws {
+        let cover = try save("cover.png", EbookBuilders.picture(12, 20))
+        let metadata = BookMetadata(); metadata.authors = ["First Author", "Second Author"]; metadata.publisher = "A&B"; metadata.description = "<description>"
+        let package = EpubPackage("A<&", "ko-KR", metadata)
+        let image = try XCTUnwrap(package.addImage(cover, folder))
+        XCTAssertEqual(package.addImage(cover, folder, true), image)
+        package.addPage("first.xhtml", XhtmlWriter.page("First", "<h1>First</h1>", "ko", "style.css", true))
+        package.addPage("second.xhtml", XhtmlWriter.page("Second", "<h1>Second</h1>", "ko", "style.css", true))
+        package.toc = [XhtmlHeading(level: 1, text: "First", target: "first.xhtml"), XhtmlHeading(level: 2, text: "Sub", target: "first.xhtml#sub"), XhtmlHeading(level: 1, text: "Second", target: "second.xhtml")]
+        let output = path("toc.epub"); try package.save(output, "body{}", false)
+        let zip = try ZipReader(path: output)
+        XCTAssertEqual(zip.entries.map(\.name), ["mimetype", "META-INF/container.xml", "OEBPS/content.opf", "OEBPS/nav.xhtml", "OEBPS/toc.ncx", "OEBPS/style.css", "OEBPS/first.xhtml", "OEBPS/second.xhtml", "OEBPS/images/img0001.png"])
+        let opf = try XDocument.parse(XCTUnwrap(zip.string(named: "OEBPS/content.opf")))
+        XCTAssertEqual(opf.root.descendants().filter { $0.name.localName == "creator" }.map(\.value), metadata.authors)
+        XCTAssertEqual(opf.root.descendants().filter { $0.attributeValue("properties") == "cover-image" }.count, 1)
+        let nav = try XDocument.parse(XCTUnwrap(zip.string(named: "OEBPS/nav.xhtml"))), ncx = try XDocument.parse(XCTUnwrap(zip.string(named: "OEBPS/toc.ncx")))
+        XCTAssertTrue(nav.root.value.contains("목차")); XCTAssertEqual(ncx.root.descendants().filter { $0.name.localName == "navPoint" }.count, 3)
+    }
+    func testCbcWithoutReadingListPreservesNaturalBookOrder() async throws {
+        let a = path("a.cbz"), b = path("b.cbz")
+        for (file, width) in [(b, 40), (a, 20)] {
+            let zip = try ZipWriter(path: file); try zip.add("page.png", data: EbookBuilders.picture(width, 30)); try zip.close()
+        }
+        let collection = path("collection.cbc"), zip = try ZipWriter(path: collection)
+        try zip.add("b.cbz", contentsOf: b); try zip.add("a.cbz", contentsOf: a); try zip.close()
+        let pages = try await ComicBook.extractPages(collection, "cbc", EbookFiles.newFolder(folder, "collection"))
+        XCTAssertEqual(pages.compactMap { ImageSupport.info($0)?.width }, [20, 40])
+    }
     func testNaturalComparer() {
         let names = ["p10", "p02", "P1", "p2", "p000", "p0", "p999999999999999999999999"]
         XCTAssertEqual(names.sorted { NaturalComparer.compare($0, $1) < 0 }, ["p000", "p0", "P1", "p02", "p2", "p10", "p999999999999999999999999"])
+        XCTAssertLessThan(NaturalComparer.compare("x😀", "x😁"), 0)
         XCTAssertEqual(NaturalComparer.compare(nil, nil), 0); XCTAssertEqual(NaturalComparer.compare(nil, "x"), -1)
     }
     func testComicsPdfFixedLayoutAndPdfCbz() async throws {

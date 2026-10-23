@@ -62,8 +62,8 @@ enum EbookFiles {
         let relative = String(entryName.replacingOccurrences(of: "\\", with: "/").drop(while: { $0 == "/" }))
         guard !relative.isEmpty, !relative.contains(":"), !relative.utf8.contains(0) else { return nil }
         let full = FilePath.fullPath(FilePath.combine(root, relative))
-        let prefix = FilePath.fullPath(root).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let absolutePrefix = "/" + prefix + "/"
+        let fullRoot = FilePath.fullPath(root)
+        let absolutePrefix = fullRoot.hasSuffix("/") ? fullRoot : fullRoot + "/"
         return full.lowercased().hasPrefix(absolutePrefix.lowercased()) ? full : nil
     }
 
@@ -79,7 +79,7 @@ enum EbookFiles {
             return (path, mediaType!)
         }
         do {
-            let image = try ImageSupport.cgImage(path)
+            let image = try cgImage(path)
             let alpha = ![CGImageAlphaInfo.none, .noneSkipFirst, .noneSkipLast].contains(image.alphaInfo)
             let jpeg = !alpha && ["image/webp", "image/avif", "image/jxl", "image/tiff"].contains(mediaType ?? "")
             try FileManager.default.createDirectoryIfNeeded(folder)
@@ -94,6 +94,21 @@ enum EbookFiles {
             guard CGImageDestinationFinalize(destination) else { return nil }
             return (file, jpeg ? "image/jpeg" : "image/png")
         } catch { return nil }
+    }
+
+    // MagickImageInfo measures the stored pixels, before EXIF orientation is applied.
+    static func imageInfo(_ path: String) -> ImageSupport.Info? {
+        guard let info = ImageSupport.info(path) else { return nil }
+        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue else { return info }
+        return ImageSupport.Info(width: width, height: height, dpiX: info.dpiX, dpiY: info.dpiY, typeIdentifier: info.typeIdentifier, frameCount: info.frameCount)
+    }
+
+    static func cgImage(_ path: String) throws -> CGImage {
+        if let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil) { return image }
+        return try ImageSupport.cgImage(path)
     }
 
     static func imageMediaType(_ path: String) -> String? {
@@ -113,7 +128,18 @@ enum EbookFiles {
 
     // .NET's overwrite move; keep output untouched until the writer closes successfully.
     static func replace(_ source: String, _ target: String) throws {
-        if rename(source, target) != 0 { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        if rename(source, target) == 0 { return }
+        guard errno == EXDEV else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        // Calibre's work folder and the user's output folder can live on different volumes.
+        let staging = target + ".tmp-" + UUID().uuidString
+        do {
+            try FileManager.default.copyItem(atPath: source, toPath: staging)
+            if rename(staging, target) != 0 { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            try FileManager.default.removeItem(atPath: source)
+        } catch {
+            try? FileManager.default.removeItem(atPath: staging)
+            throw error
+        }
     }
 
     static func files(_ folder: String) -> [String] {

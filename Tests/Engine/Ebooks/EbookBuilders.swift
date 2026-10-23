@@ -6,11 +6,11 @@ import UniformTypeIdentifiers
 @testable import FileToXEngineKit
 
 enum EbookBuilders {
-    static func picture(_ width: Int, _ height: Int, _ jpeg: Bool = false) throws -> Data {
+    static func picture(_ width: Int, _ height: Int, _ jpeg: Bool = false, orientation: Int? = nil) throws -> Data {
         let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
         context.setFillColor(CGColor(red: 1, green: 0.5, blue: 0.3, alpha: 1)); context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         let data = NSMutableData(), destination = CGImageDestinationCreateWithData(data, (jpeg ? UTType.jpeg.identifier : UTType.png.identifier) as CFString, 1, nil)!
-        CGImageDestinationAddImage(destination, context.makeImage()!, nil)
+        CGImageDestinationAddImage(destination, context.makeImage()!, orientation.map { [kCGImagePropertyOrientation: $0] as CFDictionary })
         guard CGImageDestinationFinalize(destination) else { throw ConversionError("test picture") }
         return data as Data
     }

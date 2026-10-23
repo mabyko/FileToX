@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 import PDFKit
+import AppKit
 @testable import FileToXEngineKit
 
 final class EbookBaselineTests: EbookTestCase {
@@ -21,10 +22,17 @@ with Host(manifest["host"], copies=manifest.get("copies"), scratch=manifest_path
     host.configure(first="ebook")
     results = {}
     for case in manifest["cases"]:
-        results[case["id"]] = host.convert([case["input"]], targetFormat=case["target"])
+        if case.get("pdf") or case.get("image"):
+            preset = host.call("library.get")["presets"][0]
+            preset["targetFormat"] = case["target"]
+            preset["pdf"].update(case.get("pdf", {}))
+            preset["image"].update(case.get("image", {}))
+            results[case["id"]] = host.convert([case["input"]], preset=preset)
+        else:
+            results[case["id"]] = host.convert([case["input"]], targetFormat=case["target"])
     result_path.write_text(json.dumps(results, ensure_ascii=False, indent=2))
 """#
-    private func baseline(_ cases: [[String: String]]) async throws -> [String: [String: Any]] {
+    private func baseline(_ cases: [[String: Any]]) async throws -> [String: [String: Any]] {
         let host = "/Applications/FileToX.app/Contents/Helpers/FileToXEngine.app/Contents/MacOS/FileToXEngine"
         guard FileManager.default.fileExists(host) else { throw XCTSkip("installed C# baseline not found") }
         let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../..").standardized.path
@@ -55,6 +63,50 @@ with Host(manifest["host"], copies=manifest.get("copies"), scratch=manifest_path
             value = regex.stringByReplacingMatches(in: value, range: NSRange(location: 0, length: (value as NSString).length), withTemplate: replacement)
         }
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    func testComicExifOrientationAgainstInstalledCSharp() async throws {
+        let comic = path("rotated.cbz"), zip = try ZipWriter(path: comic)
+        try zip.add("page.jpg", data: EbookBuilders.picture(80, 120, true, orientation: 6)); try zip.close()
+        let results = try await baseline([["id": "rotated", "input": comic, "target": "pdf"]])
+        let native = try await convert(comic, "cbz", "pdf"), cs = try output(XCTUnwrap(results["rotated"]))
+        let a = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: native))?.page(at: 0)?.bounds(for: .mediaBox))
+        let b = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: cs))?.page(at: 0)?.bounds(for: .mediaBox))
+        XCTAssertEqual(a.width, b.width, accuracy: 0.1); XCTAssertEqual(a.height, b.height, accuracy: 0.1)
+    }
+    func testPdfRenderPageRangeRotationAndAnnotationsAgainstInstalledCSharp() async throws {
+        let source = path("annotated.pdf")
+        var bounds = CGRect(x: 0, y: 0, width: 120, height: 180)
+        let consumer = CGDataConsumer(url: URL(fileURLWithPath: source) as CFURL)!, context = CGContext(consumer: consumer, mediaBox: &bounds, nil)!
+        for _ in 0..<2 {
+            context.beginPDFPage(nil)
+            context.setFillColor(CGColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1)); context.fill(bounds)
+            context.setFillColor(CGColor(red: 0.1, green: 0.9, blue: 0.2, alpha: 1)); context.fill(CGRect(x: 0, y: 0, width: 40, height: 60))
+            context.endPDFPage()
+        }
+        context.closePDF()
+        let document = PDFDocument(url: URL(fileURLWithPath: source))!, page = document.page(at: 1)!
+        page.rotation = 90
+        let annotation = PDFAnnotation(bounds: CGRect(x: 50, y: 60, width: 40, height: 50), forType: .square, withProperties: nil)
+        annotation.color = .red; annotation.interiorColor = .yellow; annotation.shouldPrint = true; page.addAnnotation(annotation)
+        XCTAssertTrue(document.write(to: URL(fileURLWithPath: source)))
+        let results = try await baseline([["id": "render", "input": source, "target": "cbz", "pdf": ["pageRange": "2", "renderDpi": 96], "image": ["quality": 75]]])
+        var preset = Preset(); preset.pdf.pageRange = "2"; preset.pdf.renderDpi = 96; preset.image.quality = 75
+        let native = try await convert(source, "pdf", "cbz", preset), cs = try output(XCTUnwrap(results["render"]))
+        let a = try ZipReader(path: native), b = try ZipReader(path: cs)
+        XCTAssertEqual(a.entries.map(\.name), ["001.jpg"]); XCTAssertEqual(a.entries.map(\.name), b.entries.map(\.name))
+        let nativeImage = try save("native.jpg", XCTUnwrap(a.data(named: "001.jpg"))), csImage = try save("baseline.jpg", XCTUnwrap(b.data(named: "001.jpg")))
+        let left = try EbookFiles.cgImage(nativeImage), right = try EbookFiles.cgImage(csImage)
+        XCTAssertEqual(left.width, right.width); XCTAssertEqual(left.height, right.height)
+        func pixels(_ image: CGImage) -> [UInt8] {
+            let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            return Array(UnsafeBufferPointer(start: ctx.data!.assumingMemoryBound(to: UInt8.self), count: image.width * image.height * 4))
+        }
+        let lhs = pixels(left), rhs = pixels(right)
+        if lhs.count == rhs.count {
+            let error = zip(lhs, rhs).enumerated().filter { $0.offset % 4 != 3 }.reduce(0.0) { $0 + Double(abs(Int($1.element.0) - Int($1.element.1))) } / Double(left.width * left.height * 3)
+            XCTAssertLessThan(error, 6, "PDFKit / PDFium mean color difference")
+        }
     }
     func testStandaloneOutputsAgainstInstalledCSharp() async throws {
         let txt = try save("book.txt", Data("Hello from Filee.\n\nSecond paragraph with 한글 & XML <characters>.".utf8))

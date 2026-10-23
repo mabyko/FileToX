@@ -22,7 +22,7 @@ enum EpubWriter {
         for picture in pages {
             try Task.checkCancellation()
             guard let source = package.addImage(picture, imageFolder, count == 0) else { continue }
-            guard let info = ImageSupport.info(picture) else { throw ConversionError("The comic contains no readable pictures.") }
+            guard let info = EbookFiles.imageInfo(picture) else { throw ConversionError("The comic contains no readable pictures.") }
             count += 1
             let page = String(format: "p%04d.xhtml", count)
             let head = "<meta name=\"viewport\" content=\"width=\(info.width), height=\(info.height)\"/>\n"

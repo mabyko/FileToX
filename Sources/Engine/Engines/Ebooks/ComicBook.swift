@@ -98,7 +98,7 @@ enum ComicBook {
         for i in pages.indices {
             try Task.checkCancellation()
             guard let (file, _) = EbookFiles.commonImage(pages[i], converted, false) else { continue }
-            guard let info = ImageSupport.info(file) else { throw ConversionError("The comic contains no readable pictures.") }
+            guard let info = EbookFiles.imageInfo(file) else { throw ConversionError("The comic contains no readable pictures.") }
             // MagickImageInfo reports 72 dpi for untagged JPEGs; untagged PNGs fall back to 96.
             let density = info.dpiX ?? (EbookFiles.imageMediaType(file) == "image/jpeg" ? 72 : 0)
             let dpi = density >= 36 ? density : 96
@@ -106,7 +106,7 @@ enum ComicBook {
             // Data providers preserve JPEG's encoded bytes in a PDF, as PDFsharp did.
             let image: CGImage
             if EbookFiles.imageMediaType(file) == "image/jpeg", let provider = CGDataProvider(url: URL(fileURLWithPath: file) as CFURL), let jpeg = CGImage(jpegDataProviderSource: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) { image = jpeg }
-            else { image = try ImageSupport.cgImage(file) }
+            else { image = try EbookFiles.cgImage(file) }
             context.beginPDFPage([kCGPDFContextMediaBox as String: NSData(bytes: &rect, length: MemoryLayout<CGRect>.size)] as CFDictionary)
             context.draw(image, in: rect); context.endPDFPage(); count += 1
             progress?(Double(i + 1) / Double(pages.count))
@@ -150,6 +150,11 @@ enum ComicBook {
 }
 
 enum NaturalComparer {
+    private static func lower(_ unit: UInt16) -> UInt16 {
+        if (0xD800...0xDFFF).contains(unit) { return unit }
+        let text = String(UnicodeScalar(unit)!).lowercased()
+        return text.utf16.count == 1 ? text.utf16.first! : unit
+    }
     static func compare(_ x: String?, _ y: String?) -> Int {
         guard let left = x, let right = y else { return x == nil ? (y == nil ? 0 : -1) : 1 }
         let x = Array(left.utf16), y = Array(right.utf16)
@@ -166,8 +171,8 @@ enum NaturalComparer {
                 if numberX != numberY { return numberX.lexicographicallyPrecedes(numberY) ? -1 : 1 }
                 continue
             }
-            let a = String(decoding: [x[i]], as: UTF16.self).lowercased(), b = String(decoding: [y[j]], as: UTF16.self).lowercased()
-            if a != b { return a.utf16.lexicographicallyPrecedes(b.utf16) ? -1 : 1 }
+            let a = lower(x[i]), b = lower(y[j])
+            if a != b { return a < b ? -1 : 1 }
             i += 1; j += 1
         }
         let a = x.count - i, b = y.count - j

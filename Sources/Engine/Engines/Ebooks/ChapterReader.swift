@@ -35,7 +35,7 @@ enum ChapterReader {
     private static func link(_ href: String, _ chapter: String, _ number: Int, _ index: [String: Int]) -> String? {
         if href.hasPrefix("#") { let fragment = String(href.dropFirst()); return fragment.isEmpty ? nil : "#" + anchor(number, fragment.removingPercentEncoding ?? fragment) }
         if let colon = href.firstIndex(of: ":"), href[..<colon].utf16.count > 1, href[..<colon].utf16.allSatisfy({ (65...90).contains($0) || (97...122).contains($0) }) { return href.lowercased().hasPrefix("javascript:") ? nil : href }
-        let pieces = href.components(separatedBy: "#")
+        let pieces = href.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
         var file = pieces[0]
         let fragment = pieces.count > 1 ? (pieces[1].removingPercentEncoding ?? pieces[1]) : nil
         file = file.components(separatedBy: "?")[0]
