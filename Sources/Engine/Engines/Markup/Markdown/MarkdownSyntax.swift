@@ -385,7 +385,11 @@ extension Markdown {
     /// The document's link reference definitions; labels match ignoring case and diacritics (Markdig compares with
     /// the invariant culture, IgnoreCase | IgnoreNonSpace).
     final class LinkReferenceDefinitionGroup: ContainerBlock {
-        private(set) var links: [(String, LinkReferenceDefinition)] = []
+        private var links: [(String, LinkReferenceDefinition)] = []
+        /// An ASCII label equals exactly the ASCII labels with its lower-case form, so those are found by it and only
+        /// the other labels are compared one by one (thousands of footnotes made reading quadratic).
+        private var asciiLabels: [String: Int] = [:]
+        private var otherLabels: [Int] = []
 
         init() { super.init(nil) }
 
@@ -396,15 +400,26 @@ extension Markdown {
         func set(_ label: String, _ link: LinkReferenceDefinition) {
             if !contains(link) {
                 add(link)
-                if !links.contains(where: { Self.sameLabel($0.0, label) }) { links.append((label, link)) }
+                guard index(of: label) == nil else { return }
+                if Self.isAscii(label) { asciiLabels[label.lowercased()] = links.count } else { otherLabels.append(links.count) }
+                links.append((label, link))
             }
         }
 
-        func tryGet(_ label: String) -> LinkReferenceDefinition? {
-            links.first { Self.sameLabel($0.0, label) }?.1
+        func tryGet(_ label: String) -> LinkReferenceDefinition? { index(of: label).map { links[$0].1 } }
+
+        func containsKey(_ label: String) -> Bool { index(of: label) != nil }
+
+        /// The first label added that equals `label`.
+        private func index(of label: String) -> Int? {
+            guard Self.isAscii(label) else { return links.indices.first { Self.sameLabel(links[$0].0, label) } }
+            let ascii = asciiLabels[label.lowercased()]
+            let other = otherLabels.first { Self.sameLabel(links[$0].0, label) }
+            if let ascii, let other { return min(ascii, other) }
+            return ascii ?? other
         }
 
-        func containsKey(_ label: String) -> Bool { tryGet(label) != nil }
+        private static func isAscii(_ label: String) -> Bool { label.utf8.allSatisfy { $0 < 0x80 } }
     }
 
     // MARK: Inlines
