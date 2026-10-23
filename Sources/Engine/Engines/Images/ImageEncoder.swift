@@ -1,7 +1,7 @@
 // Port of Filee.Engines/Magick/ImageEncoder.cs: applies preset ImageOptions and writes frames in the requested format.
 // Used by MagickImageConverter and by every engine that writes raster images (PDF pages, SVG, CAD, ICNS, Ghostscript).
 // ImageMagick is replaced by ImageIO for the formats this Mac encodes, libjpeg-turbo set up like ImageMagick for JPEG,
-// libwebp / libjxl for WebP and JPEG XL, and Swift codecs for Netpbm and PSD/PSB.
+// libwebp / libjxl for WebP and JPEG XL, Swift codecs for Netpbm and PSD/PSB, and ImageMagick's resize ported to Swift.
 
 import CoreGraphics
 import Foundation
@@ -129,9 +129,10 @@ enum ImageEncoder {
         let (width, height) = (frame.image.width, frame.image.height)
         switch options.resize {
         case .percent where options.resizePercent > 0 && options.resizePercent != 100:
-            let scale = Double(options.resizePercent) / 100
-            frame.image = ImagePixels.resized(frame.image, width: max(1, Int((Double(width) * scale + 0.5).rounded(.down))),
-                                              height: max(1, Int((Double(height) * scale + 0.5).rounded(.down))))
+            // ParseMetaGeometry of "N%".
+            let percent = Double(options.resizePercent)
+            frame.image = ImagePixels.resized(frame.image, width: max(1, Int(percent * Double(width) / 100.0 + 0.5)),
+                                              height: max(1, Int(percent * Double(height) / 100.0 + 0.5)))
         case .longEdge where options.longEdge > 0 && (width > options.longEdge || height > options.longEdge):
             // Only shrink images larger than the box, never upscale (ImageMagick's ">" geometry).
             let scale = min(Double(options.longEdge) / Double(width), Double(options.longEdge) / Double(height))

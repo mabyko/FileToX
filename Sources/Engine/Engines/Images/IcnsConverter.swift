@@ -35,7 +35,7 @@ final class IcnsConverter: Converter {
             try Task.checkCancellation()
             if encoded[size] == nil {
                 // Lanczos to the exact size; no metadata (EXIF/XMP/ICC would be repeated in all ten entries).
-                let icon = ImagePixels.untagged(ImagePixels.resized(master.image, width: size, height: size))
+                let icon = ImagePixels.untagged(ImagePixels.resized(master.image, width: size, height: size, filter: .lanczos))
                 encoded[size] = try Self.png32(icon)
             }
             entries.append(IcnsEntry(type: type, data: encoded[size]!))

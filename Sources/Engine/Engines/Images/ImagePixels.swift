@@ -1,7 +1,7 @@
-// Pixel work of the image engine, what Filee left to ImageMagick (Q8): EXIF orientation, high-quality resizing,
-// grayscale, flattening onto a background and padding. Pictures are processed as 8-bit premultiplied RGBA in their own
-// RGB colour space (values are not converted, like ImageMagick keeps the ICC profile beside the pixels); grayscale
-// sources come back as grayscale images.
+// Pixel work of the image engine, what Filee left to ImageMagick (Q8): EXIF orientation, resizing (ImageMagick's own
+// filters, MagickResize), grayscale, flattening onto a background and padding. Pictures are processed as 8-bit RGBA
+// (premultiplied; straight for resizing, like ImageMagick) in their own RGB colour space (values are not converted, like
+// ImageMagick keeps the ICC profile beside the pixels); grayscale sources come back as grayscale images.
 
 import Accelerate
 import CoreGraphics
@@ -151,24 +151,53 @@ enum ImagePixels {
         return self.image(result)
     }
 
-    /// Resamples to `width` × `height` with a Lanczos filter (vImage high quality), like ImageMagick's Resize.
-    static func resized(_ image: CGImage, width: Int, height: Int) -> CGImage {
-        guard width != image.width || height != image.height else { return image }
-        let source = bitmap(image)
-        var result = source
-        (result.width, result.height) = (max(1, width), max(1, height))
-        result.pixels = [UInt8](repeating: 0, count: result.width * result.height * 4)
-        var input = source.pixels
-        input.withUnsafeMutableBytes { from in
-            result.pixels.withUnsafeMutableBytes { to in
-                var src = vImage_Buffer(data: from.baseAddress, height: vImagePixelCount(source.height), width: vImagePixelCount(source.width),
-                                        rowBytes: source.width * 4)
-                var dst = vImage_Buffer(data: to.baseAddress, height: vImagePixelCount(result.height), width: vImagePixelCount(result.width),
-                                        rowBytes: result.width * 4)
-                _ = vImageScale_ARGB8888(&src, &dst, nil, vImage_Flags(kvImageHighQualityResampling))
+    /// ImageMagick's Resize to `width` × `height` (`MagickResize`). `filter` nil is ImageMagick's own choice: Lanczos,
+    /// Mitchell for pictures with alpha or a palette (indexed or gray: ImageMagick reads those PseudoClass) and for
+    /// enlargements; then the same size leaves the picture as it is. The result has straight (not premultiplied) alpha.
+    static func resized(_ image: CGImage, width: Int, height: Int, filter: MagickResize.Filter? = nil) -> CGImage {
+        let size = (width: max(1, width), height: max(1, height))
+        guard filter != nil || size != (image.width, image.height) else { return image }
+        let model = image.colorSpace?.model
+        let alpha = hasAlpha(image)
+        let chosen = filter ?? MagickResize.defaultFilter(from: (image.width, image.height), to: size, alpha: alpha,
+                                                          palette: model == .indexed || model == .monochrome)
+        let (samples, channels, space) = straight(image)
+        let result = MagickResize.resize(samples, width: image.width, height: image.height, channels: channels, alpha: alpha, to: size,
+                                         filter: chosen)
+        return make(result, size.width, size.height, components: channels, space: space, alpha: alpha, premultiplied: false)
+    }
+
+    /// The picture's samples as ImageMagick holds them: gray or RGB in the picture's own colour space (other colour
+    /// models converted to sRGB), then straight alpha when it has alpha.
+    static func straight(_ image: CGImage) -> (samples: [UInt8], channels: Int, space: CGColorSpace) {
+        let model = image.colorSpace?.model
+        let space = model == .rgb || model == .monochrome ? image.colorSpace! : CGColorSpace(name: CGColorSpace.sRGB)!
+        let channels = (model == .monochrome ? 1 : 3) + (hasAlpha(image) ? 1 : 0)
+        var format = vImage_CGImageFormat(bitsPerComponent: 8, bitsPerPixel: UInt32(8 * channels), colorSpace: Unmanaged.passUnretained(space),
+                                          bitmapInfo: CGBitmapInfo(rawValue: (hasAlpha(image) ? CGImageAlphaInfo.last : .none).rawValue),
+                                          version: 0, decode: nil, renderingIntent: .defaultIntent)
+        var buffer = vImage_Buffer()
+        var samples = [UInt8](repeating: 0, count: image.width * image.height * channels)
+        guard vImageBuffer_InitWithCGImage(&buffer, &format, nil, image, vImage_Flags(kvImageNoFlags)) == kvImageNoError else {
+            // Not a format vImage converts: go through the premultiplied bitmap.
+            let bitmap = bitmap(image)
+            for i in 0..<image.width * image.height {
+                let a = Int(bitmap.pixels[i * 4 + 3])
+                for c in 0..<channels - (hasAlpha(image) ? 1 : 0) {
+                    let value = Int(bitmap.pixels[i * 4 + c])
+                    samples[i * channels + c] = UInt8(hasAlpha(image) && a > 0 && a < 255 ? min(255, (value * 255 + a / 2) / a) : value)
+                }
+                if hasAlpha(image) { samples[i * channels + channels - 1] = UInt8(a) }
+            }
+            return (samples, channels, space)
+        }
+        defer { free(buffer.data) }
+        samples.withUnsafeMutableBytes { output in
+            for y in 0..<image.height {
+                memcpy(output.baseAddress! + y * image.width * channels, buffer.data + y * buffer.rowBytes, image.width * channels)
             }
         }
-        return self.image(result)
+        return (samples, channels, space)
     }
 
     /// ImageMagick's Grayscale: Rec. 709 luma of the (gamma-encoded) values; alpha is kept.
