@@ -145,7 +145,8 @@ enum PsdCodec {
         let channels = reader.u16(), height = reader.u32(), width = reader.u32(), depth = reader.u16(), mode = reader.u16()
         let large = version == 2
         reader.skip(reader.u32()) // colour mode data
-        let resourcesEnd = reader.position + reader.u32()
+        let resourcesLength = reader.u32()
+        let resourcesEnd = reader.position + resourcesLength
         var hasMergedData = true
         var dpi: (x: Double, y: Double)?
         while reader.position + 12 <= resourcesEnd {

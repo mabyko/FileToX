@@ -4,6 +4,7 @@
 // readers. (Filee's EMF/WMF branch is Windows-only and not ported.)
 
 import CoreGraphics
+import CoreImage
 import Foundation
 import ImageIO
 
@@ -15,6 +16,8 @@ enum ImageReader {
         switch format {
         case "ppm":
             return try NetpbmCodec.read(path)
+        case "raw":
+            return [try readRaw(path)]
         case "xcf":
             do {
                 return [try XcfReader.read(path)]
@@ -69,6 +72,29 @@ enum ImageReader {
             frames.append(frame)
         }
         return frames
+    }
+
+    /// Camera RAW developed by Core Image's RAW pipeline (Filee: LibRaw) with the camera's white balance, into 8-bit
+    /// sRGB. The picture comes out upright, so its EXIF orientation is reset; the metadata is kept.
+    private static func readRaw(_ path: String) throws -> ImageFrame {
+        let url = URL(fileURLWithPath: path)
+        let filter = CIRAWFilter(imageURL: url)
+            ?? (try? Data(contentsOf: url)).flatMap { CIRAWFilter(imageData: $0, identifierHint: ImageEncoder.typeIdentifiers["raw"]) }
+        guard let filter, let output = filter.outputImage, !output.extent.isInfinite, output.extent.width >= 1, output.extent.height >= 1 else {
+            throw ConversionError("\(FilePath.fileName(path)) is not a camera RAW picture this Mac can read.")
+        }
+        try Task.checkCancellation()
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let image = CIContext(options: [.cacheIntermediates: false]).createCGImage(output, from: output.extent, format: .RGBA8, colorSpace: space) else {
+            throw ConversionError("Could not decode \(FilePath.fileName(path)).")
+        }
+        var frame = ImageFrame(image: image)
+        if let source = CGImageSourceCreateWithURL(url as CFURL, nil), CGImageSourceGetCount(source) > 0,
+           let metadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil), let copy = CGImageMetadataCreateMutableCopy(metadata) {
+            CGImageMetadataSetValueMatchingImageProperty(copy, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFOrientation, 1 as CFNumber)
+            frame.properties[ImageFrame.metadataKey] = copy
+        }
+        return frame
     }
 
     /// Seconds an animation frame is shown (the delay as written, not ImageIO's clamped value).
