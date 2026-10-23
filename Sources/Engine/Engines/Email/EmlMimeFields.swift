@@ -733,8 +733,9 @@ extension EmlMime {
                 }
                 if let needPragma, var charset, !needPragma || gotPragma {
                     if charset.caseInsensitiveCompare("x-user-defined") == .orderedSame { charset = "windows-1252" }
+                    // UTF-16 here means strict UTF-8 to MimeKit; the caller handles that
                     let codePage = EmlCharsets.codePage(charset)
-                    if codePage != -1 { return codePage == 1200 || codePage == 1201 ? 65001 : codePage }
+                    if codePage != -1 { return codePage }
                 }
             case "body":
                 state = -1

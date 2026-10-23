@@ -100,28 +100,33 @@ enum EmlCharsets {
         }
     }
 
-    /// `Encoding.GetEncoding(name).CodePage`, through CoreFoundation's IANA names; -1 when unknown.
+    /// `Encoding.GetEncoding(name).CodePage`, through CoreFoundation's IANA names; -1 when unknown or when .NET has no
+    /// such code page (UTF-7, for one).
     private static func codePage(named name: String) -> Int {
         let cf = CFStringConvertIANACharSetNameToEncoding(name as CFString)
         guard cf != kCFStringEncodingInvalidId else { return -1 }
-        let windows = CFStringConvertEncodingToWindowsCodepage(cf)
-        // Encodings without a Windows code page are kept by their CoreFoundation id.
-        return windows == kCFStringEncodingInvalidId ? Int(cfBase) + Int(cf) : Int(windows)
+        let windows = Int(CFStringConvertEncodingToWindowsCodepage(cf))
+        return isSupported(windows) ? windows : -1
     }
 
-    private static let cfBase: UInt32 = 0x100000
+    /// `Encoding.GetEncoding(codePage)` succeeds: the code pages of .NET 10 with CodePagesEncodingProvider.
+    static func isSupported(_ codePage: Int) -> Bool { dotNetCodePages.contains(codePage) }
 
-    /// `Encoding.GetEncoding(codePage)` succeeds.
-    static func isSupported(_ codePage: Int) -> Bool {
-        switch codePage {
-        case 65001, 1200, 1201, 12000, 12001, 20127, 28591, 949, 51949, 50225: return true
-        default: return cfEncoding(codePage) != nil
-        }
-    }
+    private static let dotNetCodePages: Set<Int> = [
+        37, 437, 500, 708, 720, 737, 775, 850, 852, 855, 857, 858, 860, 861, 862, 863, 864, 865, 866, 869, 870, 874, 875, 932, 936,
+        949, 950, 1026, 1047, 1140, 1141, 1142, 1143, 1144, 1145, 1146, 1147, 1148, 1149, 1200, 1201, 1250, 1251, 1252, 1253, 1254,
+        1255, 1256, 1257, 1258, 1361, 10000, 10001, 10002, 10003, 10004, 10005, 10006, 10007, 10008, 10010, 10017, 10021, 10029,
+        10079, 10081, 10082, 12000, 12001, 20000, 20001, 20002, 20003, 20004, 20005, 20105, 20106, 20107, 20108, 20127, 20261,
+        20269, 20273, 20277, 20278, 20280, 20284, 20285, 20290, 20297, 20420, 20423, 20424, 20833, 20838, 20866, 20871, 20880,
+        20905, 20924, 20932, 20936, 20949, 21025, 21866, 28591, 28592, 28593, 28594, 28595, 28596, 28597, 28598, 28599, 28603,
+        28605, 29001, 38598, 50220, 50221, 50222, 50225, 50227, 51932, 51936, 51949, 52936, 54936, 57002, 57003, 57004, 57005,
+        57006, 57007, 57008, 57009, 57010, 57011, 65001,
+    ]
 
+    /// shortcut: code pages CoreFoundation cannot decode (EBCDIC, ISCII ...) fall back to ISO-8859-1; add tables if
+    /// such mail turns up.
     private static func cfEncoding(_ codePage: Int) -> CFStringEncoding? {
         guard codePage > 0 else { return nil }
-        if codePage >= Int(cfBase) { return CFStringEncoding(UInt32(codePage) - cfBase) }
         if codePage == 38598 { return CFStringConvertWindowsCodepageToEncoding(28598) } // iso-8859-8-i: same table
         let cf = CFStringConvertWindowsCodepageToEncoding(UInt32(codePage))
         return cf == kCFStringEncodingInvalidId ? nil : cf
