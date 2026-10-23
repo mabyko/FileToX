@@ -111,7 +111,7 @@ enum ImageReader {
 
     /// The resolution ImageMagick reads from the file, in pixels per inch; nil when it has none (or no unit).
     /// PNG pHYs in metres, BMP pixels per metre, PSD resolution info, TIFF XResolution with its unit, and for JPEG the
-    /// EXIF (or JFIF) value with the JFIF unit (a JFIF density without unit counts as none, as does EXIF alone).
+    /// EXIF (or JFIF) value with the EXIF (or JFIF) unit: a value without any unit counts as none.
     static func storedDpi(_ properties: [CFString: Any], format: String) -> (x: Double, y: Double)? {
         func number(_ value: Any?) -> Double? { (value as? NSNumber)?.doubleValue }
         let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
@@ -127,11 +127,11 @@ enum ImageReader {
             let jfif = properties[kCGImagePropertyJFIFDictionary] as? [CFString: Any]
             x = number(tiff?[kCGImagePropertyTIFFXResolution]) ?? number(jfif?[kCGImagePropertyJFIFXDensity])
             y = number(tiff?[kCGImagePropertyTIFFYResolution]) ?? number(jfif?[kCGImagePropertyJFIFYDensity])
-            if let jfif {
-                unit = (jfif[kCGImagePropertyJFIFDensityUnit] as? NSNumber)?.intValue ?? 0
-            } else {
-                let exifUnit = (tiff?[kCGImagePropertyTIFFResolutionUnit] as? NSNumber)?.intValue ?? 0
+            // The EXIF unit when there is one (ImageIO writes JFIF without unit), else the JFIF unit.
+            if let exifUnit = (tiff?[kCGImagePropertyTIFFResolutionUnit] as? NSNumber)?.intValue {
                 unit = exifUnit == 2 ? 1 : exifUnit == 3 ? 2 : 0
+            } else {
+                unit = (jfif?[kCGImagePropertyJFIFDensityUnit] as? NSNumber)?.intValue ?? 0
             }
         default:
             return nil

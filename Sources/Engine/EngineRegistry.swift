@@ -11,7 +11,7 @@ public enum EngineRegistry {
         // magick, pdfsharp, pdfium, rhwp, unhwp, markdown, spreadsheet, ooxml, hwpx-writer, archive, vector, icns,
         // font, docx-writer, pdf-text, email, ffmpeg, cad, ebook, pandoc, ghostscript, calibre, libreoffice.
         _ = environment
-        converters += [MagickImageConverter()]
+        converters += [MagickImageConverter(), PdfSharpConverter(), PdfiumConverter()]
         converters += [IcnsConverter()]
         return converters
     }
