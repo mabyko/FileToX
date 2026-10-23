@@ -1,6 +1,6 @@
 // Photoshop documents for the image engine. ImageIO reads PSD and PSB composites but writes only PSD, so both are
 // written here the way ImageMagick wrote them: one layer holding the picture (with its transparency) and the RLE
-// composite, its colours matted on white where transparent as Photoshop stores them. Composites with transparency are
+// composite with straight channel samples. Composites with transparency are
 // read here too, with ImageMagick's white unblending (ImageIO darkens semi-transparent pixels). Files saved without
 // "maximize compatibility" have no real composite; like ImageMagick, the visible layers are then composited (normal
 // blending, layer opacity and offsets; 8-bit RGB and grayscale).
@@ -82,15 +82,9 @@ enum PsdCodec {
         out.bytes(layerInfo.data)
         out.u32(0) // global layer mask info
 
-        // Composite image data: RLE, all channels; colours matted on white where transparent, as Photoshop stores them.
-        var composite = planes
-        if alpha {
-            for i in 0..<width * height {
-                let a = Int(planes[colorChannels][i])
-                for c in 0..<colorChannels { composite[c][i] = UInt8((Int(planes[c][i]) * a + 255 * (255 - a) + 127) / 255) }
-            }
-        }
-        out.bytes(rle(composite, width: width, height: height, large: large, withCompression: true))
+        // Filee's ImageMagick writer stores straight samples in both the layer and composite.
+        // Adding a white matte here changes the displayed pixels (also in ImageIO/Quick Look).
+        out.bytes(rle(planes, width: width, height: height, large: large, withCompression: true))
         try FileManager.default.writeFile(path, Data(out.data))
     }
 

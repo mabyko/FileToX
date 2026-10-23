@@ -102,6 +102,23 @@ enum ImagePixels {
 
     // ───────────────────────── Operations ─────────────────────────
 
+    /// GIF has binary transparency. ImageMagick thresholds at 50%; ImageIO otherwise
+    /// makes every nonzero alpha opaque, turning semi-transparent shadows into black.
+    static func gifImage(_ image: CGImage) -> CGImage {
+        guard hasAlpha(image) else { return image }
+        var source = bitmap(image)
+        for i in 0..<source.width * source.height {
+            let p = i * 4, alpha = Int(source.pixels[p + 3])
+            if alpha < 128 {
+                for c in 0..<4 { source.pixels[p + c] = 0 }
+            } else {
+                for c in 0..<3 { source.pixels[p + c] = UInt8(min(255, (Int(source.pixels[p + c]) * 255 + alpha / 2) / alpha)) }
+                source.pixels[p + 3] = 255
+            }
+        }
+        return self.image(source)
+    }
+
     /// Turns the picture upright for an EXIF orientation (1…8), ImageMagick's AutoOrient.
     static func oriented(_ image: CGImage, _ orientation: Int) -> CGImage {
         guard (2...8).contains(orientation) else { return image }
