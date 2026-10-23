@@ -123,6 +123,26 @@ public extension FileManager {
     }
 
     /// Deletes a file or folder tree and ignores failures (a viewer may still hold a temp file).
+    /// `File.WriteAllBytes`: creates or replaces `path` through open(2), which keeps the name as given (composed
+    /// Korean stays NFC like .NET; Data.write and FileManager would store it decomposed, NFD). Use it for every file
+    /// whose name ends up inside an output (side folders, extracted entries).
+    func writeFile(_ path: String, _ data: Data) throws {
+        let descriptor = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else { throw FilePath.writeError(errno, path) }
+        defer { close(descriptor) }
+        try data.withUnsafeBytes { raw in
+            var offset = 0
+            while offset < raw.count {
+                let written = Darwin.write(descriptor, raw.baseAddress! + offset, raw.count - offset)
+                if written < 0 {
+                    if errno == EINTR { continue }
+                    throw FilePath.writeError(errno, path)
+                }
+                offset += written
+            }
+        }
+    }
+
     func removeIfPresent(_ path: String) {
         try? removeItem(atPath: path)
     }
