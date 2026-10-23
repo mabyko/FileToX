@@ -1,37 +1,40 @@
-// Opt-in comparison with Markdig (Filee's library) on a corpus produced by the Filee harness outside the repository:
-// MARKDIG_CORPUS=<folder with specs.json, inputs.json and out-<pipeline>.json> swift test --filter MarkdownCorpusComparisonTests
-// Skipped in normal runs; the embedded conformance tests cover the same cases offline.
+// Opt-in comparisons with Filee on corpora produced by the Filee harness outside the repository:
+// MARKDIG_CORPUS=<folder with inputs.json and out-<pipeline>.json> swift test --filter MarkdownCorpusComparisonTests
+// compares the Markdig port's HTML and plain text, and MarkdownReader's documents when out-mdread.json is there;
+// PANDOC_AST_CORPUS=<folder with inputs.json of `pandoc -t json` texts and out-pandocast.json> compares PandocAstReader.
+// Documents are compared in the harness' dump format. Skipped in normal runs; the embedded conformance tests cover
+// the Markdig cases offline.
 
 import Foundation
 import XCTest
 @testable import FileToXEngineKit
 
 final class MarkdownCorpusComparisonTests: XCTestCase {
-    private func corpus() throws -> (folder: URL, inputs: [String]) {
-        guard let folder = ProcessInfo.processInfo.environment["MARKDIG_CORPUS"] else { throw XCTSkip("MARKDIG_CORPUS not set") }
-        let url = URL(fileURLWithPath: folder)
-        let inputs = try JSONSerialization.jsonObject(with: Data(contentsOf: url.appendingPathComponent("inputs.json"))) as! [String]
-        return (url, inputs)
-    }
-
-    private func compare(_ name: String, _ pipeline: Markdown.Pipeline, plainText: Bool = false) throws {
-        let (folder, inputs) = try corpus()
-        let expected = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("out-\(name).json"))) as! [String]
+    /// Compares `actual(input, folder)` with out-<name>.json. "!!CRASH" marks inputs on which Filee's reader overflowed
+    /// the stack (the port reads them; nothing to compare), "!!SKIP:" inputs Filee could not hand to the reader.
+    private func compare(_ name: String, from variable: String = "MARKDIG_CORPUS", _ actual: (String, URL) throws -> String) throws {
+        guard let path = ProcessInfo.processInfo.environment[variable] else { throw XCTSkip("\(variable) not set") }
+        let folder = URL(fileURLWithPath: path)
+        let file = folder.appendingPathComponent("out-\(name).json")
+        guard FileManager.default.fileExists(atPath: file.path) else { throw XCTSkip("no out-\(name).json") }
+        let inputs = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("inputs.json"))) as! [String]
+        let expected = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as! [String]
         var failures: [Int] = []
         var report = ""
         for (i, input) in inputs.enumerated() {
-            let actual: String
+            let result: String
             do {
-                actual = plainText ? try Markdown.toPlainText(input, pipeline) : try Markdown.toHtml(input, pipeline)
+                result = try actual(input, folder)
             } catch let error as Markdown.DepthLimitError {
-                actual = "!!EXCEPTION ArgumentException: \(error.localizedDescription)"
+                result = "!!EXCEPTION ArgumentException: \(error.localizedDescription)"
             } catch {
-                actual = "!!EXCEPTION \(error)"
+                result = "!!EXCEPTION \(error)"
             }
-            if actual != expected[i] {
+            if expected[i] == "!!CRASH" || expected[i].hasPrefix("!!SKIP:") { continue }
+            if result != expected[i] {
                 failures.append(i)
                 if failures.count <= 40 {
-                    report += "#\(i) input: \(input.debugDescription)\n  expected: \(expected[i].debugDescription)\n  actual:   \(actual.debugDescription)\n"
+                    report += "#\(i) input: \(input.debugDescription)\n  expected: \(expected[i].debugDescription)\n  actual:   \(result.debugDescription)\n"
                 }
             }
         }
@@ -40,8 +43,23 @@ final class MarkdownCorpusComparisonTests: XCTestCase {
         XCTAssertEqual(failures.count, 0, "\(name): \(failures.count) of \(inputs.count) differ, first: \(failures.prefix(30))")
     }
 
-    func testCommonMarkPipeline() throws { try compare("commonmark", .commonMark) }
-    func testAdvancedPipeline() throws { try compare("advanced", .advanced) }
-    func testFileePipeline() throws { try compare("filee", .advancedWithYaml) }
-    func testFileePlainText() throws { try compare("filee-text", .advancedWithYaml, plainText: true) }
+    func testCommonMarkPipeline() throws { try compare("commonmark") { markdown, _ in try Markdown.toHtml(markdown, .commonMark) } }
+    func testAdvancedPipeline() throws { try compare("advanced") { markdown, _ in try Markdown.toHtml(markdown, .advanced) } }
+    func testFileePipeline() throws { try compare("filee") { markdown, _ in try Markdown.toHtml(markdown, .advancedWithYaml) } }
+    func testFileePlainText() throws { try compare("filee-text") { markdown, _ in try Markdown.toPlainText(markdown, .advancedWithYaml) } }
+
+    func testMarkdownReader() throws {
+        try compare("mdread") { markdown, folder in MarkupTestSupport.dump(try MarkdownReader.read(markdown, folder.path)) }
+    }
+
+    func testPandocAstReader() throws {
+        try compare("pandocast", from: "PANDOC_AST_CORPUS") { text, folder in
+            let ast = try JSONSerialization.jsonObject(with: Data(text.utf8), options: .fragmentsAllowed)
+            let document = try PandocAstReader.read(ast) { target in
+                let path = target.hasPrefix("/") ? target : FilePath.combine(folder.path, MarkupConvert.unescapeDataString(target))
+                return FileManager.default.fileExists(atPath: path) ? FilePath.fullPath(path) : nil
+            }
+            return MarkupTestSupport.dump(document)
+        }
+    }
 }
