@@ -14,7 +14,6 @@ extension ACad.DwgObjectReader {
     func readArc() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readAttribute() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readAttributeDefinition() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readBinRecord() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readBlkRefObjectContextData() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readBlock() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readBlockAlignmentParameter() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
@@ -42,10 +41,6 @@ extension ACad.DwgObjectReader {
     func readCircle() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readCommonEntityData() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readCommonNonEntityData() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readDbColor() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readDictionary() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readDictionaryVar() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readDictionaryWithDefault() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readDimAligned() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readDimAngular3pt() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readDimArc() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
@@ -62,34 +57,24 @@ extension ACad.DwgObjectReader {
     func readField() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readFieldList() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readFlipGrip() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readGeoData() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readGroup() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readHatch() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readImageDefinition() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readImageDefinitionReactor() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readInsert() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readLWPolyline() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readLayout() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readLeader() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readLine() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readLinearGrip() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readMInsert() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readMLine() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readMLineStyle() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readMText() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readMTextAttributeObjectContextData() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readMaterial() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readMesh() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readModelerGeometry(_ template: ACad.CadModelerGeometryTemplate) throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readMultiLeader() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readMultiLeaderAnnotContext() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readMultiLeaderStyle() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readOle2Frame() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readPdfDefinition() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readPdfUnderlay() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readPfaceVertex() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readPlaceHolder() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readPlotSettings() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readPoint() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readPolyfaceMesh() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readPolyline2D() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
@@ -97,15 +82,11 @@ extension ACad.DwgObjectReader {
     func readPolylineMesh() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readProxyEntity() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readProxyObject() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readRasterVariables() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readRay() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readScale() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readSeqend() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readShape() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readSolid() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readSolid3D() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readSortentsTable() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readSpatialFilter() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readSpline() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readTableEntity() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readTableStyle() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
@@ -114,8 +95,5 @@ extension ACad.DwgObjectReader {
     func readVertex2D() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readVertex3D(_ vertex: ACad.Vertex) throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readViewport() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readVisualStyle() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readWipeoutVariables() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
     func readXLine() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
-    func readXRecord() throws -> ACad.CadTemplate? { throw ACad.DwgError.notImplemented }
 }
