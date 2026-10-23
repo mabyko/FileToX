@@ -94,4 +94,27 @@ enum MarkupConvert {
         }
         return output
     }
+
+    /// `new Uri(path).AbsoluteUri` for an absolute macOS path: "file://" and the path with characters outside the URI
+    /// path set percent-encoded as UTF-8, without Unicode normalization (Foundation's file URLs decompose Hangul).
+    /// .NET also unescapes some "%XX" sequences in the name ("%41", or "%20" when another "%" is stray) and escapes
+    /// characters outside RFC 3987's ranges twice ("\u{80}" → "%25C2%2580"), so its link misses such files; here every
+    /// "%" and character is escaped once.
+    static func fileUri(_ path: String) -> String {
+        var result = "file://"
+        for byte in path.utf8 {
+            switch byte {
+            case UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "0")...UInt8(ascii: "9"):
+                result.unicodeScalars.append(Unicode.Scalar(byte))
+            case UInt8(ascii: "-"), UInt8(ascii: "."), UInt8(ascii: "_"), UInt8(ascii: "~"), UInt8(ascii: "!"), UInt8(ascii: "$"),
+                 UInt8(ascii: "&"), UInt8(ascii: "'"), UInt8(ascii: "("), UInt8(ascii: ")"), UInt8(ascii: "*"), UInt8(ascii: "+"),
+                 UInt8(ascii: ","), UInt8(ascii: ";"), UInt8(ascii: "="), UInt8(ascii: ":"), UInt8(ascii: "@"), UInt8(ascii: "/"),
+                 UInt8(ascii: "["), UInt8(ascii: "]"):
+                result.unicodeScalars.append(Unicode.Scalar(byte))
+            default:
+                result += String(format: "%%%02X", byte)
+            }
+        }
+        return result
+    }
 }

@@ -77,7 +77,22 @@ final class MarkdownTests: XCTestCase {
 
         let html = try MarkdownConverter.toHtml(Self.sample, md, FilePath.combine(try MarkupTestSupport.newFolder(), "step.html"))
 
-        XCTAssertTrue(html.contains("src=\"\(URL(fileURLWithPath: FilePath.combine(folder, "chart.png")).absoluteString)\""))
+        XCTAssertTrue(html.contains("src=\"\(MarkupConvert.fileUri(FilePath.combine(folder, "chart.png")))\""))
+    }
+
+    func testImageUrisAreEscapedLikeDotNet() {
+        // Expected values: `new Uri(path).AbsoluteUri` on .NET 10.
+        let cases = [
+            ("/tmp/로고 1.png", "file:///tmp/%EB%A1%9C%EA%B3%A0%201.png"),
+            ("/tmp/\u{1105}\u{1169}.png", "file:///tmp/%E1%84%85%E1%85%A9.png"), // no normalization either way
+            ("/tmp/x~y #1?.png", "file:///tmp/x~y%20%231%3F.png"),
+            ("/tmp/[a]{b}|c^d`e\"f<g>h\\i.png", "file:///tmp/[a]%7Bb%7D%7Cc%5Ed%60e%22f%3Cg%3Eh%5Ci.png"),
+            ("/tmp/!$&'()*+,;=:@.png", "file:///tmp/!$&'()*+,;=:@.png"),
+            ("/tmp/é😀\u{A0}\ttab.png", "file:///tmp/%C3%A9%F0%9F%98%80%C2%A0%09tab.png"),
+            ("/tmp/a b/c%20d.png", "file:///tmp/a%20b/c%2520d.png"),
+            ("/tmp/100%.png", "file:///tmp/100%25.png"),
+        ]
+        for (path, uri) in cases { XCTAssertEqual(MarkupConvert.fileUri(path), uri) }
     }
 
     func testMarkdownToHwpxKeepsStructure() async throws {

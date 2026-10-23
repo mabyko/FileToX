@@ -45,7 +45,7 @@ public final class MarkdownConverter: Converter {
         if !MarkupConvert.equalsOrdinalIgnoreCase(inputFolder, outputFolder) {
             // Relative image paths would break away from the Markdown file: point them at the original files.
             for image in document.inlineDescendants(Markdown.LinkInline.self) where image.isImage {
-                if let path = MarkdownReader.resolveImage(image.url, inputFolder) { image.url = URL(fileURLWithPath: path).absoluteString }
+                if let path = MarkdownReader.resolveImage(image.url, inputFolder) { image.url = MarkupConvert.fileUri(path) }
             }
         }
         let body = try Markdown.render(document, MarkdownReader.pipeline)
