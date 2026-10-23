@@ -92,7 +92,8 @@ extension ACad {
         /// `TryGetCadObject`.
         func tryGetObject<T: CadObject>(_ handle: UInt64?) -> T? {
             guard let handle, handle != 0, let object = cadObjects[handle] else { return nil }
-            if object is UnknownEntity { return nil }
+            // KeepUnknownEntities / KeepUnknownNonGraphicalObjects are false for Filee's readers.
+            if object is UnknownEntity || object is UnknownNonGraphicalObject { return nil }
             return object as? T
         }
 

@@ -175,6 +175,26 @@ extension ACad {
         static let styleOverrideEntryName = "DSTYLE"
         static func makeDefault() -> DimensionStyle { DimensionStyle(name: defaultName) }
 
+        /// The validating setters of ScaleFactor / ArrowSize / TextHeight (`ArgumentOutOfRangeException`).
+        func setScaleFactor(_ value: Double) throws {
+            guard value >= 0 else { throw Self.outOfRange("The ScaleFactor must be equals or greater than zero.", value) }
+            scaleFactor = value
+        }
+
+        func setArrowSize(_ value: Double) throws {
+            guard value >= 0 else { throw Self.outOfRange("The ArrowSize must be equals or greater than zero.", value) }
+            arrowSize = value
+        }
+
+        func setTextHeight(_ value: Double) throws {
+            guard value > 0 else { throw Self.outOfRange("The TextHeight must be greater than zero.", value) }
+            textHeight = value
+        }
+
+        private static func outOfRange(_ message: String, _ value: Double) -> DwgError {
+            DwgError("\(message) (Parameter 'value')\nActual value was \(DxfNumber.netString(value)).")
+        }
+
         var alternateDimensioningSuffix = "[]"
         var alternateUnitDecimalPlaces: Int16 = 3
         var alternateUnitDimensioning = false

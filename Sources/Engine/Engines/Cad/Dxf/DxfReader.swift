@@ -8,7 +8,9 @@ extension ACad {
     struct CadNotSupportedError: Error, CustomStringConvertible {
         let version: Version?
         var description: String {
-            version.map { "File version not supported: \($0.name)" } ?? "File version not recognised"
+            // The enum name (MC0_0, AC1009 …) as C# formats it.
+            version.map { "File version not supported: \($0 == .unknown ? "Unknown" : String(describing: $0).uppercased())" }
+                ?? "File version not recognized"
         }
     }
 

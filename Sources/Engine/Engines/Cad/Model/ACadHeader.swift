@@ -126,13 +126,15 @@ extension ACad {
             return CadDateTime(years, months, days, hours, minutes, seconds, milliseconds)
         }
 
-        /// The DWG reader's `julianToDate`: 1970-01-01 plus (jdate − 2440587.5) days, then the milliseconds.
-        static func fromDwg(jdate: Int32, milliseconds: Int32) -> CadDateTime {
+        /// The DWG reader's `julianToDate`: 1970-01-01 plus (jdate − 2440587.5) days (MinValue when that overflows),
+        /// then the milliseconds, which throw when they leave the DateTime range.
+        static func fromDwg(jdate: Int32, milliseconds: Int32) throws -> CadDateTime {
             let unix = (Double(jdate) - 2_440_587.5) * 86400
-            let epoch = CadDateTime(1970, 1, 1)!
-            let date = epoch.adding(seconds: unix) ?? .minValue
-            if milliseconds < 0 { return date }
-            return date.adding(milliseconds: Double(milliseconds)) ?? date
+            let date = CadDateTime(1970, 1, 1)!.adding(seconds: unix) ?? .minValue
+            guard let result = date.adding(milliseconds: Double(milliseconds)) else {
+                throw DwgError("The added or subtracted value results in an un-representable DateTime. (Parameter 'value')")
+            }
+            return result
         }
 
         /// `CadUtils.DateToJulian` for the DWG writer.
@@ -220,7 +222,6 @@ extension ACad {
         var textQuality: Int16 = 50
         var surfaceIsolineCount: Int16 = 4
         var dimsav = false
-        var requiredVersionsDwg: Int64 = 0
 
         init(version: Version = .ac1032) {
             self.version = version
@@ -242,7 +243,7 @@ extension ACad {
     var chamferDistance1: Double = 0.0
     var chamferDistance2: Double = 0.0
     var chamferLength: Double = 0.0
-    var codePage: String = "ANSI_1252"
+    var codePage: String? = "ANSI_1252"
     var createDateTime: CadDateTime = CadDateTime.now()
     var createEllipseAsPolyline: Bool = false
     var currentDimensionStyleName: String = "Standard"
