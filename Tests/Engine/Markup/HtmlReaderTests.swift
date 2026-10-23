@@ -348,8 +348,8 @@ final class HtmlCssTests: XCTestCase {
     }
 
     func testUnescapeDataStringKeepsInvalidEscapes() {
-        XCTAssertEqual(HtmlReader.unescapeDataString("%EB%A1%9C%EA%B3%A0%201.png"), "로고 1.png")
-        XCTAssertEqual(HtmlReader.unescapeDataString("100%.png"), "100%.png")
-        XCTAssertEqual(HtmlReader.unescapeDataString("a%E2%82b"), "a%E2%82b")
+        XCTAssertEqual(MarkupConvert.unescapeDataString("%EB%A1%9C%EA%B3%A0%201.png"), "로고 1.png")
+        XCTAssertEqual(MarkupConvert.unescapeDataString("100%.png"), "100%.png")
+        XCTAssertEqual(MarkupConvert.unescapeDataString("a%E2%82b"), "a%E2%82b")
     }
 }

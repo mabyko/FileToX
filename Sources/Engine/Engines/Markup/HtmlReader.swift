@@ -1018,7 +1018,7 @@ final class HtmlReader {
         if reference.contains("://") || reference.hasPrefix("//") || lower.hasPrefix("mailto:") { return nil }
         let scalars = reference.unicodeScalars
         let cut = scalars.firstIndex { $0 == "?" || $0 == "#" }
-        let relative = Self.unescapeDataString(cut.map { String(scalars[..<$0]) } ?? reference)
+        let relative = MarkupConvert.unescapeDataString(cut.map { String(scalars[..<$0]) } ?? reference)
         if relative.isEmpty { return nil }
         let candidate = FilePath.fullPath(FilePath.combine(options.baseFolder, relative))
         return FileManager.default.fileExists(candidate) ? candidate : nil
@@ -1029,7 +1029,7 @@ final class HtmlReader {
         let scalars = Array(uri.unicodeScalars)
         guard let comma = scalars.firstIndex(of: ",") else { return nil }
         let header = String(String.UnicodeScalarView(scalars[5..<comma])).lowercased()
-        let payload = Self.unescapeDataString(String(String.UnicodeScalarView(scalars[(comma + 1)...])))
+        let payload = MarkupConvert.unescapeDataString(String(String.UnicodeScalarView(scalars[(comma + 1)...])))
         let ext: String? = switch header.components(separatedBy: ";")[0] {
         case "image/png": "png"
         case "image/jpeg", "image/jpg": "jpg"
@@ -1078,49 +1078,6 @@ final class HtmlReader {
 
     /// `Guid.NewGuid().ToString("N")`.
     private static func guid() -> String { UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased() }
-
-    /// `Uri.UnescapeDataString`: %XX escapes that form valid UTF-8 are decoded, everything else stays as written.
-    static func unescapeDataString(_ text: String) -> String {
-        guard text.contains("%") else { return text }
-        let bytes = Array(text.utf8)
-        func hex(_ byte: UInt8) -> UInt8? {
-            switch byte {
-            case 0x30...0x39: byte - 0x30
-            case 0x41...0x46: byte - 0x37
-            case 0x61...0x66: byte - 0x57
-            default: nil
-            }
-        }
-        func escaped(at index: Int) -> UInt8? {
-            guard index + 2 < bytes.count, bytes[index] == 0x25, let high = hex(bytes[index + 1]), let low = hex(bytes[index + 2]) else { return nil }
-            return high << 4 | low
-        }
-        var output: [UInt8] = []
-        var index = 0
-        while index < bytes.count {
-            guard let first = escaped(at: index) else {
-                output.append(bytes[index])
-                index += 1
-                continue
-            }
-            // The UTF-8 sequence this escape starts, all of it escaped too.
-            let length = first < 0x80 ? 1 : first >= 0xF0 ? 4 : first >= 0xE0 ? 3 : first >= 0xC0 ? 2 : 0
-            var sequence: [UInt8] = [first]
-            var next = index + 3
-            while length > 1, sequence.count < length, let byte = escaped(at: next), byte & 0xC0 == 0x80 {
-                sequence.append(byte)
-                next += 3
-            }
-            if length > 0, sequence.count == length, String(bytes: sequence, encoding: .utf8) != nil {
-                output += sequence
-                index = next
-            } else {
-                output += bytes[index..<(index + 3)]
-                index += 3
-            }
-        }
-        return String(decoding: output, as: UTF8.self)
-    }
 }
 
 private extension String {

@@ -237,11 +237,11 @@ final class EmlTests: XCTestCase {
     }
 
     func testDotNetHtmlAndUriHelpers() {
-        XCTAssertEqual(EmlConverter.htmlEncode("<a> & \" ' \u{00A0}é©\u{00FF}\u{0100}한😀"),
+        XCTAssertEqual(MarkupConvert.htmlEncode("<a> & \" ' \u{00A0}é©\u{00FF}\u{0100}한😀"),
                        "&lt;a&gt; &amp; &quot; &#39; &#160;&#233;&#169;&#255;\u{0100}한&#128512;")
         XCTAssertEqual(EmlConverter.htmlDecode("&lt;&nbsp;&eacute;&hellip;&#65;&#x42;&#xD800;&bogus;&amp;amp;&NotEqualTilde;&apos;"),
                        "<\u{00A0}é…AB&#xD800;&bogus;&amp;&NotEqualTilde;'")
-        XCTAssertEqual(EmlConverter.unescapeDataString("a%20b%E2%82%AC%E2%82x%41%zz%"), "a b€%E2%82xA%zz%")
+        XCTAssertEqual(MarkupConvert.unescapeDataString("a%20b%E2%82%AC%E2%82x%41%zz%"), "a b€%E2%82xA%zz%")
     }
 }
 
