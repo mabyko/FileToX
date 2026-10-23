@@ -28,7 +28,7 @@
 | --- | --- | --- | --- |
 | `magick` | Magick.NET(ImageMagick) | ImageIO·CoreGraphics·vImage. ImageIO가 쓰지 못하는 형식(PSB 읽기·쓰기, XCF 읽기, PPM 계열 세부 형식, ICO 크기 지정, TIFF 압축 방식)은 Swift 코덱으로 보완. 카메라 RAW는 LibRaw(4절) | 중 — **WebP·JPEG XL 쓰기는 4절** |
 | `pdfsharp` | PDFsharp | CoreGraphics PDF context·PDFKit(이미지→PDF, PDF 쪽 범위·분할, 합치기) | 중 |
-| `pdfium` | PDFtoImage(PDFium)·SkiaSharp | PDFKit/CGPDF 렌더링 + 이미지 인코더 | 하 |
+| `pdfium` | PDFtoImage(PDFium)·SkiaSharp | 번들 PDFium 147.0.7690.0 + 이미지 인코더 (`Vendor/PDFium`) | 중 |
 | `pdf-text` | PdfPig | PDFKit 문자·위치 정보 | 중 |
 | `rhwp` | 외부 rhwp | 같은 실행 파일을 같은 인자로 실행 | 하 |
 | `unhwp` | Unhwp(Rust native) + Markdig | **4절** | 상 |
@@ -43,7 +43,7 @@
 | `email` | MimeKitLite | MIME 파서(다중 파트·인코딩·RFC 2047·문자 집합)를 Swift로 구현 | 중 |
 | `ffmpeg` | 외부 FFmpeg | 같은 실행 파일 | 하 |
 | `cad` | ACadSharp·SkiaSharp | DXF 읽기·쓰기와 장면·렌더링을 Swift·CoreGraphics로 이식. **DWG는 4절** | 상 |
-| `ebook` | 자체 코드 + ImageMagick·PdfSharp·PDFtoImage·SharpCompress | 이식 + ImageIO·PDFKit·7-Zip | 중 |
+| `ebook` | 자체 코드 + ImageMagick·PdfSharp·PDFtoImage·SharpCompress | 이식 + ImageIO·PDFKit(쪽 편집)·PDFium(래스터)·7-Zip | 중 |
 | `pandoc`, `ghostscript`, `calibre`, `libreoffice` | 외부 프로그램 | 같은 실행 파일·인자 | 하 |
 
 코어와 host도 Swift로 옮긴다: 형식 레지스트리, 프리셋·출력 규칙·이름 바꾸기, 프로필 선택, 경로 탐색(`RoutePlanner`·`ConverterCatalog`), 작업 큐와 출력 staging·확정(패치 0001), 설정·프리셋·프로필·이력 저장소(`UserDataStore`의 JSON 형식과 스키마 이전 그대로), 지역화, NDJSON 프로토콜·잠금·journal 정리.
@@ -63,6 +63,7 @@
 
 - DWG: 읽기와 쓰기 모두 Swift로 이식한다. 생성한 DWG는 Swift 읽기로 되읽고, 기존 C# helper(ACadSharp 읽기)로도 읽혀 비교한다. AutoCAD·ODA에서 여는 확인은 이 환경에서 할 수 없으므로 남은 위험으로 둔다.
 - WebP·JPEG XL 쓰기: SwiftPM으로 Google libwebp 1.6.0과 libjxl 0.10.4를 소스 빌드해 쓴다(`SDWebImage/libwebp-Xcode`, `SDWebImage/libjxl-Xcode`, 버전 고정). 첫 빌드에서 패키지를 내려받는다.
+- PDF → 래스터: **C#와 같은 PDFium을 번들한다.** PDFtoImage 5.2.1이 쓰던 bblanchon.PDFium.macOS 147.0.7690(실제 PDFium 147.0.7690.0)을 선택했다. PDFKit의 안티앨리어싱 차이로 실패하던 43건은 PDFium 전환 뒤 FAIL 0건(6 PASS, 37 WARN)이 됐다. 44쪽/그림 중 21개는 픽셀이 같고 나머지 PSNR 57.754–79.047 dB, SSIM ≥0.999432다. PDF 이미지·만화·스캔/그림 추출 fallback을 하나의 전역 잠금 renderer로 처리한다. arm64/x86_64 dylib와 공개 헤더를 `Vendor/PDFium`에 포함하며 PDFium 자체는 네트워크 없이 빌드한다. helper의 `Contents/Frameworks`에 넣고 서명하며 BSD-3·번들 구성요소 고지를 `Resources/Notices`에 포함한다. 버전·해시·렌더 옵션은 [Vendor README](../../Vendor/PDFium/README.md), 건별 수치는 [비교 기록](engine-differential-triage.md#pdfkit-versus-pdfiumskia-rasterization)에 있다.
 - SVG: macOS 내장 렌더러에 CSS·`tspan` 전처리를 더한다.
 - 카메라 RAW: C# 앱과 같은 색을 낸다. C# 앱은 ImageMagick 7.1.2-32 Q8의 DNG 코더로 LibRaw 0.22.2를 썼고, Apple CIRAWFilter는 가장 잘 맞춘 설정도 평균 ΔE00 2.7 차이가 났다. 그래서 LibRaw 0.22.2를 CDDL-1.0으로 소스 포함해 빌드하고(`Vendor/LibRaw`, libjpeg 없음), ImageMagick과 같은 호출 순서·설정으로 현상한다(`Vendor/LibRaw/FileToX/develop.c`). 공개 표본 10개 중 LibRaw가 여는 8개는 C# 출력과 픽셀이 같다. 손실 압축 DNG(libjpeg 필요)와 LibRaw가 모르는 카메라는 LibRaw처럼 맞춘 CIRAWFilter로 대신 현상하고 stderr에 남긴다(손실 DNG 2개: ΔE00 1.6). 고지는 `docs/upstream/LibRaw.*`이며 helper의 `Resources/Notices`에 들어간다.
 - HWP/HWPX → TXT·MD·HTML: 공개 HWP 문서 20개로 Unhwp(A), rhwp 직접 내보내기(B), "rhwp로 HWPX 변환 + 이식한 Filee 읽기·작성기"(C)를 비교했다. C가 구조·그림·가독성에서 가장 낫고 HWP 3.x도 처리한다(A는 실패). 결정: C를 쓰고, 수식은 Unhwp의 수식→LaTeX 변환기(MIT)만 Swift로 옮겨 기존처럼 LaTeX로 낸다. 비교에서 나온 C의 문제(그림 실패, 목록 들여쓰기, 중첩 표·캡션·제목·머리말 누락, BMP 재압축, 셀 줄바꿈)를 수정하고 같은 표본으로 재검증했다. 결과·동작 변경·남은 차이는 [r3 구현·비교 보고서](swift-hwp-export-r3.md)에 있다.

@@ -35,7 +35,9 @@ Existing libwebp/libjxl Swift package dependencies still need their ordinary fir
 
 XcodeGen imports the same module in EngineKit and explicitly links, embeds and code-signs the dylib in
 `FileToXEngine.app/Contents/Frameworks` and in the engine test bundle. Their rpaths use the executable/loader's
-`../Frameworks`, with no source-tree rpath. Xcode signs nested code before signing the helper. The staging
+`../Frameworks`, without a vendor-source rpath. Xcode also injects a Debug package-products rpath;
+PDFium loads from the embedded library, verified after relocating the helper to `/tmp`.
+Xcode signs nested code before signing the helper. The staging
 script copies PDFium's licences alongside LibRaw's. Regenerate with `xcodegen generate` after project edits.
 
 ## Rendering contract

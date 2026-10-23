@@ -103,29 +103,141 @@ Focused XCTest coverage:
 
 ## Remaining FAIL groups and resolved handoff findings
 
-The final **58 non-CAD FAILs** are exactly 43 PDF raster cases, six JPEG cases,
-three ICO cases, three SVG cases and three image-to-markup resource cases. The
+The retained full replay had **58 non-CAD FAILs**: 43 PDF raster cases, six JPEG
+cases, three ICO cases, three SVG cases and three image-to-markup resource cases.
+The PDFium follow-up below resolves all 43 PDF raster FAILs; the other 15 cases
+were outside that focused replay. The
 Calibre OCR and SNB subsections retain evidence from the first fixed run, but
 neither remains FAIL in the final run.
 
 ### PDFKit versus PDFium/Skia rasterization
 
-**Classification:** native backend difference; quantitative acceptance pending.
-**Decision needed:** accept the measured raster difference for the chosen native
-PDF backend, or require closer rendering parity. It remains FAIL until decided.
+**Resolved: the user requires the same PDFium as C#.** `feat/pdfium-render` bundles
+PDFium **147.0.7690.0**, the bblanchon.PDFium.macOS 147.0.7690 build used by PDFtoImage
+5.2.1. The arm64 executable code matches the installed C# helper. See the
+[vendoring/render contract](../../Vendor/PDFium/README.md). PDFKit remains for
+non-raster text/layout extraction and PDF page manipulation.
 
-There are 43 cases in the first fixed replay, with 44 measured images/pages.
-Dimensions and frame/page counts match. PSNR spans **31.788-39.393 dB**, while
-SSIM spans **0.872954-0.948911**, failing the 0.95 threshold. A representative
-`auto-055-pdf-to-webp` scores 34.184 dB / 0.890748; document-to-image routes share
-the same downstream renderer. The changed comic JPEG quality and geometry do not
-eliminate differences between PDFKit/CoreGraphics and PDFium/Skia text/edge
-rendering. These are not 43 unrelated parsers failing.
+The same **43 baseline cases / 44 pages or images** were replayed at unchanged
+thresholds: **0 FAIL, 6 PASS, 37 WARN**. Dimensions/counts match. **21/44** decoded
+images are pixel-identical (including six byte-identical outputs); the remaining
+23 score **57.754–79.047 dB PSNR**, **0.999432–0.999994 SSIM**. Before: **31.788–39.393 dB**,
+**0.872954–0.948911 SSIM**. `auto-055-pdf-to-webp` is now byte-identical to C#.
+WARNs retain alpha/color-model/DPI metadata, container and image encoder (JPEG,
+AVIF, GIF, JPEG XL, JP2) differences; thresholds and comparator are unchanged.
+No PDF raster similarity failures remain in this group.
 
-`PdfiumConverter.render` replaces PDFtoImage/PDFium with PDFKit, draws on white,
-uses the crop box and rotation, and truncates points * Float(dpi/72), matching
-PDFtoImage's output geometry. `ComicBook.renderPdf` now calls that renderer.
-The ledger below lists every affected case and its measured scores.
+`PdfiumDocument` mirrors PDFtoImage's FPDF_ANNOT-only flags (no LCD_TEXT), white
+premultiplied BGRA8888 bitmap, form environment/lifecycle/FPDF_FFLDraw, intrinsic
+crop/rotation, and Float DPI scaling. Bitmap dimensions truncate; the drawing
+rectangle **ceils** the scaled size. All native lifetime/rendering calls share a
+global lock, including comic and PDF document-image routes. The two-page C# fixture
+matches every pixel in XCTest, including form appearance, annotation, transparency,
+text, and fractional crop/rotation.
+
+Evidence in worktree `t3-34b75636`, under `build/engine-compare/`:
+
+- `pdf-raster-cases.json`: the 43 original cases from the ledger below.
+- `baseline-pdf-raster`: copied projection of the retained C# `baseline-lo/run-optional`;
+  original case definitions/artifacts, original baseline unchanged.
+- `candidate-pdfium`, `comparison-pdfium/report.json`: Swift replay and raw report.
+- `pixel-reference`: independent C# capture of the checked-in XCTest fixture.
+- Before: `t3-e7ea93ff/build/engine-compare/comparison-fixed/report.json`.
+
+Replay from this worktree with existing external engines:
+
+```sh
+BASE=worktrees/t3-6fdca402/build/engine-compare/baseline-lo
+FILETOX_BUNDLED_ENGINES=worktrees/t3-6fdca402/build/engines/osx-arm64 \
+python3 -I Tools/engine-compare/run.py --host .build/debug/FileToXEngine \
+  --optional-root build/optional-engines/osx-arm64 \
+  --own-copy libreoffice=worktrees/t3-6fdca402/build/optional-engines/osx-arm64/libreoffice \
+  --corpus "$BASE/corpus" --matrix "$BASE/matrix-optional.json" \
+  --cases build/engine-compare/pdf-raster-cases.json \
+  --sevenzip /Applications/FileToX.app/Contents/Helpers/FileToXEngine.app/Contents/MacOS/engines/7zip/7zz \
+  --out build/engine-compare/candidate-pdfium
+python3 -I Tools/engine-compare/compare.py build/engine-compare/baseline-pdf-raster \
+  build/engine-compare/candidate-pdfium --out build/engine-compare/comparison-pdfium
+```
+
+Validation of the PDFium follow-up:
+
+- `swift build --build-tests`: PASS (`build-tests-final.log`).
+- Unfiltered `swift test` with the existing bundled-engine path: **468 engine tests,
+  21 skipped, zero failures**; **12 Core tests, one known failure** at
+  `RealEngineHostTests.swift:83` (22 engines versus expected 23 until CAD merges).
+  No other failure (`swift-tests-final.log`).
+- Full Xcode test action and clean test action: **542 tests** (74 app + 468 engine),
+  **46 skipped, zero failures** (`xcode-tests-fixed.log`, `xcode-tests-clean.log`).
+  Clean used the same scheme/destination with `-disableAutomaticPackageResolution`;
+  existing package and pinned external-engine caches were reused.
+- Final Xcode `PdfiumRenderingTests`: **4/4 PASS**, including retained error texts,
+  exact C# pixels, concurrent native lifetimes and cancellation.
+- Comparator harness self-tests: **15/15 PASS**. The two-page C# capture also matches
+  every pixel through the Xcode-built helper (99 dB sentinel / SSIM 1; alpha metadata
+  alone remains WARN).
+- Deep strict signature verification: helper and parent app PASS. PDFium is embedded
+  at `Contents/Frameworks/libpdfium.dylib`, loaded with `@rpath`; a relocated helper
+  is also verified and run from `/tmp` (`pixel-relocated`, `relocated-host.log`).
+- Both dylib slices link successfully with macOS 15 deployment. arm64 initializes;
+  x86_64 runtime remains unverified: this Mac returns `Bad CPU type in executable`
+  because Rosetta is unavailable. Developer ID/notarization and physical Intel QA
+  remain outside this local validation.
+- Bundle contribution: **11,376,192 bytes (10.85 MiB)** for the universal dylib,
+  **119,686 bytes (116.9 KiB)** for licence/notices, plus the small Swift wrapper.
+  This records the added library/notices, not an entire Release build size comparison.
+  Public headers stay in the repo.
+
+The projection uses physical copies: the comparator rejects symlinks escaping a run
+directory. The full 849-case suite was not rerun in this follow-up. Scores are min–max
+across every output page/image. **99** is the harness's identical-pixel sentinel;
+six byte-identical outputs also receive 99/1 here.
+
+| Case | Before PSNR dB | Before SSIM | PDFium PSNR dB | PDFium SSIM | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `auto-009-fb2-to-avif` | 37.545 | 0.895273 | 60.913 | 0.999954 | WARN |
+| `auto-009-fb2-to-bmp` | 37.538 | 0.894619 | 99.000 | 1.000000 | WARN |
+| `auto-009-fb2-to-cbz` | 37.575 | 0.895923 | 61.227 | 0.999751 | WARN |
+| `auto-010-md-to-gif` | 34.972 | 0.913927 | 73.831 | 0.999990 | WARN |
+| `auto-012-txt-to-jp2` | 36.284 | 0.892029 | 79.047 | 0.999994 | WARN |
+| `auto-012-txt-to-jpg` | 36.323 | 0.892923 | 61.944 | 0.999681 | WARN |
+| `auto-012-txt-to-jxl` | 36.267 | 0.891745 | 59.608 | 0.999488 | WARN |
+| `auto-022-azw3-to-psb` | 34.900 | 0.912467 | 99.000 | 1.000000 | WARN |
+| `auto-022-azw3-to-psd` | 34.900 | 0.912467 | 99.000 | 1.000000 | WARN |
+| `auto-024-docm-to-tga` | 34.143 | 0.890139 | 99.000 | 1.000000 | PASS |
+| `auto-025-dotm-to-avif` | 34.170 | 0.890566 | 67.664 | 0.999947 | WARN |
+| `auto-025-dotm-to-tiff` | 34.143 | 0.890139 | 99.000 | 1.000000 | WARN |
+| `auto-025-dotm-to-webp` | 34.184 | 0.890748 | 99.000 | 1.000000 | PASS |
+| `auto-026-dotx-to-bmp` | 34.143 | 0.890139 | 99.000 | 1.000000 | WARN |
+| `auto-026-dotx-to-cbz` | 34.191 | 0.890886 | 61.110 | 0.999761 | WARN |
+| `auto-030-epub-to-gif` | 34.885 | 0.912221 | 75.212 | 0.999993 | WARN |
+| `auto-034-hwp-to-png` | 36.274 | 0.892314 | 99.000 | 1.000000 | WARN |
+| `auto-035-hwpx-to-ppm` | 36.274 | 0.892314 | 99.000 | 1.000000 | PASS |
+| `auto-035-hwpx-to-psb` | 36.274 | 0.892314 | 99.000 | 1.000000 | WARN |
+| `auto-035-hwpx-to-psd` | 36.274 | 0.892314 | 99.000 | 1.000000 | WARN |
+| `auto-046-mobi-to-jxl` | 31.788–39.393 | 0.914399–0.948911 | 58.698–60.846 | 0.999432–0.999894 | WARN |
+| `auto-055-pdf-to-webp` | 34.184 | 0.890748 | 99.000 | 1.000000 | PASS |
+| `auto-071-txtz-to-avif` | 34.977 | 0.914325 | 57.754 | 0.999954 | WARN |
+| `auto-071-txtz-to-bmp` | 34.983 | 0.914119 | 99.000 | 1.000000 | WARN |
+| `auto-071-txtz-to-cbz` | 34.975 | 0.914410 | 58.434 | 0.999785 | WARN |
+| `auto-096-html-to-avif` | 38.193 | 0.917842 | 58.380 | 0.999946 | WARN |
+| `auto-096-html-to-bmp` | 38.210 | 0.917287 | 99.000 | 1.000000 | WARN |
+| `auto-096-html-to-cbz` | 38.222 | 0.918410 | 60.216 | 0.999750 | WARN |
+| `auto-110-doc-to-avif` | 33.984 | 0.873487 | 67.894 | 0.999944 | WARN |
+| `auto-110-doc-to-bmp` | 33.957 | 0.872954 | 99.000 | 1.000000 | WARN |
+| `auto-111-docx-to-cbz` | 34.191 | 0.890886 | 61.110 | 0.999761 | WARN |
+| `auto-112-html-to-gif` | 36.238 | 0.891609 | 68.179 | 0.999924 | WARN |
+| `auto-113-odt-to-jp2` | 36.277 | 0.892354 | 78.773 | 0.999993 | WARN |
+| `auto-113-odt-to-jpg` | 36.316 | 0.893263 | 61.959 | 0.999683 | WARN |
+| `auto-113-odt-to-jxl` | 36.269 | 0.892168 | 60.509 | 0.999560 | WARN |
+| `auto-120-txt-to-png` | 36.274 | 0.892314 | 99.000 | 1.000000 | WARN |
+| `auto-120-txt-to-ppm` | 36.274 | 0.892314 | 99.000 | 1.000000 | PASS |
+| `auto-120-txt-to-psb` | 36.274 | 0.892314 | 99.000 | 1.000000 | WARN |
+| `auto-120-txt-to-psd` | 36.274 | 0.892314 | 99.000 | 1.000000 | WARN |
+| `auto-123-txt-to-avif` | 36.294 | 0.892655 | 69.958 | 0.999950 | WARN |
+| `auto-123-txt-to-bmp` | 36.274 | 0.892314 | 99.000 | 1.000000 | WARN |
+| `auto-123-txt-to-webp` | 36.319 | 0.893130 | 99.000 | 1.000000 | PASS |
+| `builtin-to-cbz` | 34.894 | 0.912828 | 58.403 | 0.999782 | WARN |
 
 ### ImageIO JPEG encoding
 
@@ -314,7 +426,9 @@ outputs are `candidate-final.log` and `compare-final.log` under the evidence roo
 
 ### Per-case accounting
 
-This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any originally passing case that is now WARN/FAIL: **495 rows** in total. The 15 CAD cases are excluded. PASS rows record evidence of resolved comparator differences; they do not imply byte identity. Scores are min..max over all measured output frames/pictures; original and final statuses are raw comparator results. Full secondary reasons and metrics remain in `comparison-final/report.json`.
+This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any originally passing case that is now WARN/FAIL: **495 rows** in total. The 15 CAD cases are excluded. PASS rows record evidence of resolved comparator differences; they do not imply byte identity. Scores are min..max over all measured output frames/pictures; original and final statuses are raw comparator results. For the 43 PDF raster rows, Final now records the PDFium follow-up; its secondary
+reasons/metrics are in `comparison-pdfium/report.json`. Other rows retain the
+original final replay and `comparison-final/report.json`.
 
 | Case | Original | Final | Classification / action | Evidence |
 | --- | --- | --- | --- | --- |
@@ -354,10 +468,10 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-008-zip-to-tar` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-008-zip-to-tbz2` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-008-zip-to-tgz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
-| `auto-009-fb2-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 37.545; SSIM 0.895273 |
+| `auto-009-fb2-to-avif` | FAIL | WARN | b: PDFium resolved | dB 60.913; SSIM 0.999954 |
 | `auto-009-fb2-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-009-fb2-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 37.538; SSIM 0.894619 |
-| `auto-009-fb2-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 37.575; SSIM 0.895923 |
+| `auto-009-fb2-to-bmp` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-009-fb2-to-cbz` | FAIL | WARN | b: PDFium resolved | dB 61.227; SSIM 0.999751 |
 | `auto-009-fb2-to-doc` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-009-fb2-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-010-md-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
@@ -365,14 +479,14 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-010-md-to-dotx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-010-md-to-epub` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-010-md-to-fb2` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
-| `auto-010-md-to-gif` | FAIL | FAIL | b?: PDF raster backend | dB 34.972; SSIM 0.913927 |
+| `auto-010-md-to-gif` | FAIL | WARN | b: PDFium resolved | dB 73.831; SSIM 0.999990 |
 | `auto-011-cbz-to-htmlz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-011-cbz-to-hwpx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-011-cbz-to-icns` | WARN | WARN | b: within thresholds | dB 35.302..42.172; SSIM 0.998665..0.999863; within thresholds |
 | `auto-011-cbz-to-ico` | WARN | WARN | b: within thresholds | dB 32.552..39.962; SSIM 0.997960..0.999729; within thresholds |
-| `auto-012-txt-to-jp2` | FAIL | FAIL | b?: PDF raster backend | dB 36.284; SSIM 0.892029 |
-| `auto-012-txt-to-jpg` | FAIL | FAIL | b?: PDF raster backend | dB 36.323; SSIM 0.892923 |
-| `auto-012-txt-to-jxl` | FAIL | FAIL | b?: PDF raster backend | dB 36.267; SSIM 0.891745 |
+| `auto-012-txt-to-jp2` | FAIL | WARN | b: PDFium resolved | dB 79.047; SSIM 0.999994 |
+| `auto-012-txt-to-jpg` | FAIL | WARN | b: PDFium resolved | dB 61.944; SSIM 0.999681 |
+| `auto-012-txt-to-jxl` | FAIL | WARN | b: PDFium resolved | dB 59.608; SSIM 0.999488 |
 | `auto-012-txt-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-012-txt-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-012-txt-to-md` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
@@ -390,27 +504,27 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-021-avif-to-ppm` | WARN | WARN | b: within thresholds | dB 34.261; SSIM 0.999891; within thresholds |
 | `auto-022-azw3-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-022-azw3-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-022-azw3-to-psb` | FAIL | FAIL | b?: PDF raster backend | dB 34.900; SSIM 0.912467 |
-| `auto-022-azw3-to-psd` | FAIL | FAIL | b?: PDF raster backend | dB 34.900; SSIM 0.912467 |
+| `auto-022-azw3-to-psb` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-022-azw3-to-psd` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
 | `auto-023-caf-to-opus` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-023-caf-to-weba` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-024-docm-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-024-docm-to-tga` | FAIL | FAIL | b?: PDF raster backend | dB 34.143; SSIM 0.890139 |
-| `auto-025-dotm-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 34.170; SSIM 0.890566 |
+| `auto-024-docm-to-tga` | FAIL | PASS | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-025-dotm-to-avif` | FAIL | WARN | b: PDFium resolved | dB 67.664; SSIM 0.999947 |
 | `auto-025-dotm-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-025-dotm-to-tiff` | FAIL | FAIL | b?: PDF raster backend | dB 34.143; SSIM 0.890139 |
+| `auto-025-dotm-to-tiff` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
 | `auto-025-dotm-to-txt` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
 | `auto-025-dotm-to-txtz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
-| `auto-025-dotm-to-webp` | FAIL | FAIL | b?: PDF raster backend | dB 34.184; SSIM 0.890748 |
-| `auto-026-dotx-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 34.143; SSIM 0.890139 |
-| `auto-026-dotx-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 34.191; SSIM 0.890886 |
+| `auto-025-dotm-to-webp` | FAIL | PASS | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-026-dotx-to-bmp` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-026-dotx-to-cbz` | FAIL | WARN | b: PDFium resolved | dB 61.110; SSIM 0.999761 |
 | `auto-026-dotx-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-026-dotx-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-026-dotx-to-dotm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-027-dv-to-webm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-029-eot-to-woff` | WARN | WARN | b: within thresholds | within thresholds |
 | `auto-030-epub-to-fb2` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
-| `auto-030-epub-to-gif` | FAIL | FAIL | b?: PDF raster backend | dB 34.885; SSIM 0.912221 |
+| `auto-030-epub-to-gif` | FAIL | WARN | b: PDFium resolved | dB 75.212; SSIM 0.999993 |
 | `auto-030-epub-to-htmlz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-030-epub-to-hwpx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-032-flv-to-icns` | WARN | WARN | b: within thresholds | dB 41.216..46.846; SSIM 0.999756..0.999926; within thresholds |
@@ -426,10 +540,10 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-034-hwp-to-mov` | WARN | WARN | b: media packets | media packets |
 | `auto-034-hwp-to-mp4` | WARN | WARN | b: media packets | media packets |
 | `auto-034-hwp-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-034-hwp-to-png` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
-| `auto-035-hwpx-to-ppm` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
-| `auto-035-hwpx-to-psb` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
-| `auto-035-hwpx-to-psd` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-034-hwp-to-png` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-035-hwpx-to-ppm` | FAIL | PASS | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-035-hwpx-to-psb` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-035-hwpx-to-psd` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
 | `auto-035-hwpx-to-rb` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-036-icns-to-m2ts` | WARN | WARN | b: media packets | media packets |
 | `auto-036-icns-to-m4v` | WARN | WARN | b: media packets | media packets |
@@ -464,7 +578,7 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-045-mkv-to-ico` | FAIL | FAIL | b?: ICO resampling | dB 29.974..37.346; SSIM 0.996098..0.999240 |
 | `auto-045-mkv-to-jp2` | WARN | WARN | b: within thresholds | dB 40.864; SSIM 0.999909; within thresholds |
 | `auto-045-mkv-to-jpg` | FAIL | FAIL | b?: JPEG encoding | dB 27.393; SSIM 0.999092 |
-| `auto-046-mobi-to-jxl` | FAIL | FAIL | b?: PDF raster backend | dB 31.788..39.393; SSIM 0.914399..0.948911 |
+| `auto-046-mobi-to-jxl` | FAIL | WARN | b: PDFium resolved | dB 58.698–60.846; SSIM 0.999432–0.999894 |
 | `auto-046-mobi-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-046-mobi-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-046-mobi-to-odt` | WARN | PASS | a: comparator normalization | semantic/normalized match |
@@ -492,7 +606,7 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-055-pdf-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-055-pdf-to-txtz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-055-pdf-to-webm` | WARN | WARN | b: media packets | media packets |
-| `auto-055-pdf-to-webp` | FAIL | FAIL | b?: PDF raster backend | dB 34.184; SSIM 0.890748 |
+| `auto-055-pdf-to-webp` | FAIL | PASS | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
 | `auto-055-pdf-to-wmv` | WARN | WARN | b: media packets | media packets |
 | `auto-056-potx-to-avif` | WARN | WARN | b: image metadata | dB 99.000; SSIM 1.000000; image metadata |
 | `auto-056-potx-to-odp` | WARN | PASS | a: comparator normalization | semantic/normalized match |
@@ -566,9 +680,9 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-069-tgz-to-txz` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-069-tgz-to-zip` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-070-ts-to-webm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
-| `auto-071-txtz-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 34.977; SSIM 0.914325 |
-| `auto-071-txtz-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 34.983; SSIM 0.914119 |
-| `auto-071-txtz-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 34.975; SSIM 0.914410 |
+| `auto-071-txtz-to-avif` | FAIL | WARN | b: PDFium resolved | dB 57.754; SSIM 0.999954 |
+| `auto-071-txtz-to-bmp` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-071-txtz-to-cbz` | FAIL | WARN | b: PDFium resolved | dB 58.434; SSIM 0.999785 |
 | `auto-071-txtz-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-071-txtz-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-071-txtz-to-dotm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
@@ -624,10 +738,10 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-094-eml-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-094-eml-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-094-eml-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-096-html-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 38.193; SSIM 0.917842 |
+| `auto-096-html-to-avif` | FAIL | WARN | b: PDFium resolved | dB 58.380; SSIM 0.999946 |
 | `auto-096-html-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-096-html-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 38.210; SSIM 0.917287 |
-| `auto-096-html-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 38.222; SSIM 0.918410 |
+| `auto-096-html-to-bmp` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-096-html-to-cbz` | FAIL | WARN | b: PDFium resolved | dB 60.216; SSIM 0.999750 |
 | `auto-096-html-to-doc` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-096-html-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-097-rst-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
@@ -682,24 +796,24 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-109-tsv-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-109-tsv-to-ods` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-109-tsv-to-pdb` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-110-doc-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 33.984; SSIM 0.873487 |
+| `auto-110-doc-to-avif` | FAIL | WARN | b: PDFium resolved | dB 67.894; SSIM 0.999944 |
 | `auto-110-doc-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-110-doc-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 33.957; SSIM 0.872954 |
+| `auto-110-doc-to-bmp` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
 | `auto-110-doc-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-111-docx-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 34.191; SSIM 0.890886 |
+| `auto-111-docx-to-cbz` | FAIL | WARN | b: PDFium resolved | dB 61.110; SSIM 0.999761 |
 | `auto-111-docx-to-docm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-111-docx-to-dotm` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-111-docx-to-dotx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-111-docx-to-epub` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-112-html-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-112-html-to-fb2` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |
-| `auto-112-html-to-gif` | FAIL | FAIL | b?: PDF raster backend | dB 36.238; SSIM 0.891609 |
+| `auto-112-html-to-gif` | FAIL | WARN | b: PDFium resolved | dB 68.179; SSIM 0.999924 |
 | `auto-112-html-to-htmlz` | FAIL | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-112-html-to-hwpx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `auto-113-odt-to-ico` | WARN | WARN | b: within thresholds | dB 35.166..44.492; SSIM 0.999117..0.999902; within thresholds |
-| `auto-113-odt-to-jp2` | FAIL | FAIL | b?: PDF raster backend | dB 36.277; SSIM 0.892354 |
-| `auto-113-odt-to-jpg` | FAIL | FAIL | b?: PDF raster backend | dB 36.316; SSIM 0.893263 |
-| `auto-113-odt-to-jxl` | FAIL | FAIL | b?: PDF raster backend | dB 36.269; SSIM 0.892168 |
+| `auto-113-odt-to-jp2` | FAIL | WARN | b: PDFium resolved | dB 78.773; SSIM 0.999993 |
+| `auto-113-odt-to-jpg` | FAIL | WARN | b: PDFium resolved | dB 61.959; SSIM 0.999683 |
+| `auto-113-odt-to-jxl` | FAIL | WARN | b: PDFium resolved | dB 60.509; SSIM 0.999560 |
 | `auto-113-odt-to-lit` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-114-rtf-to-lrf` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `auto-114-rtf-to-mobi` | WARN | WARN | b: unsupported binary | unsupported binary |
@@ -712,10 +826,10 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-119-pdf-to-mkv` | FAIL | WARN | c: fixed alpha/composite/canvas | media packets |
 | `auto-119-pdf-to-mov` | FAIL | WARN | c: fixed alpha/composite/canvas | media packets |
 | `auto-119-pdf-to-mp4` | FAIL | WARN | c: fixed alpha/composite/canvas | media packets |
-| `auto-120-txt-to-png` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
-| `auto-120-txt-to-ppm` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
-| `auto-120-txt-to-psb` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
-| `auto-120-txt-to-psd` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-120-txt-to-png` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-120-txt-to-ppm` | FAIL | PASS | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-120-txt-to-psb` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
+| `auto-120-txt-to-psd` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
 | `auto-121-pdf-to-mpg` | WARN | WARN | b: media packets | media packets |
 | `auto-121-pdf-to-mxf` | WARN | WARN | b: media packets | media packets |
 | `auto-121-pdf-to-rst` | WARN | WARN | b: within thresholds | within thresholds |
@@ -723,11 +837,11 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `auto-122-png-to-tex` | WARN | WARN | b: within thresholds | within thresholds |
 | `auto-122-png-to-tiff` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
 | `auto-122-png-to-ts` | WARN | WARN | b: media packets | media packets |
-| `auto-123-txt-to-avif` | FAIL | FAIL | b?: PDF raster backend | dB 36.294; SSIM 0.892655 |
+| `auto-123-txt-to-avif` | FAIL | WARN | b: PDFium resolved | dB 69.958; SSIM 0.999950 |
 | `auto-123-txt-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-123-txt-to-bmp` | FAIL | FAIL | b?: PDF raster backend | dB 36.274; SSIM 0.892314 |
+| `auto-123-txt-to-bmp` | FAIL | WARN | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
 | `auto-123-txt-to-tcr` | WARN | WARN | b: unsupported binary | unsupported binary |
-| `auto-123-txt-to-webp` | FAIL | FAIL | b?: PDF raster backend | dB 36.319; SSIM 0.893130 |
+| `auto-123-txt-to-webp` | FAIL | PASS | b: PDFium resolved | dB 99.000; SSIM 1.000000 |
 | `builtin-jpg-70` | WARN | WARN | b: within thresholds | dB 39.848; SSIM 0.999537; within thresholds |
 | `builtin-merge-pdf` | WARN | WARN | b: empty-text PDF | empty-text PDF |
 | `builtin-pdf-split` | WARN | WARN | b: empty-text PDF | empty-text PDF |
@@ -736,7 +850,7 @@ This ledger covers all **495 original non-CAD FAIL/WARN cases**, plus any origin
 | `builtin-to-avif` | WARN | WARN | b: within thresholds | dB 42.377; SSIM 0.999774; within thresholds |
 | `builtin-to-azw3` | WARN | WARN | b: unsupported binary | unsupported binary |
 | `builtin-to-bmp` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
-| `builtin-to-cbz` | FAIL | FAIL | b?: PDF raster backend | dB 34.894; SSIM 0.912828 |
+| `builtin-to-cbz` | FAIL | WARN | b: PDFium resolved | dB 58.403; SSIM 0.999782 |
 | `builtin-to-docx` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `builtin-to-epub` | WARN | PASS | a: comparator normalization | semantic/normalized match |
 | `builtin-to-fb2` | WARN | PASS | a: comparator normalization | text 1.000000; semantic/normalized match |

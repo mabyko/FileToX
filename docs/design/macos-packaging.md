@@ -1,5 +1,49 @@
 # macOS 앱·변환 엔진 배포 설계
 
+## 현재 Swift helper 패키징 (2026-10-23)
+
+현재 빌드 입력은 `Package.swift`, `project.yml`, `Tools/stage-bundled-engines.sh`다.
+변환 helper는 Swift 실행 파일이며 .NET runtime·NuGet DLL·JIT entitlement를 포함하지 않는다.
+macOS 15 이상, arm64/x86_64를 각각 `ARCHS=$(NATIVE_ARCH_ACTUAL)`로 빌드한다.
+아래의 기존 .NET 설계는 전환 전 조사 기록이며 현재 빌드·서명 지침으로 적용하지 않는다.
+
+```text
+FileToX.app/Contents/Helpers/FileToXEngine.app/Contents/
+  MacOS/FileToXEngine                  # Swift helper, host-wire-v1 NDJSON
+  MacOS/engines/{rhwp,7zip}/...         # 아키텍처별 pinned 실행 파일
+  Frameworks/libpdfium.dylib           # PDFium 147.0.7690.0, arm64+x86_64
+  Resources/Resources/...              # 엔진 카탈로그·번역·템플릿
+  Resources/Notices/...                # Filee, rhwp/7-Zip, LibRaw, PDFium 고지
+```
+
+PDF → 래스터는 C# PDFtoImage 5.2.1과 같은 PDFium을 사용한다. PDFium의 macOS universal
+prebuilt dylib·공개 헤더·버전·빌드 설정을 `Vendor/PDFium`에 체크인했다. 원본 release asset의
+SHA-256을 GitHub release digest와 대조했으며, arm64 실행 코드는 설치된 C# helper와 같다.
+출처·해시·갱신 절차·실제 렌더 플래그는 [Vendor README](../../Vendor/PDFium/README.md)에 있다.
+PDFium을 받기 위한 빌드 중 네트워크 요청은 없다. PDFium은 BSD-3, 배포 패키징은 MIT이며,
+번들 third-party 고지를 포함한 `docs/upstream/PDFium.*`를 staging script가 `Resources/Notices`에 넣는다.
+
+XcodeGen이 dylib를 helper의 `Contents/Frameworks`에 복사하고 **Code Sign on Copy**로 서명한다.
+install name은 `@rpath/libpdfium.dylib`, helper rpath는 `@executable_path/../Frameworks`와
+`@loader_path/../Frameworks`다. PDFium 로딩은 소스 트리의 라이브러리 경로에 의존하지 않는다.
+Debug 빌드에는 Xcode가 패키지 산출물 rpath도 추가하지만 PDFium은 번들의 상대 경로에서 로드한다.
+helper를 `/tmp`로 복사해 PDFium 로드·실제 렌더링·서명을 다시 검증했다. 동일 dylib를 엔진 XCTest 번들에도 포함한다. 서명 순서는 dylib·외부 엔진 → helper → 부모 앱이다.
+Developer ID 배포에서는 모든 내부 Mach-O에 같은 Team ID를 사용하고 hardened runtime·타임스탬프·
+공증·staple을 별도로 검증해야 한다. 로컬 ad-hoc 검증은 공증 검증을 대신하지 않는다.
+
+SwiftPM은 `CPDFium` C 모듈과 체크인 dylib에 직접 링크한다. `swift build`/`swift test` 산출물은
+소스 트리의 `Vendor/PDFium/lib`를 rpath로 사용하므로 checkout에서 바로 실행할 수 있다.
+이 command-line 실행 파일만 별도 폴더로 옮길 때는 라이브러리/rpath도 함께 구성해야 한다.
+배포에는 Xcode의 helper 번들을 사용한다. 기존 libwebp/libjxl 패키지는 첫 의존성 해석이 필요하고,
+rhwp/7-Zip은 pinned archive 캐시가 없을 때 staging script가 내려받는다. 캐시가 있으면 재사용한다.
+
+검증 명령은 `swift build --build-tests`, `swift test`,
+`xcodegen generate`, `xcodebuild test -project FileToX.xcodeproj -scheme FileToX -destination 'platform=macOS'`다.
+PDFium의 43건 비교 수치와 검증 결과는 [differential triage](engine-differential-triage.md#pdfkit-versus-pdfiumskia-rasterization)에 있다.
+앱 내부는 서명 후 읽기 전용으로 유지한다. 설정·선택 엔진·임시/결과 경로의 기존 경계를 바꾸지 않는다.
+
+## 전환 전 .NET 패키징 조사 기록 (2026-10-11)
+
 작성·공식 문서 확인일: 2026-10-11. SDK 10.0.401을 `~/.dotnet`에 설치했고 arm64 self-contained helper의 로컬 게시·ad-hoc hardened runtime 서명을 실행했다. Developer ID 서명·공증과 Intel 검증은 아직 수행하지 않았다.
 
 ## 배포 단위와 최소 OS
