@@ -1,12 +1,19 @@
 # C# / Swift engine differential triage
 
-Date: 2026-10-23. Branch: `fix/swift-engine-differential`.
+Date: 2026-10-23. Original triage branch: `fix/swift-engine-differential`;
+current integration branch: `refactor/swift-conversion-engine`.
 
-This report covers the retained 849-case C# / Swift replay, excluding the 15 CAD
-cases from the parity verdict. CAD is being ported separately. It distinguishes
+The original triage below excluded 15 then-unported CAD cases from its verdict.
+Later sections retain the resolved backend choices, CAD integration and final
+849-case replay including CAD. The report distinguishes
 comparator noise, confirmed engine defects, previously accepted differences, and
 backend differences that still need an acceptance decision. A raw FAIL is not
 automatically a Swift defect; matching failures can also receive PASS.
+
+The final optimisation replay (`a064ab8`) is **578 PASS / 263 WARN / 8 FAIL**.
+Additional readback exposed an unfixed Calibre TCR content-corruption defect,
+reproduced directly without either host. The counts are not proof of full content
+equivalence; see [final verification and limits](#performance-integration-2026-10-23).
 
 ## Evidence and results
 
@@ -33,8 +40,9 @@ All paths below are relative to the named worktree, unless absolute.
 | Final helper (`cd35b98`) | **73** | **244** | **532** | **58** |
 | JPEG/resize parity (`feat/jpeg-resize-parity`) | **67** | **233** | **549** | **52** |
 | Merged branch with PDFium, JPEG/resize, Skia JPEG and CAD (`2fd553f`) | **8** | **263** | **578** | **7** |
+| Final optimisations and Unicode correction (`a064ab8`) | **8** | **263** | **578** | **7** |
 
-The last row is a later replay of the same corpus, cases and engine paths with the helper of branch
+The JPEG/resize row is a later replay of the same corpus, cases and engine paths with the helper of branch
 `feat/jpeg-resize-parity` (libjpeg-turbo JPEG writing and ImageMagick's resize, see the two "resolved" sections
 below). Evidence in worktree `t3-4b2d90a6`: `build/engine-compare/candidate-jpeg-final`,
 `comparison-jpeg-final/report.json` and `build/jpeg-parity/final-delta.txt` (every changed case, before → after).
@@ -1013,3 +1021,150 @@ original final replay and `comparison-final/report.json`.
 | `option-tiff-none` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
 | `option-tiff-zip` | WARN | WARN | b: within thresholds | dB 99.000; SSIM 1.000000; within thresholds |
 | `option-webp-lossless` | WARN | WARN | b: within thresholds | dB 53.413; SSIM 0.999974; within thresholds |
+
+## Performance integration (2026-10-23)
+
+Recovered the interrupted work based on `15943f6`. The original agent worktrees, installed C# reference application
+and original user data were preserved. No dependency was added. Production changes are signed commits:
+
+- `ee715af`: linear ebook regex replacement and document/XML escaping and trimming fast paths; eight regressions.
+- `5ff2f80`: ad-hoc Release helper signing fix for bundled PDFium, with a signing-entitlement regression test.
+- `87708cb`: independent PDFKit text workers, attribute/format caching and serialized attributed-string creation;
+  page order, every text run's style and cancellation are covered by two regressions.
+- `f6a7c07`: Markdown reference indexing, literal scans and allocation reductions; four regressions.
+- `a064ab8`: preserve canonical Unicode escaping. U+1FEF equals a backtick under Swift Character equality, so
+  non-ASCII text must reach the original Character predicate. Isolated, embedded and mixed cases were added to
+  the existing document regression. Independent re-review found the issue resolved and no remaining findings.
+
+PDF text remains on PDFKit: a PDFium text draft changed Korean spacing in three corpus PDFs and was rejected.
+Each text worker owns its PDFDocument and reader; page order is restored before header/footer removal and
+assembly. Only attributed-string construction uses the new shared lock, reducing Foundation attribute-table
+contention. PDFium raster rendering and its global lock are unchanged. Cross-job throughput of the text lock is
+unmeasured. The subsequent Markdown autolink experiment was slower and was not retained.
+
+Measurements and goal gaps are recorded in [the benchmark results](../../Tools/engine-bench/README.md#optimisation-results-2026-10-23).
+Focused evidence remains under `build/resume/{pdf-next-validation,ebook-validation,markdown-next-validation}`.
+
+### Final conversion replay
+
+The final production host is retained at `build/resume/final-integrated-host/FileToXEngine`, SHA-256
+`7d661dbea80547e3f8eecfbc6f12ea77a7552bd17b2148c2819fca7bf45a2774`. Its bundle, all 290 captured source
+hashes, the 124 corpus files and the harness inputs matched before and after the replay. The snapshot includes
+all five production commits above; committing the already captured Unicode fix did not change source bytes.
+
+All **849 cases** were replayed at unchanged thresholds: **578 PASS / 263 WARN / 8 FAIL**. Raw states match the
+C# baseline and previous Swift run: **786 completed / 63 failed**, with **zero harness or inspection errors**.
+The eight strict FAILs remain recorded:
+
+- Three SVG raster cases: `auto-064-svg-to-{jp2,jpg,jxl}`, the accepted CoreSVG/Svg.Skia rendering difference.
+- Four broken C# image references: `auto-061-psd-to-html`, `auto-077-webp-to-html`, `auto-086-dxf-to-md`,
+  `auto-101-gif-to-md`. Swift's outputs preserve the image sidecars.
+- `auto-067-tcr-to-txtz`: generated Calibre cover variation and OCR disagreement. It was WARN in the preceding
+  replay and is FAIL in this one; the threshold was not relaxed.
+
+The seven non-cover FAIL outputs are byte-identical to the preceding Swift candidate. The preceding frozen-host
+round had **577 PASS / 265 WARN / 7 FAIL**; two Calibre cover statuses explain the count changes. The first attempt
+executed **0/849** because optional engine folders had been intentionally removed after earlier validation.
+Those missing prerequisites were restored before either complete round; the failed attempt is not a test pass.
+
+All 55 changed binary book/document outputs were read back through Calibre (165 commands), and all final text
+readbacks matched the C# baseline. This is still not proof of layout or embedded-object equivalence. Decompressed
+TCR bytes exposed a real quality issue hidden by binary WARN: `auto-096-html-to-tcr` has a spurious trailing `Fil`
+versus the source and preceding Swift output, also present in the C# baseline. Two preceding TCR outputs contained
+invalid UTF-8 that the final run did not contain (`auto-038-lit-to-tcr` and `auto-063-snb-to-tcr`; DOCM/PDB payloads
+were valid and identical). These findings are not waived as harmless metadata. Existing question-mark losses
+in PDB/RB-derived text also remain where the C# baseline matches. No blanket claim of full content equivalence is made.
+
+A bounded direct-engine investigation reproduced corruption in unchanged **Calibre 9.15.0 without either host**.
+Four conversions of byte-identical HTML with isolated profiles produced two clean 49-byte payloads and two
+52-byte payloads with trailing `Fil`, exactly matching the replay variants. Direct compressor probes isolated
+the defect to `TCRCompressor._combine_codes`: changing dictionary meanings while a terminal/stale code remains
+in the stream corrupts content; unordered set iteration makes the result process-dependent. The same method
+reproduced the exact invalid UTF-8 SNB payload from valid input. Calibre's own decompressor agreed with the
+independent decoder, excluding a readback-decoder explanation. The particular LIT variant was not separately
+reproduced. The external TCR defect remains unfixed; no version, format or quality threshold was changed.
+Evidence and exact seven-call reproduction: `build/resume/tcr-variability-triage/{findings.md,summary.json}`.
+
+Six generated DWG files also read back successfully to DXF through the final Swift host; content matched apart
+from four time fields. This does not replace AutoCAD/ODA validation.
+
+Commands, per-case evidence and limits: `build/resume/final-replay-r3-summary.json`,
+`build/resume/final-replay-r3-comparison/report.{json,md}` and `build/resume/final-replay-r3-inspection/`.
+
+### Build, tests and packaging
+
+- Final-source SwiftPM tests after the Unicode fix: **524 engine tests, 17 skipped, zero failures**, and
+  **12 Core tests, zero failures** (536 total). Log: `build/resume/swift-test-post-review.log`.
+- Production `swift build -c release --jobs 4 --product FileToXEngine`: succeeded, including the Unicode fix.
+  Log: `build/resume/swift-release-final.log`.
+- SDK-denying Xcode `clean build-for-testing`: succeeded with the optimisations and signing phase.
+  Log: `build/resume/xcode-clean-isolated-final.log`.
+- Full Xcode tests from that clean build: **74 app tests + 524 engine tests**, **56 skipped**, **zero failures**.
+  Log: `build/resume/xcode-test-final.log`. This build preceded the final Unicode correction.
+- Xcode engine tests inside the SDK-denying sandbox: **523 tests, 56 skipped, zero failures**. Only
+  `ProcessRunnerTests.testTimeoutKillsTheWholeTree` was explicitly excluded because that sandbox cannot execute
+  `/bin/ps` (`Operation not permitted`), independently reproduced. It passed in the normal full runs.
+  Log: `build/resume/xcode-engine-test-isolated-final.log`.
+- The Unicode correction was subsequently rebuilt and tested by Xcode inside the same SDK-denying sandbox:
+  **five document text tests, zero skips, zero failures**. Log: `build/resume/xcode-unicode-test-isolated.log`.
+- Final-source Xcode Release build in the SDK-denying sandbox: succeeded.
+  Log: `build/resume/xcode-release-isolated-final.log`.
+- The final Release copy contains **no .NET runtime files, DLLs or runtime/dependency manifests**; `otool -L`
+  contains no .NET links, and `codesign --verify --deep --strict` passed.
+- Relocated final Release copies passed **22 smoke checks ad hoc and 22 with the existing personal development
+  certificate**, with repository, SDK and NuGet access denied. Each run includes 20 real conversions and two
+  selection checks, with no staging leftovers. Logs: `build/resume/release-final-smoke-{adhoc,certificate}.log`;
+  audit: `build/resume/release-final-bundle-audit.json`; copy path: `build/resume/release-final-proof-path.txt`.
+- `Tools/engine-compare/test_harness.py`: **15 passed**. Real settings, history, presets and profiles compared
+  through C# and Swift hosts on copies had no semantic differences; original user data was not written.
+  Evidence: `build/resume/user-data-baseline/summary.json`.
+
+The signing fix addresses an actual relocated-app failure: ad-hoc hardened helpers and PDFium lack a Team ID,
+so library validation rejects the dylib even when signature verification succeeds. A checkout-local rpath could
+hide that failure. Apple's [library validation documentation](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.cs.disable-library-validation)
+explains the same-Team-ID requirement. `Tools/prepare-engine-entitlements.py` grants the exception only to signing
+identity `-`; certificate-signed helpers get an empty dictionary. Xcode passes the generated file directly to
+codesign after the script, avoiding a generated `CODE_SIGN_ENTITLEMENTS` dependency cycle. Hardened Runtime
+remains enabled, and no bundle ID, project team or local identity was changed.
+
+The relocated certificate proof signs PDFium, the helper and the main app with the existing certificate matching
+the personal team already selected in ignored local configuration. All three signatures have that Team ID, the
+helper has no library-validation exception, and both signature and runtime checks pass. This is a copy-signing
+proof, not an Xcode certificate-signing build, Developer ID distribution or notarization.
+
+### Isolation and remaining limits
+
+`build/isolated.sb` denies reads/writes of `~/.dotnet`, `~/.nuget` and `/usr/local/share/dotnet`; an explicit probe
+confirmed the denials and absence of `dotnet` from PATH (`build/resume/no-dotnet-probe.log`). Home SDK/NuGet
+folders were not deleted or modified. The clean build used:
+
+```sh
+env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=/tmp \
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+  /usr/bin/sandbox-exec -f build/isolated.sb /usr/bin/xcodebuild clean build-for-testing \
+  -project FileToX.xcodeproj -scheme FileToX -destination 'platform=macOS' \
+  -derivedDataPath build/DerivedData-resume-isolated \
+  -clonedSourcePackagesDirPath build/DerivedData-unified2/SourcePackages \
+  -disableAutomaticPackageResolution -IDEPackageSupportDisableManifestSandbox=YES \
+  'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox' -jobs 4
+```
+
+The package cache was resolved beforehand. Only nested manifest/compiler sandboxes are disabled to permit the
+outer SDK-denying sandbox. This is not a separate SDK-free macOS installation. The full app test host remains
+incompatible with the outer sandbox and was tested outside it with the clean PATH. Skipped optional-tool,
+fixture and codec tests are not passes. Full visual/layout QA and perceptual media/glyph equivalence are not
+established by the comparison harness.
+
+Pandoc 3.12, Calibre 9.15.0 and LibreOffice 26.2.6 were temporarily restored under this checkout's ignored build
+folder using pinned SHA-256 archives; no global installation or application settings changed. After all checks and
+final measurements, their three copies and verified download archives were removed (**2.84 GB**;
+`build/resume/optional-engines-cleanup.json`). Reproduction inputs, decoded bytes, disassembly, reports and frozen
+native hosts were retained; reproducing optional-engine calls requires restoring the same pinned engines.
+Homebrew FFmpeg and bundled rhwp/7-Zip are preserved. No AutoCAD/ODA application or macOS VM tool was found
+locally. Intel runtime, separate-OS testing,
+AutoCAD/ODA, Xcode certificate signing, Developer ID signing and notarization remain unverified.
+
+Build tools remain Swift/Xcode and Python 3 (standard-library scripts); XcodeGen is required only to regenerate
+the project. Runtime dependencies remain macOS frameworks; native libjpeg-turbo, LibRaw, PDFium, libwebp, libjxl,
+Brotli, libxml2 and zlib; bundled rhwp and 7-Zip; optional FFmpeg, Ghostscript, Pandoc, LibreOffice and Calibre.
+No installation, deployment, notarization or push was performed.
