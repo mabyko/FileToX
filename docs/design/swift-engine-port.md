@@ -58,6 +58,7 @@ C# 변환 helper(`EngineHost` + Filee `Core`·`Engines`)를 Swift helper로 옮�
 - **정규식:** `NSRegularExpression`으로 같은 패턴을 쓴다. `RegexOptions.IgnoreCase` → `.caseInsensitive`.
 - **반올림·변환:** .NET `Math.Round`는 기본이 짝수 반올림이다(`.rounded(.toNearestOrEven)`). `(int)x`는 0 쪽으로 버린다(`Int(x)`). `int.TryParse`·`double.TryParse`는 앞뒤 공백과 부호를 허용하므로 Swift에서는 공백을 먼저 지운다. `Convert.ToInt32(s, 16)` → `Int(s, radix: 16)`.
 - **임시 파일:** `step.workDirectory` 아래에만 만든다. 입력 파일은 절대 바꾸지 않는다.
+- **한글 파일 이름(NFC):** `Data.write`, `String.write`, `FileManager`의 `createFile`·`createDirectory`·`copyItem`·`moveItem`은 이름을 분해형(NFD)으로 저장한다. .NET(C# helper)은 받은 그대로(보통 NFC) 저장하므로, 결과물 안에 남는 이름(부속 폴더, 압축 해제 항목, 첨부 파일)은 `FileManager.default.createDirectoryIfNeeded(_:)`(mkdir), `FileManager.default.writeFile(_:_:)`(open), `rename(2)`로 만든다. 결과 파일 자체는 확정 단계의 `rename(2)`가 이름을 정하므로 상관없다.
 
 ## 이미지 공용 API (이미지 엔진 담당)
 
