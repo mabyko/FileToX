@@ -6,10 +6,18 @@ import PDFKit
 class EbookTestCase: XCTestCase {
     var folder: String!
     override func setUpWithError() throws {
-        folder = FileManager.default.temporaryDirectory.appendingPathComponent("ftx-ebooks-\(UUID().uuidString)").path
+        if let root = ProcessInfo.processInfo.environment["FILETOX_EBOOK_FIXTURE_OUTPUT"] {
+            folder = FilePath.combine(root, String(describing: type(of: self)), name.replacingOccurrences(of: "/", with: "_"))
+        } else {
+            folder = FileManager.default.temporaryDirectory.appendingPathComponent("ftx-ebooks-\(UUID().uuidString)").path
+        }
         try FileManager.default.createDirectoryIfNeeded(folder)
     }
-    override func tearDownWithError() throws { try? FileManager.default.removeItem(atPath: folder) }
+    override func tearDownWithError() throws {
+        if ProcessInfo.processInfo.environment["FILETOX_EBOOK_FIXTURE_OUTPUT"] == nil {
+            try? FileManager.default.removeItem(atPath: folder)
+        }
+    }
     func path(_ name: String) -> String { FilePath.combine(folder, name) }
     func save(_ name: String, _ bytes: Data) throws -> String { let p = path(name); try bytes.write(to: URL(fileURLWithPath: p)); return p }
     func convert(_ input: String, _ from: String, _ to: String, _ preset: Preset = Preset(), _ engine: Converter = EbookConverter()) async throws -> String {

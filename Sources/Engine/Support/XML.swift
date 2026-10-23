@@ -570,6 +570,13 @@ private struct XmlTextWriter {
     }
 
     static func escapeText(_ text: String) throws -> String {
+        // Most text nodes need no change: one validating scan instead of rebuilding the string scalar by scalar.
+        var plain = true
+        for scalar in text.unicodeScalars {
+            try check(scalar)
+            if scalar == "&" || scalar == "<" || scalar == ">" || scalar == "\r" || scalar == "\n" { plain = false; break }
+        }
+        if plain { return text }
         var result = ""
         result.reserveCapacity(text.utf8.count)
         var previousCR = false

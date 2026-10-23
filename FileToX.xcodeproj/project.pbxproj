@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0101683F324338D34300D6CA /* PanelPlacementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7C338D26B27FB21E225848 /* PanelPlacementTests.swift */; };
+		057284B725CF37FFAD59BF5B /* EbookRegexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17962B620FEB89126DD93D41 /* EbookRegexTests.swift */; };
 		0657C0314A00B9567F80B2DC /* FileToXEngineKit in Frameworks */ = {isa = PBXBuildFile; productRef = 701D2EFA5900170E6CF03367 /* FileToXEngineKit */; };
 		072694D2D4EA48852367187C /* OoxmlVariantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3628DD5274AA6FF1DC00649 /* OoxmlVariantTests.swift */; };
 		0CFE07DB333DE0135499D8E8 /* ComparisonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E43F83DB34B8E4ECE70C4C2E /* ComparisonTests.swift */; };
@@ -58,6 +59,7 @@
 		4E17B45CFBCFFAE613839144 /* SpreadsheetFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 276BFA05FBBA7C28098AC559 /* SpreadsheetFormatTests.swift */; };
 		513B64891B9E0EDA041AE9B6 /* GlobalDragMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 931432C168F544F409883E9C /* GlobalDragMonitorTests.swift */; };
 		517850416EE1AB830F332CA9 /* CoreTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D1CC6A42D55A0CB0E3161C9 /* CoreTestSupport.swift */; };
+		5314444BE0AFF5DAB737C8CE /* DocumentTextPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD18298014CBFAE2965D92C0 /* DocumentTextPerformanceTests.swift */; };
 		533764FD59C38376EE568953 /* FormatDropView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDCA29B344364B67EDE82328 /* FormatDropView.swift */; };
 		560F5247E2F6E30924AD6654 /* conversion-baseline.json in Resources */ = {isa = PBXBuildFile; fileRef = FD37AE3DA9B3F7CAFF1F3001 /* conversion-baseline.json */; };
 		5613BF34EA63DAA85686EE47 /* OutputPathResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C3D576F63B6A24457A7B5D6 /* OutputPathResolverTests.swift */; };
@@ -236,6 +238,7 @@
 		12001E38034594072D5B4D9C /* EbookFoundationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EbookFoundationTests.swift; sourceTree = "<group>"; };
 		1379D6E39F6BA495858CED4A /* CoverArtTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverArtTests.swift; sourceTree = "<group>"; };
 		1615C83046F2EAA78AFBADC7 /* ConversionPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversionPanelController.swift; sourceTree = "<group>"; };
+		17962B620FEB89126DD93D41 /* EbookRegexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EbookRegexTests.swift; sourceTree = "<group>"; };
 		189B508B0CE4BA0968AADBA9 /* DocumentTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTestSupport.swift; sourceTree = "<group>"; };
 		193C8F2B8293CD98FAF88165 /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/Localizable.strings; sourceTree = "<group>"; };
 		1A337F4A7651CF589E45A18B /* HwpxReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HwpxReaderTests.swift; sourceTree = "<group>"; };
@@ -348,6 +351,7 @@
 		C45F1E909E0BCCF1B0182636 /* JobQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobQueueTests.swift; sourceTree = "<group>"; };
 		C93312F6C30D9F77BBC8F5F6 /* DocumentExportFixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentExportFixTests.swift; sourceTree = "<group>"; };
 		CB2E5C76C36FE8A3B5DBBACD /* korean_AC1018.dxf */ = {isa = PBXFileReference; path = korean_AC1018.dxf; sourceTree = "<group>"; };
+		CD18298014CBFAE2965D92C0 /* DocumentTextPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTextPerformanceTests.swift; sourceTree = "<group>"; };
 		CD44AA28761083E892693B7B /* AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelTests.swift; sourceTree = "<group>"; };
 		CEC1220C6DD1FF5419BADC88 /* GlobalDragMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalDragMonitor.swift; sourceTree = "<group>"; };
 		CEF64D18A53A1F8CC46E3AC8 /* libreoffice-baseline.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "libreoffice-baseline.json"; sourceTree = "<group>"; };
@@ -484,6 +488,7 @@
 				E0FB58DF8DB7125F6A168AFD /* DocumentFixtures.swift */,
 				F2D17A54B810E29B58617260 /* DocumentParityTests.swift */,
 				189B508B0CE4BA0968AADBA9 /* DocumentTestSupport.swift */,
+				CD18298014CBFAE2965D92C0 /* DocumentTextPerformanceTests.swift */,
 				ACA9B33D2BDBFC2098C4F5D9 /* DocxToHwpxTests.swift */,
 				DB5947CEAB776747730419A4 /* DocxWriterTests.swift */,
 				3294F8AEBD5B94A958BD025E /* HDocumentAssert+Comparer.swift */,
@@ -665,6 +670,7 @@
 				36E489849975603AA13BEE1B /* EbookBaselineTests.swift */,
 				3945A489641941BE18E1F683 /* EbookBuilders.swift */,
 				12001E38034594072D5B4D9C /* EbookFoundationTests.swift */,
+				17962B620FEB89126DD93D41 /* EbookRegexTests.swift */,
 				F60B7A0FB683F6A91C309C92 /* EbookRouteTests.swift */,
 				74797D670F64B7B88DE0A9D6 /* EbookTests.swift */,
 			);
@@ -1044,11 +1050,13 @@
 				3093FDE5A19788650A40BEDA /* DocumentFixtures.swift in Sources */,
 				A739BF661CB77A1CEA00A753 /* DocumentParityTests.swift in Sources */,
 				32ABCDE58F626C80D3BABC44 /* DocumentTestSupport.swift in Sources */,
+				5314444BE0AFF5DAB737C8CE /* DocumentTextPerformanceTests.swift in Sources */,
 				94176ED313E551DBF03261F4 /* DocxToHwpxTests.swift in Sources */,
 				997BACF91191751FC427E621 /* DocxWriterTests.swift in Sources */,
 				D0812AF205004AA73D784145 /* EbookBaselineTests.swift in Sources */,
 				3381318451F9241E32A16BBE /* EbookBuilders.swift in Sources */,
 				745288B5D7F2EE4FB79169DB /* EbookFoundationTests.swift in Sources */,
+				057284B725CF37FFAD59BF5B /* EbookRegexTests.swift in Sources */,
 				8AA35E209D998D6B33F7BC12 /* EbookRouteTests.swift in Sources */,
 				176EC6C96DA12E66514AB152 /* EbookTests.swift in Sources */,
 				37CC82ACCC75F84446A64977 /* EmlCorpusTests.swift in Sources */,

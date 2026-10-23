@@ -140,7 +140,7 @@ extension HwpxReader {
         for node in e.nodes {
             if let value0 = node.text {
                 var value = value0
-                if value.contains("\n") || value.contains("\r") {
+                if value.utf8.contains(0x0A) || value.utf8.contains(0x0D) {
                     if DocumentXML.trim(value).isEmpty { continue }
                     value = value.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "")
                 }

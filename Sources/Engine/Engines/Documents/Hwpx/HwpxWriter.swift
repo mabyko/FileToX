@@ -164,18 +164,35 @@ final class HwpxWriter {
         list.map { DocumentXML.int($0.attributeValue("id")) ?? 0 }.max() ?? 0
     }
     static func escape(_ text: String) -> String {
-        let clean = String(
-            String.UnicodeScalarView(
-                text.unicodeScalars.filter {
-                    $0 == "\t" || $0 == "\n" || $0 == "\r"
-                        || ($0.value >= 0x20 && $0.value != 0xFFFE && $0.value != 0xFFFF)
-                }))
-        // .literal: by default Foundation skips a "<" or "&" that a combining mark follows ("<\u{338}" is "≮").
-        return clean.replacingOccurrences(of: "&", with: "&amp;", options: .literal)
-            .replacingOccurrences(of: "<", with: "&lt;", options: .literal)
-            .replacingOccurrences(of: ">", with: "&gt;", options: .literal)
-            .replacingOccurrences(of: "\"", with: "&quot;", options: .literal)
-            .replacingOccurrences(of: "'", with: "&apos;", options: .literal)
+        // One pass over the scalars: drops the characters XML forbids and escapes the five markup characters. Working
+        // per scalar matches .literal replacement (which never skips a "<" or "&" that a combining mark follows).
+        var needsWork = false
+        for scalar in text.unicodeScalars where !escapeKeeps(scalar) {
+            needsWork = true
+            break
+        }
+        if !needsWork { return text }
+        var result = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            switch scalar {
+            case "&": result.append(contentsOf: "&amp;".unicodeScalars)
+            case "<": result.append(contentsOf: "&lt;".unicodeScalars)
+            case ">": result.append(contentsOf: "&gt;".unicodeScalars)
+            case "\"": result.append(contentsOf: "&quot;".unicodeScalars)
+            case "'": result.append(contentsOf: "&apos;".unicodeScalars)
+            case "\t", "\n", "\r": result.append(scalar)
+            default: if scalar.value >= 0x20 && scalar.value != 0xFFFE && scalar.value != 0xFFFF { result.append(scalar) }
+            }
+        }
+        return String(result)
+    }
+    /// True when `escape` leaves the scalar as it is.
+    private static func escapeKeeps(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar {
+        case "&", "<", ">", "\"", "'": return false
+        case "\t", "\n", "\r": return true
+        default: return scalar.value >= 0x20 && scalar.value != 0xFFFE && scalar.value != 0xFFFF
+        }
     }
     private static func readEntry(_ zip: ZipReader, _ name: String) throws -> String {
         guard let e = zip.entry(named: name) else { throw ConversionError("Reference HWPX has no \(name).") }

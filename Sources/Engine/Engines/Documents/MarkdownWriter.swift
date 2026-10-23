@@ -59,7 +59,7 @@ final class MarkdownWriter {
         if p.headingLevel > 0 {
             output +=
                 lead + String(repeating: "#", count: min(max(p.headingLevel, 1), 6)) + " "
-                + text.replacingOccurrences(of: "\\\n", with: " ") + "\n\n"
+                + (text.utf8.contains(0x0A) ? text.replacingOccurrences(of: "\\\n", with: " ") : text) + "\n\n"
             return
         }
         if let list = p.list, list.numbered || allowContinuation {
@@ -81,11 +81,11 @@ final class MarkdownWriter {
                 lead + indent + String(repeating: " ", count: max(marker.utf16.count, list.numbered ? 0 : 4))
             output +=
                 (list.numbered ? lead + indent + marker : continuation)
-                + text.replacingOccurrences(of: "\n", with: "\n" + continuation) + "\n"
+                + Self.replacingNewlines(text, "\n" + continuation) + "\n"
             if (next as? HParagraph)?.list == nil { output += "\n" }
             return
         }
-        output += lead + Self.escapeLineStart(text).replacingOccurrences(of: "\n", with: "\n" + lead) + "\n\n"
+        output += lead + Self.replacingNewlines(Self.escapeLineStart(text), "\n" + lead) + "\n\n"
     }
     private func table(_ t: HTable, _ output: inout String, _ prefix: String) {
         blocks(t.caption, &output, prefix)
@@ -189,8 +189,22 @@ final class MarkdownWriter {
         if f.shade == HtmlReader.markShade { core = "==\(core)==" }
         return lead + core + trail
     }
+    private static let escaped: Set<Character> = ["\\", "`", "*", "_", "[", "]", "<", ">", "~", "^", "|", "="]
+    private static let escapedBytes: Set<UInt8> = Set("\\`*_[]<>~^|=".utf8)
     private static func escape(_ text: String) -> String {
-        text.map { "\\`*_[]<>~^|=".contains($0) ? "\\\($0)" : String($0) }.joined()
+        // Per Character, like the original map/joined: a mark attached to one of these characters leaves it alone.
+        guard text.utf8.contains(where: { escapedBytes.contains($0) }) else { return text }
+        var result = ""
+        result.reserveCapacity(text.utf8.count + 8)
+        for character in text {
+            if escaped.contains(character) { result.append("\\") }
+            result.append(character)
+        }
+        return result
+    }
+    /// `replacingOccurrences(of: "\n", with: replacement)`, skipping Foundation when there is no line break.
+    private static func replacingNewlines(_ text: String, _ replacement: String) -> String {
+        text.utf8.contains(0x0A) ? text.replacingOccurrences(of: "\n", with: replacement) : text
     }
     private static func escapeLineStart(_ text: String) -> String {
         let t = String(text.drop(while: { $0.isWhitespace }))

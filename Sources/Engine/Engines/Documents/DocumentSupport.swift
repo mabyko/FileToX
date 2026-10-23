@@ -99,9 +99,22 @@ enum DocumentXML {
         text.flatMap { Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
     static func set(_ node: XElement?, _ name: XName, _ value: Int) { node?.setAttributeValue(name, String(value)) }
-    static func trim(_ text: String) -> String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+    static func trim(_ text: String) -> String {
+        // Trimming only touches the edges: text that starts and ends with a printable ASCII character is unchanged.
+        if let first = text.utf8.first, let last = text.utf8.last, first > 0x20, first < 0x7F, last > 0x20, last < 0x7F {
+            return text
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     static func trimEnd(_ text: String) -> String {
-        String(text.reversed().drop(while: { $0.isWhitespace }).reversed())
+        // Same result as reversing, dropping white-space Characters and reversing back, without copying the text
+        // through two reversed Character sequences (the text writers call this per paragraph and on the whole output).
+        var end = text.endIndex
+        while end > text.startIndex {
+            let before = text.index(before: end)
+            if text[before].isWhitespace { end = before } else { break }
+        }
+        return end == text.endIndex ? text : String(text[..<end])
     }
     static func guid() -> String { UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased() }
     static func overlay(_ b: HCharFormat, _ f: HCharFormat) -> HCharFormat {

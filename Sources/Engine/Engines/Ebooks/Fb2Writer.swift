@@ -191,6 +191,10 @@ final class Fb2Writer {
         binaries.append((path, id, file, mediaType)); return id
     }
     private static func clean(_ text: String) -> String {
-        String(String.UnicodeScalarView(text.unicodeScalars.filter { $0.value == 9 || $0.value == 10 || $0.value == 13 || ($0.value >= 0x20 && $0.value != 0xFFFE && $0.value != 0xFFFF) }))
+        if !text.unicodeScalars.contains(where: { !allowed($0) }) { return text }
+        return String(String.UnicodeScalarView(text.unicodeScalars.filter(allowed)))
+    }
+    private static func allowed(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.value == 9 || scalar.value == 10 || scalar.value == 13 || (scalar.value >= 0x20 && scalar.value != 0xFFFE && scalar.value != 0xFFFF)
     }
 }

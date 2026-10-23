@@ -11,11 +11,20 @@ enum EbookRegex {
         return range.location == NSNotFound ? "" : (text as NSString).substring(with: range)
     }
     static func replace(_ pattern: String, _ text: String, _ options: NSRegularExpression.Options = [], _ replacement: (NSTextCheckingResult) throws -> String) rethrows -> String {
-        let output = NSMutableString(string: text)
-        // Evaluate replacements in input order (resource numbering and linked aids depend on it).
-        var replacements: [(NSRange, String)] = []
-        for match in matches(pattern, text, options) { replacements.append((match.range, try replacement(match))) }
-        for (range, value) in replacements.reversed() { output.replaceCharacters(in: range, with: value) }
+        let found = matches(pattern, text, options)
+        if found.isEmpty { return text }
+        // Evaluate replacements in input order (resource numbering and linked aids depend on it) and assemble the
+        // result in one forward pass: in-place NSMutableString edits were quadratic on multi-megabyte documents.
+        let source = text as NSString
+        let output = NSMutableString(capacity: source.length)
+        var position = 0
+        for match in found {
+            let range = match.range
+            if range.location > position { output.append(source.substring(with: NSRange(location: position, length: range.location - position))) }
+            output.append(try replacement(match))
+            position = range.location + range.length
+        }
+        if position < source.length { output.append(source.substring(from: position)) }
         return output as String
     }
 }
