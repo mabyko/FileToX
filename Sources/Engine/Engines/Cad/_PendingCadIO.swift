@@ -1,13 +1,9 @@
-// Stand-ins for the ACadSharp DWG reader and writer, which are being ported separately. Replaced by the real
-// implementations (same signatures) when they are merged.
+// Stand-in for the ACadSharp DWG writer, which is being ported separately. Replaced by the real
+// implementation (same signature) when they are merged.
 
 import Foundation
 
 extension CadFileIO {
-    static func readDwg(_ data: Data, warning: ((String) -> Void)?) throws -> ACad.Document {
-        throw ConversionError("not ported yet")
-    }
-
     static func writeDwg(_ document: ACad.Document, to path: String, warning: ((String) -> Void)?) throws {
         throw ConversionError("not ported yet")
     }
