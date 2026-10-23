@@ -132,21 +132,9 @@ public final class UnhwpConverter: Converter {
         let doc = try HwpxReader.read(input, FilePath.combine(step.workDirectory, "media-" + DocumentXML.guid()))
         try Task.checkCancellation()
         progress?(0.5)
-        // Keep image content in the single allocated output; extracted work files are deleted after the job.
-        var imageSources: [String: String] = [:]
-        if step.to == "md" || step.to == "html" {
-            for image in HDocumentWalker.images(doc) where imageSources[image.path] == nil {
-                let ext = FilePath.extension(image.path).lowercased()
-                let mime = [
-                    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
-                    ".bmp": "image/bmp", ".svg": "image/svg+xml",
-                ][ext]
-                let bytes =
-                    try mime == nil
-                    ? ImageSupport.pngData(image.path) : Data(contentsOf: URL(fileURLWithPath: image.path))
-                imageSources[image.path] = "data:\(mime ?? "image/png");base64," + bytes.base64EncodedString()
-            }
-        }
+        guard let path = try step.output.allocate(step.to) else { return [] }
+        let imageSources = step.to == "md" || step.to == "html"
+            ? try DocumentImages.sources(doc, path, step.workDirectory, markdown: step.to == "md") : [:]
         let content: String
         switch step.to {
         case "txt": content = PlainTextWriter.write(doc)
@@ -159,7 +147,6 @@ public final class UnhwpConverter: Converter {
             content = Self.htmlPage(title, body)
         default: throw ConversionError(step.to)
         }
-        guard let path = try step.output.allocate(step.to) else { return [] }
         var data = Data()
         if step.to == "txt" { data.append(contentsOf: [0xEF, 0xBB, 0xBF]) }
         data.append(contentsOf: content.utf8)

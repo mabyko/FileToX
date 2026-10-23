@@ -62,6 +62,8 @@ enum HPageType: Hashable { case both, even, odd }
 
 final class HHeaderFooter {
     let pages: HPageType
+    /// Body position where this definition starts (HWPX permits changes within a section).
+    var startBlockIndex = 0
     var blocks: [HBlock] = []
     init(_ pages: HPageType) { self.pages = pages }
 }
@@ -188,10 +190,22 @@ struct HBorders: Hashable {
 
 class HInline {}
 
-final class HText: HInline {
+class HText: HInline {
     let text: String
     let format: HCharFormat
     init(_ text: String, _ format: HCharFormat = HCharFormat()) { self.text = text; self.format = format }
+}
+
+/// Keep the source as text for package writers that do not support equation objects.
+final class HEquation: HText {
+    let latex: String
+    let display: Bool
+    init(_ script: String, _ format: HCharFormat = HCharFormat(), display: Bool = false) {
+        latex = HwpEquationConverter.toLatex(script)
+        self.display = display
+        super.init(script, format)
+    }
+    var fallback: String { text.isEmpty ? "[unhwp:equation-unsupported]" : text }
 }
 
 final class HLineBreak: HInline {

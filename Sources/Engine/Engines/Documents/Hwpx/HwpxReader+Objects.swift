@@ -13,11 +13,17 @@ extension HwpxReader {
     func drawingObject(_ e: XElement, _ b: ParagraphBuilder, _ f: HCharFormat) throws {
         if Self.shapeNames.contains(e.name.localName) {
             for i in try shapes(e, Self.placementOf(e)) { b.add(i) }
+            for caption in Self.descendants(e, "caption") where caption.parent.map({ Self.shapeNames.contains($0.name.localName) }) == true {
+                b.blockContent(try readSubList(Self.child(caption, "subList")))
+            }
             return
         }
         let value: String?
         switch e.name.localName {
-        case "equation": value = Self.child(e, "script").map { DocumentXML.trim($0.value) }
+        case "equation":
+            b.add(HEquation(Self.child(e, "script").map { DocumentXML.trim($0.value) } ?? "", f,
+                            display: Self.attr(e, "lineMode") == "LINE"))
+            return
         case "textart": value = Self.attr(e, "text") ?? Self.child(e, "text")?.value
         case "compose": value = Self.attr(e, "composeText") ?? Self.child(e, "composeText")?.value
         case "dutmal": value = Self.attr(e, "mainText") ?? Self.child(e, "mainText")?.value

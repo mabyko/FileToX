@@ -34,13 +34,13 @@ extension HwpxReader {
         func addText(_ text: String, _ format: HCharFormat) {
             if text.isEmpty { return }
             if let sink = sinks.last {
-                if let t = sink.content.last as? HText, t.format == format {
+                if let t = sink.content.last as? HText, !(t is HEquation), t.format == format {
                     sink.content[sink.content.count - 1] = HText(t.text + text, format)
                 } else {
                     sink.content.append(HText(text, format))
                 }
             } else {
-                if let t = current.inlines.last as? HText, t.format == format {
+                if let t = current.inlines.last as? HText, !(t is HEquation), t.format == format {
                     current.inlines[current.inlines.count - 1] = HText(t.text + text, format)
                 } else {
                     current.inlines.append(HText(text, format))
@@ -55,10 +55,14 @@ extension HwpxReader {
         func closeLink() { _ = sinks.popLast() }
         var hasContent: Bool { current.inlines.contains { ($0 as? HLink)?.content.isEmpty != true } }
         func table(_ t: HTable) {
+            blockContent([t])
+        }
+        func blockContent(_ content: [HBlock]) {
+            guard !content.isEmpty else { return }
             if hasContent || current.pageBreakBefore || current.columnBreakBefore || current.columnsChange != nil {
                 emit()
             }
-            output.append(t)
+            output += content
             newParagraph(list.map { HListRef($0.numbering, $0.level, false) })
             afterTable = true
         }
@@ -193,11 +197,8 @@ extension HwpxReader {
         let pages: HPageType =
             Self.attr(c, "applyPageType") == "EVEN" ? .even : Self.attr(c, "applyPageType") == "ODD" ? .odd : .both
         let header = c.name.localName == "header"
-        if (header ? s.headers : s.footers).contains(where: { $0.pages == pages }) {
-            skip(c)
-            return
-        }
         let h = HHeaderFooter(pages)
+        h.startBlockIndex = s.blocks.count
         h.blocks = try readSubList(Self.child(c, "subList"))
         if header { s.headers.append(h) } else { s.footers.append(h) }
     }
