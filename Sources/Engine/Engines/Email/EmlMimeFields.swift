@@ -267,13 +267,16 @@ extension EmlMime {
     }
 
     /// IdnMapping.GetUnicode for the domains MimeKit decodes: punycode labels decoded, ASCII lower-cased; the original
-    /// domain when a label does not decode. shortcut: no full UTS #46 validation, upgrade if invalid IDNs matter.
+    /// domain when a label is not a valid IDN label (ICU's check, mostly: assigned, NFC, lower case, not ASCII-only).
+    /// shortcut: no bidi / CONTEXTJ rules of UTS #46, upgrade if such domains matter.
     static func idnToUnicode(_ domain: String) -> String {
         var labels: [String] = []
         for label in domain.split(separator: ".", omittingEmptySubsequences: false) {
             let lower = label.lowercased()
             if lower.hasPrefix("xn--") {
-                guard let decoded = punycodeDecode(String(lower.dropFirst(4))) else { return domain }
+                guard let decoded = punycodeDecode(String(lower.dropFirst(4))), decoded.unicodeScalars.contains(where: { !$0.isASCII }),
+                      decoded.unicodeScalars.allSatisfy({ ![.unassigned, .control, .privateUse, .surrogate].contains($0.properties.generalCategory) }),
+                      decoded == decoded.precomposedStringWithCanonicalMapping, decoded == decoded.lowercased() else { return domain }
                 labels.append(decoded)
             } else {
                 labels.append(lower)
