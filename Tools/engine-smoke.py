@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Real-engine smoke run (engine-host.md G3 samples) against a published host.
+"""Real-engine smoke run (engine-host.md G3 samples) against a built engine helper.
 
-usage: smoke.py <FileToXEngine> <empty work dir>
+usage: engine-smoke.py <FileToXEngine> <empty work dir>
 Starts the host on a fresh data folder, converts generated samples and checks the results' signatures.
 """
 import json, os, pathlib, subprocess, sys, threading, time, zlib, struct, zipfile

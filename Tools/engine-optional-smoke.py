@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise optional Filee engines and cancellation using isolated host state.
 
-Usage: optional-smoke.py <FileToXEngine> <new work directory>
+Usage: engine-optional-smoke.py <FileToXEngine> <new work directory>
 Reports actual sample conversions; it does not certify all format pairs.
 """
 import hashlib
@@ -180,7 +180,7 @@ def main():
         print(__doc__.strip())
         return 0
     if len(sys.argv) != 3:
-        print("Usage: optional-smoke.py <FileToXEngine> <new work directory>", file=sys.stderr)
+        print("Usage: engine-optional-smoke.py <FileToXEngine> <new work directory>", file=sys.stderr)
         return 2
     executable, work = pathlib.Path(sys.argv[1]).resolve(), pathlib.Path(sys.argv[2]).resolve()
     assert not work.exists(), "Choose a new work directory to avoid changing an earlier report"
