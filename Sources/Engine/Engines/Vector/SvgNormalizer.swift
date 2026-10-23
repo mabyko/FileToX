@@ -347,7 +347,20 @@ enum SvgNormalizer {
     private static func outlineText(_ element: XElement, inherited: TextStyle) {
         let style = inherited.adding(element)
         if element.name.localName == "text" {
-            if let outlined = TextLayout(element, style).outlined() { element.replaceWith(outlined) }
+            guard let outlined = TextLayout(element, style).outlined() else { return }
+            if element.parent?.name.localName == "clipPath" {
+                // Clip paths take shapes, not groups: the outlines with the text's transform and clip.
+                let paths = outlined.elements()
+                for path in paths {
+                    for name in ["transform", "clip-path", "clip-rule"] where outlined.attributeValue(XName(name)) != nil {
+                        path.setAttributeValue(XName(name), outlined.attributeValue(XName(name)))
+                    }
+                }
+                for path in paths.reversed() { element.addAfterSelf(XElement(copying: path)) }
+                element.remove()
+            } else {
+                element.replaceWith(outlined)
+            }
             return
         }
         for child in element.elements() { outlineText(child, inherited: style) }

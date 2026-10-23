@@ -88,6 +88,10 @@ enum ImageReader {
         guard let image = CIContext(options: [.cacheIntermediates: false]).createCGImage(output, from: output.extent, format: .RGBA8, colorSpace: space) else {
             throw ConversionError("Could not decode \(FilePath.fileName(path)).")
         }
+        // macOS develops some DNG variants (e.g. lossy DNGs from Camera Raw 15) as an all-black picture.
+        if isBlack(image) {
+            throw ConversionError("\(FilePath.fileName(path)) can't be developed on this Mac: macOS's camera RAW decoder returned an empty (black) picture.")
+        }
         var frame = ImageFrame(image: image)
         if let source = CGImageSourceCreateWithURL(url as CFURL, nil), CGImageSourceGetCount(source) > 0,
            let metadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil), let copy = CGImageMetadataCreateMutableCopy(metadata) {
@@ -95,6 +99,17 @@ enum ImageReader {
             frame.properties[ImageFrame.metadataKey] = copy
         }
         return frame
+    }
+
+    /// True when a 64 × 64 thumbnail of the picture has no light at all.
+    private static func isBlack(_ image: CGImage) -> Bool {
+        var pixels = [UInt8](repeating: 0, count: 64 * 64 * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            let context = CGContext(data: buffer.baseAddress, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 256,
+                                    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 64, height: 64))
+        }
+        return !pixels.enumerated().contains { $0.offset % 4 != 3 && $0.element > 0 }
     }
 
     /// Seconds an animation frame is shown (the delay as written, not ImageIO's clamped value).

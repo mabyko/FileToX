@@ -15,7 +15,7 @@ final class MagickImageConverter: Converter, TiffMerger {
     let edges: [ConversionEdge] = ImageEncoder.sources.flatMap { source in ImageEncoder.writable.map { ConversionEdge(source, $0) } }
 
     func status() -> EngineStatus {
-        .available(detail: "libwebp \(CodecLibraries.webpVersion) · libjxl \(CodecLibraries.jxlVersion)", version: EngineVersions.system("ImageIO"))
+        .available(version: "\(EngineVersions.system("ImageIO")) · libwebp \(CodecLibraries.webpVersion) · libjxl \(CodecLibraries.jxlVersion)")
     }
 
     /// Writes the pages into one multi-page TIFF. Each page is flattened onto the preset's background (no alpha) at 8 bits

@@ -264,6 +264,20 @@ final class VectorTests: XCTestCase {
         XCTAssertEqual(GraphicsTestKit.pixel(image.frames[0], 2, 2).a, 0) // transparent where the drawing leaves the page empty
     }
 
+    /// Filee's OwnCopyTests / PortableEngineTests for Ghostscript: version output, the bin/gs layout of a copy, and the
+    /// user's own copy found before one on the Mac.
+    func testGhostscriptCopiesAreFoundAndVersioned() throws {
+        XCTAssertTrue(CopyVersions.parseVersion("ghostscript", "10.04.0\r\n").map { $0 == (10, 4) } ?? false)
+        let root = FilePath.combine(dir, "gs-copy")
+        let bin = FilePath.combine(root, "bin")
+        try FileManager.default.createDirectoryIfNeeded(bin)
+        try Data("binary".utf8).write(to: URL(fileURLWithPath: FilePath.combine(bin, "gs")))
+        XCTAssertEqual(EngineEnvironment.folderWithPrograms("ghostscript", root), bin)
+        XCTAssertEqual(EngineEnvironment.folderWithPrograms("ghostscript", FilePath.combine(bin, "gs")), bin)
+        EngineEnvironment.ownCopies = ["ghostscript": root]
+        XCTAssertEqual(GhostscriptConverter.locate(), FilePath.combine(bin, "gs"))
+    }
+
     // ───────────────────────── Routes ─────────────────────────
 
     func testGraphicsEnginesOfferFileesDirectEdges() {
@@ -328,5 +342,20 @@ enum PdfContent {
                 if CGPDFDictionaryGetDictionary(dictionary, "Resources", &inner), let inner { collect(inner, &content, &images, &fonts, depth + 1) }
             }
         }
+    }
+}
+
+extension VectorTests {
+    func testTextInsideAClipPathBecomesClipShapes() throws {
+        let data = Data("""
+            <svg xmlns="http://www.w3.org/2000/svg" width="100" height="40">
+              <clipPath id="c"><text x="5" y="30" font-size="30" transform="translate(1 0)">Hi</text></clipPath>
+              <rect width="100" height="40" fill="red" clip-path="url(#c)"/>
+            </svg>
+            """.utf8)
+        let root = try XDocument.load(data: SvgNormalizer.normalize(data, baseDirectory: dir)).root
+        let clip = try XCTUnwrap(root.descendants().first { $0.name.localName == "clipPath" })
+        XCTAssertEqual(clip.elements().map(\.name.localName), ["path"])
+        XCTAssertEqual(clip.elements().first?.attributeValue("transform"), "translate(1 0)")
     }
 }
