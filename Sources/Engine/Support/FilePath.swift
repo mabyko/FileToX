@@ -75,6 +75,19 @@ public enum FilePath {
 
     /// `Path.GetInvalidFileNameChars()` on Unix.
     public static let invalidFileNameCharacters: Set<Character> = ["\0", "/"]
+
+    /// The Cocoa error FileManager reports for a failed write of `path` (errno `code`).
+    static func writeError(_ code: Int32, _ path: String) -> CocoaError {
+        let kind: CocoaError.Code = switch code {
+        case EACCES, EPERM: .fileWriteNoPermission
+        case EEXIST: .fileWriteFileExists
+        case ENOSPC, EDQUOT: .fileWriteOutOfSpace
+        case EROFS: .fileWriteVolumeReadOnly
+        case ENAMETOOLONG: .fileWriteInvalidFileName
+        default: .fileWriteUnknown
+        }
+        return CocoaError(kind, userInfo: [NSFilePathErrorKey: path, NSUnderlyingErrorKey: POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)])
+    }
 }
 
 public extension FileManager {
@@ -90,9 +103,16 @@ public extension FileManager {
         return fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
-    /// `Directory.CreateDirectory`: creates every missing parent, succeeds when the folder already exists.
+    /// `Directory.CreateDirectory`: creates every missing parent, succeeds when the folder already exists. mkdir(2) keeps
+    /// names as given, like .NET; FileManager.createDirectory would store them decomposed (NFD), which shows Korean names
+    /// as separated jamo once they leave the Mac.
     func createDirectoryIfNeeded(_ path: String) throws {
-        try createDirectory(atPath: path, withIntermediateDirectories: true)
+        if directoryExists(path) { return }
+        if let parent = FilePath.directoryName(path), !parent.isEmpty, parent != path { try createDirectoryIfNeeded(parent) }
+        guard mkdir(path, 0o777) != 0 else { return }
+        let code = errno
+        if code == EEXIST && directoryExists(path) { return }
+        throw FilePath.writeError(code, path)
     }
 
     /// Deletes a file or folder tree and ignores failures (a viewer may still hold a temp file).
