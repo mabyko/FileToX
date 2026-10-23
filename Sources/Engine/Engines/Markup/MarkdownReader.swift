@@ -19,6 +19,8 @@ final class MarkdownReader {
     private static let plain = HCharFormat()
     private static let codeFormat = HCharFormat(shade: "#F1F0F5")
     private let baseFolder: String
+    /// The footnotes being read (a reference to one of them is left out).
+    private var footnotes: Set<ObjectIdentifier> = []
 
     private init(_ baseFolder: String) { self.baseFolder = baseFolder }
 
@@ -27,7 +29,8 @@ final class MarkdownReader {
         let parsed = try Markdown.parse(markdown, pipeline)
         let reader = MarkdownReader(baseFolder)
         let section = HSection()
-        reader.blocks(parsed, &section.blocks, Context())
+        // Nested emphasis (up to Markdig's 10 240 inline levels) and chains of footnotes recurse here.
+        try MarkupConvert.onLargeStack { reader.blocks(parsed, &section.blocks, Context()) }
         let document = HDocument()
         document.title = title(parsed)
         document.sections.append(section)
@@ -260,9 +263,12 @@ final class MarkdownReader {
                 italic.italic = true
                 output.append(HText(math.content.description, italic))
             case let footnote as Markdown.FootnoteLink:
-                if !footnote.isBackLink {
+                // A footnote referring to itself (directly or through others) would nest without end; Filee's reader
+                // overflows the stack and the helper dies. The inner reference is left out, like the "↩" back link.
+                if !footnote.isBackLink, footnotes.insert(ObjectIdentifier(footnote.footnote)).inserted {
                     let note = HNote(false)
                     blocks(footnote.footnote, &note.blocks, Context())
+                    footnotes.remove(ObjectIdentifier(footnote.footnote))
                     output.append(note)
                 } // else: the "↩" back link inside a footnote
             case let other as Markdown.ContainerInline:

@@ -122,6 +122,37 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(Array(read.unicodeScalars), Array(text.unicodeScalars))
     }
 
+    func testFootnotesReferringToThemselvesAndLongChainsAreRead() async throws {
+        // Filee's reader recursed forever on a footnote that refers to itself and overflowed the stack; the reference
+        // inside the note is left out.
+        let cycle = try MarkdownReader.read("Text[^a]\n\n[^a]: Note [^b]\n\n[^b]: Back to [^a] here.\n", NSTemporaryDirectory())
+        let paragraph = try XCTUnwrap(cycle.sections.first?.blocks.first as? HParagraph)
+        let a = try XCTUnwrap(paragraph.inlines.last as? HNote)
+        let b = try XCTUnwrap((a.blocks.first as? HParagraph)?.inlines.last as? HNote)
+        XCTAssertEqual(HDocumentWalker.inlines(b.blocks).compactMap { $0 as? HNote }.count, 0)
+        XCTAssertEqual(HDocumentWalker.inlines(b.blocks).compactMap { ($0 as? HText)?.text }.joined(), "Back to  here.")
+
+        // A chain of notes nests one level per note; read from a pool thread, as conversions are. (Releasing such a
+        // document recurses per level too, so that happens on a large stack here.)
+        let count = 3000
+        let chain = "A[^1]\n\n" + (1..<count).map { "[^\($0)]: x[^\($0 + 1)]\n" }.joined(separator: "\n") + "\n[^\(count)]: end\n"
+        let depth = try await Task.detached { () throws -> Int in
+            var document: HDocument? = try MarkdownReader.read(chain, NSTemporaryDirectory())
+            var depth = 0
+            try MarkupConvert.onLargeStack {
+                var inlines = (document?.sections.first?.blocks.first as? HParagraph)?.inlines ?? []
+                while let note = inlines.last as? HNote {
+                    depth += 1
+                    inlines = (note.blocks.first as? HParagraph)?.inlines ?? []
+                }
+                inlines = []
+                document = nil
+            }
+            return depth
+        }.value
+        XCTAssertEqual(depth, count)
+    }
+
     func testMarkdownToPdfWithBuiltInEngines() async throws {
         guard RhwpConverter.locate() != nil else { throw XCTSkip("rhwp not found (bundled engine)") }
         let pdf = try await MarkupTestSupport.convert(try writeSample(try MarkupTestSupport.newFolder()), "pdf")

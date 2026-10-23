@@ -1,4 +1,5 @@
-// .NET number conversions the Markup readers rely on, so lengths and sizes come out as in Filee.
+// .NET number conversions the Markup readers rely on, so lengths and sizes come out as in Filee, and their other
+// shared helpers.
 
 import Foundation
 
@@ -116,5 +117,21 @@ enum MarkupConvert {
             }
         }
         return result
+    }
+
+    /// Runs `work` on a thread with a 16 MB stack and waits for it: the readers recurse per nesting level, and deep
+    /// input would exhaust the stack of a pool thread (smaller than .NET's), which ends the helper.
+    static func onLargeStack(_ work: @escaping () throws -> Void) throws {
+        final class Outcome: @unchecked Sendable { var error: Error? }
+        let outcome = Outcome()
+        let done = DispatchSemaphore(value: 0)
+        let thread = Thread {
+            do { try work() } catch { outcome.error = error }
+            done.signal()
+        }
+        thread.stackSize = 16 * 1024 * 1024
+        thread.start()
+        done.wait()
+        if let error = outcome.error { throw error }
     }
 }
