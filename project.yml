@@ -16,6 +16,9 @@ packages:
   libjxl:
     url: https://github.com/SDWebImage/libjxl-Xcode.git
     exactVersion: 0.10.4
+  # libjpeg-turbo 3.2.0 from source (Vendor/libjpeg-turbo/README.FileToX.md): JPEG writing and LibRaw's lossy DNG.
+  libjpeg-turbo:
+    path: Vendor/libjpeg-turbo
 targets:
   FileToX:
     type: application
@@ -66,7 +69,7 @@ targets:
           destination: wrapper
           subpath: Contents/Helpers
   # Camera RAW: LibRaw 0.22.2 (CDDL-1.0) and FileToX's shim, the module CLibRaw (Vendor/LibRaw/README.FileToX.md).
-  # Same defines as Package.swift; LibRaw's own warnings are silenced.
+  # Same defines as Package.swift (USE_JPEG: libjpeg-turbo's headers; the helper links it); LibRaw's warnings are silenced.
   CLibRaw:
     type: library.static
     platform: macOS
@@ -86,8 +89,9 @@ targets:
         PRODUCT_NAME: CLibRaw
         ARCHS: $(NATIVE_ARCH_ACTUAL)
         SKIP_INSTALL: YES
-        GCC_PREPROCESSOR_DEFINITIONS: [LIBRAW_NODLL, USE_ZLIB]
-        HEADER_SEARCH_PATHS: [$(SRCROOT)/Vendor/LibRaw, $(SRCROOT)/Vendor/LibRaw/FileToX/include]
+        GCC_PREPROCESSOR_DEFINITIONS: [LIBRAW_NODLL, USE_ZLIB, USE_JPEG]
+        HEADER_SEARCH_PATHS: [$(SRCROOT)/Vendor/LibRaw, $(SRCROOT)/Vendor/LibRaw/FileToX/include, $(SRCROOT)/Vendor/libjpeg-turbo/src,
+                              $(SRCROOT)/Vendor/libjpeg-turbo/FileToX/config]
         GCC_WARN_INHIBIT_ALL_WARNINGS: YES
   # The conversion engine (Sources/Engine), shared by the helper and its tests. Swift 5 mode: line-by-line port of C#.
   FileToXEngineKit:
@@ -107,6 +111,9 @@ targets:
         link: true
       - package: libjxl
         product: brotli
+        link: true
+      - package: libjpeg-turbo
+        product: CJpegTurbo
         link: true
     settings:
       base:
@@ -136,6 +143,8 @@ targets:
       - package: libjxl
       - package: libjxl
         product: brotli
+      - package: libjpeg-turbo
+        product: CJpegTurbo
       - sdk: libxml2.tbd
       - sdk: libz.tbd
     settings:
@@ -179,6 +188,8 @@ targets:
       - package: libjxl
       - package: libjxl
         product: brotli
+      - package: libjpeg-turbo
+        product: CJpegTurbo
       - sdk: libxml2.tbd
       - sdk: libz.tbd
     settings:

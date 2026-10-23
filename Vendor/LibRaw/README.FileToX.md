@@ -33,11 +33,12 @@ Magick.NET 14.17.2 (ImageMagick 7.1.2-32 Q8, LibRaw 0.22.2-Release).
 
 Built from source as the `CLibRaw` target (SwiftPM `Package.swift`, XcodeGen `project.yml`):
 
-- Defines: `LIBRAW_NODLL`, `USE_ZLIB` (deflate-compressed DNG; links the system `libz`).
+- Defines: `LIBRAW_NODLL`, `USE_ZLIB` (deflate-compressed DNG; links the system `libz`), `USE_JPEG` (lossy-JPEG DNGs
+  and old Kodak JPEG RAWs, decoded by the same libjpeg-turbo 3.2.0 as in ImageMagick, `Vendor/libjpeg-turbo`; its
+  headers come from `src/` and `FileToX/config/` there).
 - Not defined: `LIBRAW_NOTHREADS` (that build keeps decoder state in statics; FileToX converts files in parallel),
-  `USE_JPEG` (no libjpeg: LibRaw then rejects lossy-JPEG DNGs and old Kodak JPEG RAWs, which FileToX hands to Core
-  Image's RAW decoder instead), `USE_X3FTOOLS` (Sigma X3F; `src/x3f/` compiles to nothing, like in ImageMagick's
-  build), OpenMP, LCMS, RawSpeed, DNG SDK, GPR SDK.
+  `USE_X3FTOOLS` (Sigma X3F; `src/x3f/` compiles to nothing, like in ImageMagick's build), OpenMP, LCMS, RawSpeed,
+  DNG SDK, GPR SDK.
 - LibRaw's own warnings are silenced for this target only (`-w`).
 
 ## Updating

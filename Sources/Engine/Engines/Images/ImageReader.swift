@@ -84,8 +84,8 @@ enum ImageReader {
 
     /// Camera RAW developed by LibRaw exactly as the C# helper's ImageMagick did (Filee: camera white balance, sRGB, AHD,
     /// auto-brightness, then 8 bits), so the colours are the same. The picture comes as stored, with its orientation for
-    /// ApplyOptions' AutoOrient. Files LibRaw can't develop (lossy DNG: this build has no libjpeg; cameras LibRaw doesn't
-    /// know) go to Core Image's RAW pipeline set up to look like LibRaw.
+    /// ApplyOptions' AutoOrient. Files LibRaw can't develop (cameras LibRaw doesn't know) go to Core Image's RAW pipeline
+    /// set up to look like LibRaw.
     private static func readRaw(_ path: String) throws -> ImageFrame {
         var raw = FTXRawImage()
         let error = ftx_libraw_develop(path, &raw)
