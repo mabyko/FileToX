@@ -31,6 +31,15 @@ enum ArchiveFiles {
         }
     }
 
+    /// LINQ's checked `Sum` of sizes read from an archive: absurd declared sizes fail the file instead of trapping.
+    static func sum(_ values: [Int64]) throws -> Int64 {
+        try values.reduce(0) { total, value in
+            let (result, overflow) = total.addingReportingOverflow(value)
+            if overflow { throw ConversionError("Arithmetic operation resulted in an overflow.") }
+            return result
+        }
+    }
+
     /// The bytes of `data` (usually a slice of a memory-mapped archive) in 64 KiB pieces.
     static func chunks(_ data: Data) -> ArchiveSource {
         { emit in

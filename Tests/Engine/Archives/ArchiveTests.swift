@@ -557,6 +557,68 @@ final class ArchiveTests: XCTestCase {
     func testClashingNamesInOneArchiveAreNumbered() {
         let items = ArchiveConverter.uniqueEntries(["/tmp/a/x.txt", "/tmp/b/X.txt", "/tmp/c/x.txt", "/tmp/d/y"])
         XCTAssertEqual(items.map(\.entryName), ["x.txt", "X (2).txt", "x (3).txt", "y"])
+        // Ordinal like .NET: the composed and decomposed spellings of a name are different names.
+        let forms = ArchiveConverter.uniqueEntries(["/tmp/a/caf\u{E9}.txt", "/tmp/b/cafe\u{301}.txt"])
+        XCTAssertEqual(forms.map { Array($0.entryName.unicodeScalars) }, [Array("caf\u{E9}.txt".unicodeScalars), Array("cafe\u{301}.txt".unicodeScalars)])
+    }
+
+    /// A combining mark after "/" or "\\" does not hide the separator (C# checks chars, not grapheme clusters).
+    func testSeparatorsFollowedByCombiningMarksAreStillSeparators() throws {
+        XCTAssertTrue(ArchiveSafety.isUnsafePath("a/../\u{301}b.txt"))
+        XCTAssertTrue(ArchiveSafety.isUnsafePath("/\u{301}etc"))
+        XCTAssertTrue(ArchiveSafety.isUnsafePath("\\\u{301}x"))
+        let root = try newFolder()
+        let resolved = try ArchiveSafety.resolveEntryPath(root, "dir/\u{301}b", "x.alz")
+        XCTAssertEqual(Array(resolved.unicodeScalars), Array(FilePath.combine(root, "dir", "\u{301}b").unicodeScalars))
+        XCTAssertEqual(Array(try ArchiveSafety.resolveEntryPath(root, "\u{301}b", "x.alz").unicodeScalars),
+                       Array(FilePath.combine(root, "\u{301}b").unicodeScalars))
+    }
+
+    /// Absurd declared sizes fail the one file ("Arithmetic operation resulted in an overflow.", LINQ's checked Sum)
+    /// instead of trapping the helper.
+    func testDeclaredSizesThatOverflowFailTheFile() async throws {
+        let dir = try newFolder()
+        let huge: Int64 = 1 << 62
+        let entry = SevenZipEntry(path: "a", isFolder: false, size: huge, isEncrypted: false, symbolicLink: nil, hardLink: nil)
+        XCTAssertThrowsError(try ArchiveSafety.checkListing([entry, entry], "x.zip", dir)) {
+            XCTAssertEqual($0.localizedDescription, "Arithmetic operation resulted in an overflow.")
+        }
+
+        // ALZ entries with 8-byte size fields: two of 2^62 bytes, and one whose packed size runs past the end.
+        func alzEntry(_ name: String, packed: Int64, size: Int64) -> Data {
+            let w = BinaryWriter()
+            w.write(Data("BLZ\u{1}".utf8))
+            w.write(UInt16(name.utf8.count)); w.write(UInt8(0x20)); w.write(UInt32(0)); w.write(UInt8(0x80)); w.write(UInt8(0))
+            w.write(UInt8(0)); w.write(UInt8(0)); w.write(UInt32(0)); w.write(packed); w.write(size)
+            w.write(Data(name.utf8))
+            return w.data
+        }
+        let header = Data("ALZ\u{1}".utf8) + Data([0x0A, 0, 0, 0])
+        let end = Data("CLZ\u{2}".utf8) + Data(count: 12)
+        let target = FilePath.combine(dir, "out")
+        try FileManager.default.createDirectoryIfNeeded(target)
+        let sizes = FilePath.combine(dir, "sizes.alz")
+        try (header + alzEntry("a", packed: 0, size: huge) + alzEntry("b", packed: 0, size: huge) + end).write(to: URL(fileURLWithPath: sizes))
+        XCTAssertThrowsError(try AlzReader.extract(sizes, target)) {
+            XCTAssertEqual($0.localizedDescription, "Arithmetic operation resulted in an overflow.")
+        }
+        let packed = FilePath.combine(dir, "packed.alz")
+        try (header + alzEntry("a", packed: .max, size: 1) + end).write(to: URL(fileURLWithPath: packed))
+        XCTAssertThrowsError(try AlzReader.extract(packed, target)) {
+            XCTAssertEqual($0.localizedDescription, "packed.alz is damaged or incomplete (the archive ends too early).")
+        }
+
+        // lzip members whose trailers claim 2^62 bytes each (checked before 7-Zip runs).
+        let member = Data("LZIP".utf8) + Data([1, 20]) + Data(count: 4) + withUnsafeBytes(of: huge.littleEndian) { Data($0) }
+            + withUnsafeBytes(of: Int64(26).littleEndian) { Data($0) }
+        let lz = FilePath.combine(dir, "big.txt.lz")
+        try (member + member).write(to: URL(fileURLWithPath: lz))
+        do {
+            try await LzipReader.decompress(lz, FilePath.combine(target, "big.txt"), SevenZip("/nonexistent/7zz"), dir)
+            XCTFail("the lzip file was unpacked")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Arithmetic operation resulted in an overflow.")
+        }
     }
 
     func testLzipDictionarySizes() {

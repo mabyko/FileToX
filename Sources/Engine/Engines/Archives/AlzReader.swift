@@ -41,7 +41,7 @@ enum AlzReader {
         let archiveName = FilePath.fileName(archive)
         let stream = try ArchiveFiles.map(archive)
         let entries = try readEntries(stream, archiveName)
-        try ArchiveSafety.ensureRoom(entries.filter { !$0.isFolder }.reduce(0) { $0 + $1.size }, targetDirectory, archiveName)
+        try ArchiveSafety.ensureRoom(try ArchiveFiles.sum(entries.filter { !$0.isFolder }.map(\.size)), targetDirectory, archiveName)
 
         var folders: [(path: String, modified: Date?)] = []
         for entry in entries {
@@ -166,7 +166,7 @@ enum AlzReader {
 
         let name = decodeName(try reader.readBytes(nameLength))
         let offset = Int64(reader.position)
-        if offset + packedSize > Int64(reader.length) { throw ArchiveSafety.damaged(archiveName, "the archive ends too early") }
+        if packedSize > Int64(reader.length) - offset { throw ArchiveSafety.damaged(archiveName, "the archive ends too early") }
         reader.position += Int(packedSize)
 
         let isFolder = attributes & 0x10 != 0

@@ -231,6 +231,22 @@ final class MediaTests: XCTestCase {
         XCTAssertEqual(MediaEncoding.formatSeconds(1.248), "1.248")
         XCTAssertEqual(MediaEncoding.formatSeconds(0.0005), "0.001")
         XCTAssertEqual(MediaEncoding.formatSeconds(0), "0")
+        XCTAssertEqual(MediaEncoding.formatSeconds(0.105 / 10), "0.011") // 15 digits first, as .NET: 0.0105 → 0.011
+        XCTAssertEqual(MediaEncoding.formatSeconds(9.2e16), "92000000000000000")
+    }
+
+    /// A tool that stops writing is killed after the stall timeout (FFmpeg's is 10 minutes; a silent stand-in here).
+    func testASilentProcessIsStoppedByTheStallWatchdog() async throws {
+        let marker = "37.\(Int.random(in: 100...999))"
+        let started = Date()
+        do {
+            _ = try await FfmpegRunner.run("/bin/sleep", [marker], onPosition: nil, stallTimeout: 1.5)
+            XCTFail("the silent process was not stopped")
+        } catch let error as FfmpegRunner.StallError {
+            XCTAssertTrue(error.localizedDescription.hasPrefix("FFmpeg stopped responding"), error.localizedDescription)
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10)
+        XCTAssertEqual(try ProcessRunner.runBlocking("/usr/bin/pgrep", ["-f", "sleep \(marker)"], timeout: 10).exitCode, 1)
     }
 
     // ───────────────────────── Real conversions ─────────────────────────

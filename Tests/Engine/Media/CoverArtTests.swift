@@ -25,6 +25,12 @@ final class CoverArtTests: XCTestCase {
         XCTAssertEqual(CoverArt.escape(##"a=b;c#d\e"##), ##"a\=b\;c\#d\\e"##)
     }
 
+    /// Tags in a legacy code page must not cost the cover: invalid UTF-8 becomes U+FFFD, as File.ReadAllLines does.
+    func testMetadataFilesAreReadLikeReadAllLines() {
+        let data = Data("\u{FEFF};FFMETADATA1\r\ntitle=".utf8) + Data([0xC7, 0xD1]) + Data("\nartist=x\n".utf8) // "한" in CP949
+        XCTAssertEqual(CoverArt.readAllLines(data), [";FFMETADATA1", "title=\u{FFFD}\u{FFFD}", "artist=x"])
+    }
+
     func testOnlyJpegAndPngCoversAreUsed() {
         XCTAssertEqual(CoverArt.mimeOf(Data([0xFF, 0xD8, 0xFF, 0xDB, 0])), "image/jpeg")
         XCTAssertEqual(CoverArt.mimeOf(Data([0x89, UInt8(ascii: "P"), UInt8(ascii: "N"), UInt8(ascii: "G"), 0x0D, 0x0A, 0x1A, 0x0A, 0])), "image/png")

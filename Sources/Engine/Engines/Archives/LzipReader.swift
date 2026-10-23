@@ -23,7 +23,7 @@ enum LzipReader {
         let name = FilePath.fileName(lzipFile)
         let input = try ArchiveFiles.map(lzipFile)
         let members = try findMembers(input, name)
-        try ArchiveSafety.ensureRoom(members.reduce(0) { $0 + $1.dataSize },
+        try ArchiveSafety.ensureRoom(try ArchiveFiles.sum(members.map(\.dataSize)),
                                      FilePath.directoryName(FilePath.fullPath(outputFile)) ?? "/", name)
 
         let folder = FilePath.combine(workDirectory, "lzip-\(ArchiveFiles.guid().prefix(8))")

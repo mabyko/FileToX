@@ -50,7 +50,7 @@ enum EggReader {
         let archiveName = FilePath.fileName(archive)
         let stream = try ArchiveFiles.map(archive)
         let entries = try readEntries(stream, archiveName)
-        try ArchiveSafety.ensureRoom(entries.filter { !$0.isFolder }.reduce(0) { $0 + $1.size }, targetDirectory, archiveName)
+        try ArchiveSafety.ensureRoom(try ArchiveFiles.sum(entries.filter { !$0.isFolder }.map(\.size)), targetDirectory, archiveName)
 
         var folders: [(path: String, modified: Date?)] = []
         for entry in entries {
@@ -188,7 +188,7 @@ enum EggReader {
         for entry in entries {
             if entry.name.isEmpty { throw ArchiveSafety.damaged(archiveName, "an entry has no name") }
             if entry.name.hasSuffix("/") || entry.name.hasSuffix("\\") { entry.isFolder = true }
-            if !entry.isFolder && entry.blocks.reduce(0, { $0 + $1.size }) != entry.size {
+            if try !entry.isFolder && ArchiveFiles.sum(entry.blocks.map(\.size)) != entry.size {
                 throw ArchiveSafety.damaged(archiveName, "the blocks of \(entry.name) do not add up")
             }
         }

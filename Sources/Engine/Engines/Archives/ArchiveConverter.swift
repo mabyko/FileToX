@@ -108,14 +108,15 @@ final class ArchiveConverter: Converter, FileCombiner {
 
     /// Each file (or folder) under its own name; later ones with a name already used become "name (2).ext".
     static func uniqueEntries(_ paths: [String]) -> [PackItem] {
-        var used = Set<String>()
+        // OrdinalIgnoreCase: code units, so NFC and NFD spellings of a name stay different (a Swift String set would merge them).
+        var used = Set<[UInt16]>()
         var items: [PackItem] = []
         for path in paths {
             var name = FilePath.fileName(FilePath.trimEndingSeparator(path))
             let stem = FilePath.fileNameWithoutExtension(name)
             let ext = FilePath.extension(name)
             var n = 2
-            while !used.insert(name.lowercased()).inserted {
+            while !used.insert(Array(name.lowercased().utf16)).inserted {
                 name = "\(stem) (\(n))\(ext)"
                 n += 1
             }

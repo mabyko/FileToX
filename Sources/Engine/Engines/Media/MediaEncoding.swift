@@ -434,15 +434,13 @@ enum MediaEncoding {
         ]
     }
 
-    /// .NET's "0.###" (invariant): at most three decimals, rounded half away from zero, no trailing zeros.
+    /// .NET's "0.###" (invariant): the double taken to 15 significant digits, then at most three decimals rounded half
+    /// away from zero, no trailing zeros (0.0105 → "0.011", where rounding the binary value would give "0.01").
     static func formatSeconds(_ seconds: Double) -> String {
-        let thousandths = Int64((seconds * 1000).rounded(.toNearestOrAwayFromZero))
-        let whole = thousandths / 1000, fraction = abs(thousandths % 1000)
-        if fraction == 0 { return String(whole) }
-        var digits = String(fraction)
-        digits = String(repeating: "0", count: 3 - digits.count) + digits
-        while digits.hasSuffix("0") { digits.removeLast() }
-        return "\(thousandths < 0 && whole == 0 ? "-" : "")\(whole).\(digits)"
+        var value = Decimal(string: String(format: "%.15g", seconds)) ?? 0
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &value, 3, .plain)
+        return NSDecimalNumber(decimal: rounded).stringValue
     }
 
     // ───────────────────────── Helpers ─────────────────────────

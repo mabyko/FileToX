@@ -24,12 +24,20 @@ enum ArchiveSafety {
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     ]
 
-    /// True if an entry path is absolute, starts with a drive, or climbs out of the target with "..".
+    /// True if an entry path is absolute, starts with a drive, or climbs out of the target with "..". Checked per
+    /// code point like .NET's chars: a separator followed by a combining mark is still a separator.
     static func isUnsafePath(_ entryPath: String) -> Bool {
-        guard let first = entryPath.first else { return false }
+        let scalars = Array(entryPath.unicodeScalars)
+        guard let first = scalars.first else { return false }
         if first == "/" || first == "\\" { return true }
-        if entryPath.dropFirst().first == ":", first.isASCII, first.isLetter { return true }
-        return entryPath.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).contains("..")
+        if scalars.count >= 2, scalars[1] == ":", first.isASCII, first.properties.isAlphabetic { return true }
+        return segments(entryPath, omittingEmpty: false).contains("..")
+    }
+
+    /// The parts of an entry name between "/" and "\\" (String.Split on chars, not on grapheme clusters).
+    private static func segments(_ entryName: String, omittingEmpty: Bool) -> [String] {
+        entryName.unicodeScalars.split(omittingEmptySubsequences: omittingEmpty, whereSeparator: { $0 == "/" || $0 == "\\" })
+            .map(String.init)
     }
 
     /// Refuses a 7-Zip listing with encrypted entries, entries or hard links pointing outside the target folder, too
@@ -44,7 +52,7 @@ enum ArchiveSafety {
                 throw unsafe(archiveName, entry.path)
             }
         }
-        try ensureRoom(entries.filter { !$0.isFolder }.reduce(0) { $0 + $1.size }, targetDirectory, archiveName)
+        try ensureRoom(try ArchiveFiles.sum(entries.filter { !$0.isFolder }.map(\.size)), targetDirectory, archiveName)
     }
 
     /// Throws when `bytes` would not fit on the drive of `directory`.
@@ -70,15 +78,14 @@ enum ArchiveSafety {
     /// Windows does not allow are replaced, and anything escaping the root is refused.
     static func resolveEntryPath(_ root: String, _ entryName: String, _ archiveName: String) throws -> String {
         if isUnsafePath(entryName) { throw unsafe(archiveName, entryName) }
-        let parts = entryName.split(whereSeparator: { $0 == "/" || $0 == "\\" })
-            .map(String.init)
+        let parts = segments(entryName, omittingEmpty: true)
             .filter { $0 != "." }
             .map(sanitizeSegment)
         if parts.isEmpty { throw damaged(archiveName, "an entry has no name") }
 
         let fullRoot = FilePath.fullPath(root)
         let full = FilePath.fullPath(FilePath.combine([fullRoot] + parts))
-        guard full.lowercased().hasPrefix((FilePath.trimEndingSeparator(fullRoot) + "/").lowercased()) else {
+        guard Array(full.lowercased().utf16).starts(with: Array((FilePath.trimEndingSeparator(fullRoot) + "/").lowercased().utf16)) else {
             throw unsafe(archiveName, entryName)
         }
         return full
@@ -137,7 +144,7 @@ enum ArchiveSafety {
         var name = String(scalars)
         while let last = name.unicodeScalars.last, last == "." || last == " " { name.unicodeScalars.removeLast() }
         if name.isEmpty { return "_" }
-        let stem = name.split(separator: ".", omittingEmptySubsequences: false)[0]
+        let stem = String(name.unicodeScalars.split(separator: ".", omittingEmptySubsequences: false)[0])
         return reservedNames.contains(stem.uppercased()) ? "_" + name : name
     }
 }

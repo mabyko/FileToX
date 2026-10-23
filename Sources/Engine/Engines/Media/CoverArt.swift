@@ -43,7 +43,7 @@ enum CoverArt {
             guard try await run(ffmpeg, ["-i", input, "-f", "ffmetadata", metadata]) else { return nil }
             guard let info = ImageSupport.info(picture) else { return nil }
             let line = "METADATA_BLOCK_PICTURE=" + escape(pictureBlock(image, mime, info.width, info.height))
-            var lines = readAllLines(try String(contentsOfFile: metadata, encoding: .utf8))
+            var lines = readAllLines(try Data(contentsOf: URL(fileURLWithPath: metadata)))
             lines.insert(line, at: min(1, lines.count)) // global tags come right after ";FFMETADATA1"
             try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: URL(fileURLWithPath: metadata))
             return CoverExtras(metadataFile: metadata, attachmentFile: nil, attachmentMime: nil)
@@ -93,8 +93,11 @@ enum CoverArt {
         return nil
     }
 
-    /// File.ReadAllLines: "\r\n", "\n" and "\r" end lines; a final line break adds no empty line.
-    private static func readAllLines(_ text: String) -> [String] {
+    /// File.ReadAllLines: UTF-8 with invalid bytes as U+FFFD (tags in a legacy code page keep the cover), a BOM dropped;
+    /// "\r\n", "\n" and "\r" end lines and a final line break adds no empty line.
+    static func readAllLines(_ data: Data) -> [String] {
+        var text = TextEncodings.decode(data, encoding: .utf8)
+        if text.unicodeScalars.first == "\u{FEFF}" { text.unicodeScalars.removeFirst() }
         var lines = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
             .components(separatedBy: "\n")
         if lines.last == "" { lines.removeLast() }
