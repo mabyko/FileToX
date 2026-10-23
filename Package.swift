@@ -19,6 +19,8 @@ let package = Package(
     products: [
         .library(name: "FileToXCore", targets: ["FileToXCore"]),
         .library(name: "FileToXEngineKit", targets: ["FileToXEngineKit"]),
+        // For the Xcode test bundle, which imports LibRaw's header directly (CameraRawTests).
+        .library(name: "CLibRaw", targets: ["CLibRaw"]),
         .executable(name: "FileToXEngine", targets: ["FileToXEngine"]),
     ],
     dependencies: [

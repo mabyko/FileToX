@@ -31,7 +31,7 @@ Magick.NET 14.17.2 (ImageMagick 7.1.2-32 Q8, LibRaw 0.22.2-Release).
 
 ## Build
 
-Built from source as the `CLibRaw` target (SwiftPM `Package.swift`, XcodeGen `project.yml`):
+Built from source as the `CLibRaw` target of the root `Package.swift` (Xcode consumes that package through `project.yml`; there is no separate Xcode target):
 
 - Defines: `LIBRAW_NODLL`, `USE_ZLIB` (deflate-compressed DNG; links the system `libz`), `USE_JPEG` (lossy-JPEG DNGs
   and old Kodak JPEG RAWs, decoded by the same libjpeg-turbo 3.2.0 as in ImageMagick, `Vendor/libjpeg-turbo`; its

@@ -29,8 +29,8 @@ DNG and Kodak JPEG RAW files.
 
 ## Build
 
-`CJpegTurbo` is built from source by SwiftPM, both for `swift build` (root `Package.swift`) and for Xcode
-(`project.yml` references this folder as a local package):
+`CJpegTurbo` is built from source by SwiftPM: the root `Package.swift` depends on this folder as a local package,
+and Xcode consumes the root package through `project.yml`:
 
 - The `JPEG_SOURCES` of upstream's CMake build, 8-, 12- and 16-bit, with arithmetic coding, `JPEG_LIB_VERSION` 62
   (upstream's default), in-memory source and destination managers.
