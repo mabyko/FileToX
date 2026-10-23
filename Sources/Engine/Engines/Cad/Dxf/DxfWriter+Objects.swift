@@ -129,7 +129,7 @@ extension ACad.DxfWriter {
             return false
         case is E.EvaluationGraph, is E.BlockRepresentationData, is E.DynamicBlockPurgePreventer:
             return writeDynamicBlockData
-        case is E.DimensionAssociation, is E.Material, is E.MultiLeaderObjectContextData, is E.ProxyObject, is E.TableContent:
+        case is E.AecWallStyle, is E.AecCleanupGroup, is E.AecBinRecord, is E.DimensionAssociation, is E.Material, is E.MultiLeaderObjectContextData, is E.ProxyObject, is E.TableContent:
             notify("Object not implemented : \(type(of: object))")
             return false
         default:

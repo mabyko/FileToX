@@ -31,7 +31,7 @@ extension ACad {
     }
 
     final class CadTableStyleTemplate: CadTemplate {
-        private(set) var cellStyleTemplates: [CadCellStyleTemplate] = []
+        var cellStyleTemplates: [CadCellStyleTemplate] = []
         private(set) var currentCellStyleTemplate: CadCellStyleTemplate?
         var tableCellStyleTemplate: CadCellStyleTemplate?
 
@@ -61,15 +61,69 @@ extension ACad {
     /// `CadTableEntityTemplate.CadTableCellTemplate` (its build has no effect for DXF data).
     final class CadTableCellTemplate {
         let cell: TableEntity.Cell
+        /// `HashSet<(ulong, string)>` (DWG before R2007).
+        var attributeHandles: [(UInt64, String)] = []
+        var contentTemplates: [CadTableCellContentTemplate] = []
         var formatTextHeight: Double?
         var styleId: Int32 = 0
+        var textStyleOverrideHandle: UInt64?
+        var unknownHandle: UInt64?
         var valueHandle: UInt64?
         init(_ cell: TableEntity.Cell) { self.cell = cell }
+
+        /// `Build`: only the contents do something (their attribute templates throw).
+        func build(_ builder: CadDocumentBuilder) throws {
+            for template in contentTemplates { try template.build(builder) }
+        }
+    }
+
+    /// `CadTableEntityTemplate.CadTableCellContentTemplate` (DWG).
+    final class CadTableCellContentTemplate {
+        let content: TableEntity.CellContent
+        var attTemplates: [CadTableAttributeTemplate] = []
+        var blockRecordHandle: UInt64?
+        var fieldHandle: UInt64?
+        init(_ content: TableEntity.CellContent) { self.content = content }
+
+        func build(_ builder: CadDocumentBuilder) throws {
+            // The CadValueTemplate of a content is never set by the reader.
+            for template in attTemplates { try template.build(builder) }
+        }
+    }
+
+    /// `CadTableEntityTemplate.CadTableAttributeTemplate`: its build is not implemented in ACadSharp 3.8.0.
+    final class CadTableAttributeTemplate {
+        var attDefHandle: UInt64?
+        var value: String?
+
+        func build(_ builder: CadDocumentBuilder) throws { throw DwgError.notImplemented }
+    }
+
+    /// `CadTableEntityTemplate.CadTableComponentTemplate`: a row or column with its style overrides (DWG).
+    final class CadTableComponentTemplate {
+        let component: TableEntity.Component
+        var cellStyleTemplate: CadCellStyleTemplate!
+        var styleId: Int32 = 0
+        init(_ component: TableEntity.Component) { self.component = component }
+
+        func build(_ builder: CadDocumentBuilder, _ table: TableStyle) {
+            switch styleId {
+            case 1: component.cellStyle = table.titleCellStyle
+            case 2: component.cellStyle = table.headerCellStyle
+            case 3: component.cellStyle = table.dataCellStyle
+            default: break
+            }
+            cellStyleTemplate.build(builder)
+        }
     }
 
     final class CadTableEntityTemplate: CadInsertTemplate {
         var blockOwnerHandle: UInt64?
-        private(set) var cellTemplates: [CadTableCellTemplate] = []
+        var cellTemplates: [CadTableCellTemplate] = []
+        var cellStyleTemplate: CadCellStyleTemplate?
+        var componentTemplates: [CadTableComponentTemplate] = []
+        var fieldHandles: [UInt64] = []
+        var nullHandle: UInt64?
         private(set) var currentCellTemplate: CadTableCellTemplate?
         var horizontalMargin: Double?
         var styleHandle: UInt64?
@@ -110,6 +164,14 @@ extension ACad {
             } else {
                 builder.notify("[TableStyle] \(styleHandle.map(String.init) ?? "") not found for table with handle \(table.handle)")
             }
+            do {
+                for template in cellTemplates { try template.build(builder) }
+            } catch {
+                builder.fail("\(error)")
+                return
+            }
+            for component in componentTemplates { component.build(builder, table.style) }
+            cellStyleTemplate?.build(builder)
         }
     }
 

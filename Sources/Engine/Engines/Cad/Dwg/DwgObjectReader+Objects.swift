@@ -493,12 +493,6 @@ extension ACad.DwgObjectReader {
     // ───────────────────────── Spatial filters, visual styles ─────────────────────────
 
     /// `read4x3Matrix`: rows 0 … 2 of a `Matrix4` (12 values, `M00 … M23`).
-    private func read4x3Matrix() throws -> [Double] {
-        var values: [Double] = []
-        for _ in 0..<12 { values.append(try mergedReaders.readBitDouble()) }
-        return values
-    }
-
     func readSpatialFilter() throws -> ACad.CadTemplate? {
         let filter = A.SpatialFilter()
         let template = A.CadNonGraphicalObjectTemplate(filter)

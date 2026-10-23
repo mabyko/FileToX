@@ -973,7 +973,8 @@ extension ACad {
             var arrowhead: BlockRecord?
             var arrowheadSize = 0.0
             var breakInfoCount: Int32 = 0
-            var breakInfo: [(segmentIndex: Int32, pairs: [StartEndPointPair])] = []
+            var segmentIndex: Int32 = 0
+            var startEndPoints: [StartEndPointPair] = []
             var index: Int32 = 0
             var lineColor = Color.byBlock
             var lineType: LineType?
@@ -1044,7 +1045,7 @@ extension ACad {
         var textRotation = 0.0
         var textStyle: TextStyle?
         var textTopAttachment: Int16 = 0
-        /// 16 values, row-major (a default `Matrix4` is all zeros).
+        /// 16 values in the DWG order M00, M10, M20, M30, M01 … M33 (a default `Matrix4` is all zeros).
         var transformationMatrix: [Double] = Array(repeating: 0, count: 16)
         var wordBreak = false
 
