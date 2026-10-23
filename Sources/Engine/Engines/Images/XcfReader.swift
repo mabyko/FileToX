@@ -16,9 +16,8 @@ enum XcfReader {
         let version = versionText == "file" ? 0 : Int(versionText.dropFirst()) ?? 0
         reader.position = 14
         let width = try reader.u32(), height = try reader.u32(), baseType = try reader.u32()
-        guard (1...524_288).contains(width), (1...524_288).contains(height), width * height <= 1 << 30 else {
-            throw ConversionError("The XCF image has an invalid size.")
-        }
+        guard (1...524_288).contains(width), (1...524_288).contains(height) else { throw ConversionError("The XCF image has an invalid size.") }
+        guard width * height <= 100_000_000 else { throw ConversionError("The XCF image is too large (\(width) × \(height) pixels).") }
         if version >= 4 {
             let precision = try reader.u32()
             let eightBit = version < 7 ? precision == 0 : precision == 100 || precision == 150
@@ -52,7 +51,7 @@ enum XcfReader {
         }
 
         // Straight RGBA canvas, 0…1; layers are stored top-most first and composited bottom-up.
-        var canvas = [Double](repeating: 0, count: width * height * 4)
+        var canvas = [Float](repeating: 0, count: width * height * 4)
         for offset in layerOffsets.reversed() {
             try Task.checkCancellation()
             reader.position = offset
@@ -161,7 +160,7 @@ enum XcfReader {
 
     /// Composites a layer onto the canvas with its blend mode (ImageMagick's operator for the GIMP mode): the blended
     /// colour where both are opaque, the layer over the canvas elsewhere.
-    private static func composite(_ layer: Layer, onto canvas: inout [Double], width: Int, height: Int) {
+    private static func composite(_ layer: Layer, onto canvas: inout [Float], width: Int, height: Int) {
         let blend = blendFunction(layer.mode)
         for ly in 0..<layer.height {
             let y = ly + layer.y
@@ -172,14 +171,14 @@ enum XcfReader {
                 let p = (ly * layer.width + lx) * 4, o = (y * width + x) * 4
                 let sa = Double(layer.pixels[p + 3]) / 255 * layer.opacity
                 guard sa > 0 else { continue }
-                let da = canvas[o + 3]
+                let da = Double(canvas[o + 3])
                 let outAlpha = sa + da - sa * da
                 for c in 0..<3 {
-                    let sc = Double(layer.pixels[p + c]) / 255, dc = canvas[o + c]
+                    let sc = Double(layer.pixels[p + c]) / 255, dc = Double(canvas[o + c])
                     let mixed = blend(sc, dc) * sa * da + sc * sa * (1 - da) + dc * da * (1 - sa)
-                    canvas[o + c] = outAlpha > 0 ? mixed / outAlpha : 0
+                    canvas[o + c] = Float(outAlpha > 0 ? mixed / outAlpha : 0)
                 }
-                canvas[o + 3] = outAlpha
+                canvas[o + 3] = Float(outAlpha)
             }
         }
     }

@@ -278,7 +278,7 @@ enum PsdCodec {
             }
             reader.position = start + size + size % 2
         }
-        guard !hasMergedData, depth == 8, mode == 1 || mode == 3, width > 0, height > 0, channels >= 1 else { return nil }
+        guard !hasMergedData, depth == 8, mode == 1 || mode == 3, width > 0, height > 0, width * height <= 100_000_000, channels >= 1 else { return nil }
         reader.position = resourcesEnd
         let sectionLength = large ? reader.u64() : reader.u32()
         guard sectionLength > 0 else { return nil }
@@ -300,7 +300,7 @@ enum PsdCodec {
             layers.append(layer)
         }
         let gray = mode == 1
-        var canvas = [Double](repeating: 0, count: width * height * 4) // straight RGB + alpha, 0…1
+        var canvas = [Float](repeating: 0, count: width * height * 4) // straight RGB + alpha, 0…1
         for layer in layers {
             try Task.checkCancellation()
             let (w, h) = (layer.right - layer.left, layer.bottom - layer.top)
@@ -325,10 +325,10 @@ enum PsdCodec {
                     let color: [Double] = gray
                         ? Array(repeating: Double(planes[0]?[i] ?? 0) / 255, count: 3)
                         : (0..<3).map { Double(planes[$0]?[i] ?? 0) / 255 }
-                    let below = canvas[o + 3]
+                    let below = Double(canvas[o + 3])
                     let outAlpha = a + below * (1 - a)
-                    for c in 0..<3 { canvas[o + c] = (color[c] * a + canvas[o + c] * below * (1 - a)) / outAlpha }
-                    canvas[o + 3] = outAlpha
+                    for c in 0..<3 { canvas[o + c] = Float((color[c] * a + Double(canvas[o + c]) * below * (1 - a)) / outAlpha) }
+                    canvas[o + 3] = Float(outAlpha)
                 }
             }
         }

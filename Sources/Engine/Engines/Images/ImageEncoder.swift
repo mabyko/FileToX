@@ -1,6 +1,7 @@
 // Port of Filee.Engines/Magick/ImageEncoder.cs: applies preset ImageOptions and writes frames in the requested format.
 // Used by MagickImageConverter and by every engine that writes raster images (PDF pages, SVG, CAD, ICNS, Ghostscript).
-// ImageMagick is replaced by ImageIO for the formats this Mac encodes, and by Swift codecs for Netpbm and PSD/PSB.
+// ImageMagick is replaced by ImageIO for the formats this Mac encodes, libwebp / libjxl for WebP and JPEG XL, and Swift
+// codecs for Netpbm and PSD/PSB.
 
 import CoreGraphics
 import Foundation
@@ -159,7 +160,7 @@ enum ImageEncoder {
             // 100 means lossless (JPEG XL distance 0).
             frame.properties[ImageFrame.qualityKey] = quality
         case "jp2":
-            // 100 means lossless (ImageIO's reversible wavelet at quality 1).
+            // 100 means lossless (ImageIO's reversible wavelet at quality 1); below that ImageIO keeps about the same rate.
             frame.properties[kCGImageDestinationLossyCompressionQuality] = Double(quality) / 100
         case "webp":
             frame.properties[ImageFrame.qualityKey] = quality

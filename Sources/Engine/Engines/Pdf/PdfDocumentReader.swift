@@ -133,14 +133,11 @@ final class PdfDocumentReader {
 
     // ───────────────────────── Document ─────────────────────────
 
-    private var document: PDFDocument?
-
     private func readDocument() throws -> HDocument {
         guard let pdf = PDFDocument(url: URL(fileURLWithPath: path)) else {
             throw ConversionError("\(FilePath.fileName(path)) is not a PDF file that can be read.")
         }
         if pdf.isLocked { throw Self.passwordProtected() }
-        document = pdf
 
         var pages: [PageContent] = []
         for index in 0..<pdf.pageCount {
