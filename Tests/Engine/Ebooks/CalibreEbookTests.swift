@@ -61,6 +61,23 @@ final class CalibreEbookTests: EbookTestCase {
             XCTAssertTrue(all.compactMap { $0 as? HBookmark }.contains { "#" + $0.name == link.target })
         }
     }
+    func testCalibreJointMobiUsesItsKf8HalfAndSharedPictures() async throws {
+        try useCalibre()
+        let executable = try XCTUnwrap(CalibreConverter.locate()), epub = try EbookBuilders.epub(folder), output = path("joint.mobi")
+        var environment = ["CALIBRE_OVERRIDE_LANG": "en", "PYTHONIOENCODING": "utf-8"]
+        for (key, name) in [("CALIBRE_CONFIG_DIRECTORY", "config"), ("CALIBRE_CACHE_DIRECTORY", "cache"), ("CALIBRE_TEMP_DIR", "temp")] {
+            let directory = path(name); try FileManager.default.createDirectoryIfNeeded(directory); environment[key] = directory
+        }
+        let result = try await ProcessRunner.run(executable, [epub, output, "--mobi-file-type", "both"], timeout: 120, workingDirectory: folder, environment: environment)
+        XCTAssertEqual(result.exitCode, 0, result.standardError)
+        let database = try PalmDatabase.open(Data(contentsOf: URL(fileURLWithPath: output))), header = try MobiHeader.parse(database, 0)
+        XCTAssertLessThan(header.version, 8); XCTAssertNotNil(header.kf8Boundary)
+        let book = try MobiReader.readBook(output, folder), text = PlainTextWriter.write(book.document)
+        for expected in ["첫 번째 장", "두 번째 장", "주석 내용입니다.", "목록 둘"] { XCTAssertTrue(text.contains(expected), expected) }
+        XCTAssertFalse(HDocumentWalker.images(book.document).isEmpty)
+        let all = inlines(book.document), link = try XCTUnwrap(all.compactMap { $0 as? HLink }.first { $0.target.hasPrefix("#") })
+        XCTAssertTrue(all.compactMap { $0 as? HBookmark }.contains { "#" + $0.name == link.target })
+    }
     func testCalibreReadsAndWritesRareFormats() async throws {
         try useCalibre()
         let epub = try EbookBuilders.epub(folder), lit = try await convert(epub, "epub", "lit", Preset(), CalibreConverter())
