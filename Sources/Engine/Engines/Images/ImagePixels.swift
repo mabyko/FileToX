@@ -1,0 +1,236 @@
+// Pixel work of the image engine, what Filee left to ImageMagick (Q8): EXIF orientation, high-quality resizing,
+// grayscale, flattening onto a background and padding. Pictures are processed as 8-bit premultiplied RGBA in their own
+// RGB colour space (values are not converted, like ImageMagick keeps the ICC profile beside the pixels); grayscale
+// sources come back as grayscale images.
+
+import Accelerate
+import CoreGraphics
+import Foundation
+
+enum ImagePixels {
+    /// 8-bit premultiplied RGBA, rows top to bottom.
+    struct Bitmap {
+        var width: Int
+        var height: Int
+        var pixels: [UInt8]
+        /// RGB colour space the values are in.
+        var space: CGColorSpace
+        /// Grayscale colour space of the source, to turn the result back into a grayscale image.
+        var gray: CGColorSpace?
+        var hasAlpha: Bool
+    }
+
+    /// ImageMagick's `HasAlpha`: the picture has an alpha channel (even when every pixel is opaque).
+    static func hasAlpha(_ image: CGImage) -> Bool {
+        switch image.alphaInfo {
+        case .none, .noneSkipFirst, .noneSkipLast: false
+        default: true
+        }
+    }
+
+    /// The picture as an RGBA bitmap. Drawn in its own colour space, so the values are not converted.
+    static func bitmap(_ image: CGImage) -> Bitmap {
+        let (w, h) = (image.width, image.height)
+        let rect = CGRect(x: 0, y: 0, width: w, height: h)
+        let model = image.colorSpace?.model
+        if model == .monochrome, let gray = image.colorSpace {
+            // Gray drawn onto black is the premultiplied value; the alpha comes from an alpha-only drawing.
+            var values = [UInt8](repeating: 0, count: w * h)
+            values.withUnsafeMutableBytes { buffer in
+                let context = CGContext(data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: gray,
+                                        bitmapInfo: CGImageAlphaInfo.none.rawValue)!
+                context.interpolationQuality = .none
+                context.draw(image, in: rect)
+            }
+            var alpha = [UInt8](repeating: 255, count: w * h)
+            let hasAlpha = hasAlpha(image)
+            if hasAlpha {
+                // Alpha is not colour managed: take it from an RGBA drawing.
+                var rgba = [UInt8](repeating: 0, count: w * h * 4)
+                rgba.withUnsafeMutableBytes { buffer in
+                    let context = CGContext(data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                    context.draw(image, in: rect)
+                }
+                for i in 0..<w * h { alpha[i] = rgba[i * 4 + 3] }
+            }
+            var pixels = [UInt8](repeating: 0, count: w * h * 4)
+            for i in 0..<w * h { (pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2], pixels[i * 4 + 3]) = (values[i], values[i], values[i], alpha[i]) }
+            return Bitmap(width: w, height: h, pixels: pixels, space: CGColorSpace(name: CGColorSpace.sRGB)!, gray: gray, hasAlpha: hasAlpha)
+        }
+        let space = model == .rgb ? image.colorSpace! : CGColorSpace(name: CGColorSpace.sRGB)!
+        var bitmap = Bitmap(width: w, height: h, pixels: [UInt8](repeating: 0, count: w * h * 4), space: space, gray: nil, hasAlpha: hasAlpha(image))
+        bitmap.pixels.withUnsafeMutableBytes { buffer in
+            let context = CGContext(data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: space,
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.interpolationQuality = .none
+            context.draw(image, in: rect)
+        }
+        return bitmap
+    }
+
+    /// The bitmap as an image: RGB(A), or gray(+alpha) when the source was grayscale.
+    static func image(_ bitmap: Bitmap) -> CGImage {
+        if let gray = bitmap.gray {
+            var values = [UInt8](repeating: 0, count: bitmap.width * bitmap.height * (bitmap.hasAlpha ? 2 : 1))
+            let step = bitmap.hasAlpha ? 2 : 1
+            for i in 0..<bitmap.width * bitmap.height {
+                values[i * step] = bitmap.pixels[i * 4]
+                if bitmap.hasAlpha { values[i * 2 + 1] = bitmap.pixels[i * 4 + 3] }
+            }
+            return make(values, bitmap.width, bitmap.height, components: step, space: gray, alpha: bitmap.hasAlpha)
+        }
+        if bitmap.hasAlpha { return make(bitmap.pixels, bitmap.width, bitmap.height, components: 4, space: bitmap.space, alpha: true) }
+        var rgb = [UInt8](repeating: 0, count: bitmap.width * bitmap.height * 3)
+        for i in 0..<bitmap.width * bitmap.height {
+            rgb[i * 3] = bitmap.pixels[i * 4]
+            rgb[i * 3 + 1] = bitmap.pixels[i * 4 + 1]
+            rgb[i * 3 + 2] = bitmap.pixels[i * 4 + 2]
+        }
+        return make(rgb, bitmap.width, bitmap.height, components: 3, space: bitmap.space, alpha: false)
+    }
+
+    /// An image over interleaved 8-bit samples; `alpha` means the last component is premultiplied alpha.
+    static func make(_ samples: [UInt8], _ width: Int, _ height: Int, components: Int, space: CGColorSpace, alpha: Bool,
+                     premultiplied: Bool = true) -> CGImage {
+        let info: CGImageAlphaInfo = !alpha ? (components == 4 ? .noneSkipLast : .none) : premultiplied ? .premultipliedLast : .last
+        let provider = CGDataProvider(data: Data(samples) as CFData)!
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 8 * components, bytesPerRow: width * components,
+                       space: space, bitmapInfo: CGBitmapInfo(rawValue: info.rawValue), provider: provider, decode: nil,
+                       shouldInterpolate: false, intent: .defaultIntent)!
+    }
+
+    // ───────────────────────── Operations ─────────────────────────
+
+    /// Turns the picture upright for an EXIF orientation (1…8), ImageMagick's AutoOrient.
+    static func oriented(_ image: CGImage, _ orientation: Int) -> CGImage {
+        guard (2...8).contains(orientation) else { return image }
+        let source = bitmap(image)
+        let (w, h) = (source.width, source.height)
+        let swapped = orientation >= 5
+        var result = source
+        (result.width, result.height) = swapped ? (h, w) : (w, h)
+        source.pixels.withUnsafeBytes { from in
+            result.pixels.withUnsafeMutableBytes { to in
+                let input = from.bindMemory(to: UInt32.self), output = to.bindMemory(to: UInt32.self)
+                let outWidth = result.width
+                for y in 0..<result.height {
+                    for x in 0..<outWidth {
+                        // Displayed (x, y) comes from stored (sx, sy).
+                        let (sx, sy): (Int, Int) = switch orientation {
+                        case 2: (w - 1 - x, y)
+                        case 3: (w - 1 - x, h - 1 - y)
+                        case 4: (x, h - 1 - y)
+                        case 5: (y, x)
+                        case 6: (y, h - 1 - x)
+                        case 7: (w - 1 - y, h - 1 - x)
+                        default: (w - 1 - y, x)
+                        }
+                        output[y * outWidth + x] = input[sy * w + sx]
+                    }
+                }
+            }
+        }
+        return self.image(result)
+    }
+
+    /// Resamples to `width` × `height` with a Lanczos filter (vImage high quality), like ImageMagick's Resize.
+    static func resized(_ image: CGImage, width: Int, height: Int) -> CGImage {
+        guard width != image.width || height != image.height else { return image }
+        let source = bitmap(image)
+        var result = source
+        (result.width, result.height) = (max(1, width), max(1, height))
+        result.pixels = [UInt8](repeating: 0, count: result.width * result.height * 4)
+        var input = source.pixels
+        input.withUnsafeMutableBytes { from in
+            result.pixels.withUnsafeMutableBytes { to in
+                var src = vImage_Buffer(data: from.baseAddress, height: vImagePixelCount(source.height), width: vImagePixelCount(source.width),
+                                        rowBytes: source.width * 4)
+                var dst = vImage_Buffer(data: to.baseAddress, height: vImagePixelCount(result.height), width: vImagePixelCount(result.width),
+                                        rowBytes: result.width * 4)
+                _ = vImageScale_ARGB8888(&src, &dst, nil, vImage_Flags(kvImageHighQualityResampling))
+            }
+        }
+        return self.image(result)
+    }
+
+    /// ImageMagick's Grayscale: Rec. 709 luma of the (gamma-encoded) values; alpha is kept.
+    static func grayscale(_ image: CGImage) -> CGImage {
+        var source = bitmap(image)
+        for i in 0..<source.width * source.height {
+            let p = i * 4
+            // Luma is linear in R, G and B, so it can be taken from premultiplied values.
+            let luma = 0.212656 * Double(source.pixels[p]) + 0.715158 * Double(source.pixels[p + 1]) + 0.072186 * Double(source.pixels[p + 2])
+            let value = UInt8(min(255, luma.rounded()))
+            (source.pixels[p], source.pixels[p + 1], source.pixels[p + 2]) = (value, value, value)
+        }
+        source.gray = CGColorSpaceCreateDeviceGray()
+        return self.image(source)
+    }
+
+    /// Composites the picture over an opaque colour and drops alpha (ImageMagick's `Alpha(AlphaOption.Remove)`).
+    static func flattened(_ image: CGImage, background: (red: UInt8, green: UInt8, blue: UInt8)) -> CGImage {
+        var source = bitmap(image)
+        let fill = [background.red, background.green, background.blue]
+        for i in 0..<source.width * source.height {
+            let p = i * 4
+            let remaining = 255 - Int(source.pixels[p + 3])
+            for c in 0..<3 {
+                source.pixels[p + c] = UInt8(min(255, Int(source.pixels[p + c]) + (Int(fill[c]) * remaining + 127) / 255))
+            }
+            source.pixels[p + 3] = 255
+        }
+        source.hasAlpha = false
+        if source.gray != nil && !(fill[0] == fill[1] && fill[1] == fill[2]) { source.gray = nil }
+        return self.image(source)
+    }
+
+    /// Centres the picture on a transparent `side` × `side` square (ImageMagick's Extent with Gravity.Center).
+    static func padded(_ image: CGImage, side: Int) -> CGImage {
+        let source = bitmap(image)
+        var result = source
+        (result.width, result.height, result.hasAlpha) = (side, side, true)
+        result.pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let (left, top) = ((side - source.width) / 2, (side - source.height) / 2)
+        for y in 0..<source.height {
+            let from = y * source.width * 4
+            let to = ((y + top) * side + left) * 4
+            result.pixels.replaceSubrange(to..<to + source.width * 4, with: source.pixels[from..<from + source.width * 4])
+        }
+        return self.image(result)
+    }
+
+    /// The same values without their ICC profile (ImageMagick's Strip): read as plain sRGB / gray / CMYK afterwards.
+    static func untagged(_ image: CGImage) -> CGImage {
+        let space: CGColorSpace? = switch image.colorSpace?.model {
+        case .rgb: CGColorSpace(name: CGColorSpace.sRGB)
+        case .monochrome: CGColorSpaceCreateDeviceGray()
+        case .cmyk: CGColorSpaceCreateDeviceCMYK()
+        default: nil
+        }
+        guard let space, image.colorSpace?.name != space.name else { return image }
+        return image.copy(colorSpace: space) ?? image
+    }
+
+    /// True when the image carries an ICC profile other than the untagged default (plain sRGB / gray).
+    static func hasColorProfile(_ image: CGImage) -> Bool {
+        guard let space = image.colorSpace, let name = space.name as String? else { return image.colorSpace?.copyICCData() != nil }
+        return ![CGColorSpace.sRGB as String, "kCGColorSpaceDeviceRGB", "kCGColorSpaceDeviceGray", "kCGColorSpaceDeviceCMYK"].contains(name)
+            && space.copyICCData() != nil
+    }
+
+    /// "#RRGGBB", "#RGB" or "#RRGGBBAA" as RGB; white for anything else (Filee's ParseColor fallback).
+    static func parseColor(_ hex: String) -> (red: UInt8, green: UInt8, blue: UInt8) {
+        var text = hex.trimmingCharacters(in: .whitespaces)
+        guard text.hasPrefix("#") else { return named[text.lowercased()] ?? (255, 255, 255) }
+        text.removeFirst()
+        if text.count == 3 || text.count == 4 { text = text.map { "\($0)\($0)" }.joined() }
+        guard text.count == 6 || text.count == 8, let value = UInt32(text.prefix(6), radix: 16) else { return (255, 255, 255) }
+        return (UInt8(value >> 16 & 0xFF), UInt8(value >> 8 & 0xFF), UInt8(value & 0xFF))
+    }
+
+    private static let named: [String: (red: UInt8, green: UInt8, blue: UInt8)] = [
+        "white": (255, 255, 255), "black": (0, 0, 0), "red": (255, 0, 0), "green": (0, 128, 0), "lime": (0, 255, 0),
+        "blue": (0, 0, 255), "yellow": (255, 255, 0), "gray": (128, 128, 128), "grey": (128, 128, 128), "silver": (192, 192, 192),
+    ]
+}
