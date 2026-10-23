@@ -13,6 +13,7 @@ public enum EngineRegistry {
         _ = environment
         converters += [MagickImageConverter(), PdfSharpConverter(), PdfiumConverter()]
         converters += [IcnsConverter()]
+        converters += [PdfTextConverter()]
         return converters
     }
 
