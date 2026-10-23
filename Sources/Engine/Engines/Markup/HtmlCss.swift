@@ -15,7 +15,7 @@ struct CssDeclarations {
     static func parse(_ text: String?) -> CssDeclarations {
         var result = CssDeclarations()
         guard let text, !text.allSatisfy(\.isWhitespace) else { return result }
-        for declaration in text.components(separatedBy: ";") {
+        for declaration in text.unicodeScalars.split(separator: ";", omittingEmptySubsequences: false).map(String.init) {
             guard let colon = declaration.firstIndex(of: ":"), colon != declaration.startIndex else { continue }
             let name = declaration[..<colon].trimmingCharacters(in: .whitespacesAndNewlines)
             let value = declaration[declaration.index(after: colon)...]

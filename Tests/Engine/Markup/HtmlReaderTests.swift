@@ -345,6 +345,7 @@ final class HtmlCssTests: XCTestCase {
         XCTAssertEqual(style.get("TEXT-ALIGN"), "center")
         XCTAssertNil(style.get("display"))
         XCTAssertEqual(CssDeclarations.parse("color: red !important; COLOR: blue; :x; y:").get("color"), "blue")
+        XCTAssertEqual(CssDeclarations.parse("font-family: Τι\u{037E}; color: red").get("font-family"), "Τι\u{037E}") // only ";" splits
     }
 
     func testUnescapeDataStringKeepsInvalidEscapes() {

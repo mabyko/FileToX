@@ -236,8 +236,8 @@ enum HtmlDom {
             for match in pattern.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed() {
                 guard let range = Range(match.range(at: 2), in: result) else { continue }
                 var content = String(result[range])
-                if escapeAmpersands { content = content.replacingOccurrences(of: "&", with: "&amp;") }
-                result.replaceSubrange(range, with: content.replacingOccurrences(of: "<", with: "&lt;"))
+                if escapeAmpersands { content = content.replacingOccurrences(of: "&", with: "&amp;", options: .literal) }
+                result.replaceSubrange(range, with: content.replacingOccurrences(of: "<", with: "&lt;", options: .literal))
             }
         }
         return result
