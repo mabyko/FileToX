@@ -40,12 +40,14 @@
 		1703DD5964460742CAB018CB /* FileToXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76AF946CDC0B29C440098FF8 /* FileToXApp.swift */; };
 		176EC6C96DA12E66514AB152 /* EbookTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74797D670F64B7B88DE0A9D6 /* EbookTests.swift */; };
 		181DF0995414089383170D66 /* exif_gps.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7FEEADF33F0763677155CA63 /* exif_gps.cpp */; };
+		18C03065624E82B127D0249E /* ComicRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A042AB42E3FB75C51914E7 /* ComicRenderingTests.swift */; };
 		19DF52480D3175CB58CE8D9A /* raw2image.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2D6B0FA84DC2F27A68E2A579 /* raw2image.cpp */; };
 		19F0017C15E6615A277EC75E /* libraw_c_api.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BC82955184CC910998CC0295 /* libraw_c_api.cpp */; };
 		1A161C847F8A18E06A3D7D97 /* SvgRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA23700DDCD4BCB8E770E0C7 /* SvgRenderer.swift */; };
 		1A4D2C2B3872069A0BC9F9DE /* ImageReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72D53DD15BB968A330949FFA /* ImageReader.swift */; };
 		1AB877C5D24F40BC13A25540 /* Woff2.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4004CD6EF6217DF31F82810C /* Woff2.swift */; };
 		1B4306C8AEF852DAE5296136 /* DragPasteboardGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9899FAF433476CA2C6DC2464 /* DragPasteboardGate.swift */; };
+		1B7DB425DAD851E96544538B /* PdfiumRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833DACA01537F995E7AF3EC1 /* PdfiumRenderingTests.swift */; };
 		1BF574B7D56182EEBA6D1BFB /* fp_dng.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4985968057021D82FC5645CA /* fp_dng.cpp */; };
 		1C23CB22DB79F13A86A1C5DE /* HDocumentAssert+Comparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3294F8AEBD5B94A958BD025E /* HDocumentAssert+Comparer.swift */; };
 		1C2CAD54BC609D983FB5EB67 /* MarkdownPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B29D07FF73FC23F8879A132 /* MarkdownPipeline.swift */; };
@@ -82,6 +84,7 @@
 		2F206FF3DB6C1E54B56580A3 /* MarkdownBlockProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30681A0176CAED9F1D1A90B3 /* MarkdownBlockProcessor.swift */; };
 		2FBCB4F2F0A0AC37CABBC70B /* OfficeBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629B17962DBFAB2AE4BDA565 /* OfficeBuilders.swift */; };
 		2FCD88AAB7BB9282231E61DD /* CsvFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141F76ED0F728E8D2DE7F926 /* CsvFormat.swift */; };
+		2FD0CA2C7CA5078CAB70BB71 /* libpdfium.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = E56E4F8F5D4B301B56734146 /* libpdfium.dylib */; };
 		2FEE05B64355F005313940A8 /* Type2Interpreter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C9B39E0A174C0CC1D75BA64 /* Type2Interpreter.swift */; };
 		30055027897C59DFB7B1FBC8 /* LzipReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 061290C8AA28535CC119C528 /* LzipReader.swift */; };
 		30630EA7C1867BA294484F05 /* x3f_parse_process.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6881687BBDD59DC29FCED883 /* x3f_parse_process.cpp */; };
@@ -133,6 +136,7 @@
 		4BD17022922CC98B35C3B117 /* ArchiveBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F1DCFD9B1FEFCAE2A212C8 /* ArchiveBuilders.swift */; };
 		4C1DAE577A0A68C8C59A7641 /* TextEncodings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1741EF0B41FE4B9D874B1FA2 /* TextEncodings.swift */; };
 		4C8161A816E19F468283ADD9 /* XlsxWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D85EB229636F1A89E76E7AC /* XlsxWriter.swift */; };
+		4CBE9C21B5391E4436084838 /* PandocTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95E567FCC07DB69B5AB1EFEB /* PandocTests.swift */; };
 		4CE321056FAB80C8A28E7EF1 /* DocumentEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3905273642B4BB2A61CAD1E9 /* DocumentEngineTests.swift */; };
 		4CF85CF548A34E5A86996CF0 /* compare_baseline.py in Resources */ = {isa = PBXBuildFile; fileRef = 9BA636C4360A11BDE31AAC7D /* compare_baseline.py */; };
 		4DF2EB1C0FBB69AD2EDEE658 /* MarkdownReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3F013BFEDFB6956A57C7BEC /* MarkdownReader.swift */; };
@@ -174,6 +178,8 @@
 		6010730FD3148AD354C8856D /* libwebp in Frameworks */ = {isa = PBXBuildFile; productRef = B3A074F7E7C884F1F0A94AF3 /* libwebp */; };
 		60B1CABD3FC0C325C79B90D7 /* EggReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E73B5D171AF0D3459CE2C9EF /* EggReader.swift */; };
 		6135A66FAA4C104A6FE97A79 /* OutputCommit+FinalPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B19C2ADA2AEF00A37C4B75A /* OutputCommit+FinalPath.swift */; };
+		61A8496C1452B2F8EAA83986 /* MarkdownConformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A5A6FAD0922D142B7B4FF21 /* MarkdownConformanceTests.swift */; };
+		62AA189613E6C3839C478370 /* MarkdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03B4961683CB6C4009571283 /* MarkdownTests.swift */; };
 		63A5A5F1696D66C6AAFBEFE6 /* file_write.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 234B4CA6BB2E5E8D8815E528 /* file_write.cpp */; };
 		647CF8F1223CF0898456FF98 /* GraphicsBuilders.swift in Sources */ = {isa = PBXBuildFile; fileRef = E67BC68981AA9B509F57BDA0 /* GraphicsBuilders.swift */; };
 		64AB5AE8650EB3A6BF642D5C /* libjxl in Frameworks */ = {isa = PBXBuildFile; productRef = E9B779AF4E29615ED5499F1F /* libjxl */; };
@@ -208,6 +214,7 @@
 		745288B5D7F2EE4FB79169DB /* EbookFoundationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12001E38034594072D5B4D9C /* EbookFoundationTests.swift */; };
 		74ADC01D0995EC853583B01E /* DocxReader+Drawing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 855A396654C077049ACE51F4 /* DocxReader+Drawing.swift */; };
 		752C3101E2B1F28FB76E7E90 /* HwpxReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382BF1BDFF7ED069CC7F1A7B /* HwpxReader.swift */; };
+		7581A7448C8D179E97915491 /* PdfiumDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C60B2E574A3986001F4FA8A /* PdfiumDocument.swift */; };
 		75A3A20463C918DD70109558 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524E48B052CD40CC77A197A1 /* AppSettings.swift */; };
 		76BAA34B31951E1CE5740BEC /* leica.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 6C4688C9DD76220B77A6E9DD /* leica.cpp */; };
 		77FE26FAB74F298C2CFBCAA3 /* EmlTables.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADC728E32CD040853241B69A /* EmlTables.swift */; };
@@ -250,6 +257,7 @@
 		90D9A198BF99A5EF6C6CAA0A /* colorconst.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 39F761B1347B04CC1CEBCF1E /* colorconst.cpp */; };
 		90F5EC715DEDEC2C30CE937F /* MarkdownWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37FB67E687C9B3779F97F258 /* MarkdownWriter.swift */; };
 		918A8BE19DAF0C126F42709B /* FileeTest-TrueType.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C1A3DE2F557BD08250A832F8 /* FileeTest-TrueType.ttf */; };
+		92CD36AB932068B47FD19D45 /* libpdfium.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = E56E4F8F5D4B301B56734146 /* libpdfium.dylib */; };
 		933D248A58D684ACA0DD81FB /* ahd_demosaic.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 3CBE6BBC008C9191BC909784 /* ahd_demosaic.cpp */; };
 		939EC35B9A0039B179E7795E /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = B263A261C7ED99DF9C389EA6 /* OFL.txt */; };
 		94176ED313E551DBF03261F4 /* DocxToHwpxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA9B33D2BDBFC2098C4F5D9 /* DocxToHwpxTests.swift */; };
@@ -262,6 +270,7 @@
 		9819DC0C47B60DC656B6166A /* PanelPlacement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98120A61BE14A99C3C58C1CA /* PanelPlacement.swift */; };
 		9943C256BC07B102E6FD936A /* init_close_utils.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D596A7A1596D142B275DEBDE /* init_close_utils.cpp */; };
 		997BACF91191751FC427E621 /* DocxWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5947CEAB776747730419A4 /* DocxWriterTests.swift */; };
+		99C16B3C9137067B6FEE4321 /* libpdfium.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E56E4F8F5D4B301B56734146 /* libpdfium.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		9ACD94F4509466D732E51D03 /* IcnsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD034B74F1973F5774EB0949 /* IcnsTests.swift */; };
 		9C5E788F467113C41363AB0D /* ConverterCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D96DA87646F9E111BDF94874 /* ConverterCatalog.swift */; };
 		9C8A43085E2F52626D14E98C /* tiff_writer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = C23A99ADD8B288CCFA2C03EE /* tiff_writer.cpp */; };
@@ -327,6 +336,7 @@
 		C7D0CE282BF7BD4B78CFD731 /* FontBaselineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D02EE3CBA1BF57774DBD360 /* FontBaselineTests.swift */; };
 		C83A6878AA4F3ADF06A9ADFB /* HuffCdic.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CC4447CEC418F33650E063 /* HuffCdic.swift */; };
 		C96CC6A99AE1158D814C5793 /* ApplicationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D17548651AB41F64897EAD /* ApplicationPreferences.swift */; };
+		CC3F8AE2C4B3DA69DB12CE84 /* MarkdownConformanceData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B425EFE562E97B47F1154E12 /* MarkdownConformanceData.swift */; };
 		CD8E2672D8B56559EF991DBD /* EngineRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD34B297B2F52FBED8B35754 /* EngineRegistry.swift */; };
 		CDFE81A2AD0E91979708E5C6 /* MarkdownInlineProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1CB2DBAB9B605CB6E69DE0B /* MarkdownInlineProcessor.swift */; };
 		CE3B1EB536A30E7F9A9A2D03 /* FileeTest-CID.otf in Resources */ = {isa = PBXBuildFile; fileRef = 42D37066B9DC488821256814 /* FileeTest-CID.otf */; };
@@ -364,6 +374,7 @@
 		E00F0F8801EB176A08777266 /* losslessjpeg.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 5C5A8FECF26BE9214C776FB9 /* losslessjpeg.cpp */; };
 		E1781443485C653C5E1E29BA /* misc_parsers.cpp in Sources */ = {isa = PBXBuildFile; fileRef = BC88542302C068AACAF85E8A /* misc_parsers.cpp */; };
 		E1CA27443260D34C692AA8AC /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = AA2643BDA7CA6019E1536699 /* Resources */; };
+		E2F8640D5474A920FEB02203 /* libpdfium.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E56E4F8F5D4B301B56734146 /* libpdfium.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E372DC3F1A06FBD345364C62 /* tiff.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A7FC9CA33378664303F01022 /* tiff.cpp */; };
 		E46237CEFE6C737E27BC3BE1 /* generic.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 611405959A65206CE52EEFAE /* generic.cpp */; };
 		E4832423D3975854D692D0E8 /* ArchiveCrc32.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5065C6511E010BDEC996D2AB /* ArchiveCrc32.swift */; };
@@ -467,6 +478,28 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		6B7E4CBD061AD9405FE40933 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				99C16B3C9137067B6FEE4321 /* libpdfium.dylib in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		70C4235CD8572055CE4F79A6 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				E2F8640D5474A920FEB02203 /* libpdfium.dylib in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		95607C9E3010036407969B20 /* Embed Dependencies */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -484,6 +517,7 @@
 		02AA7A76F0A0D21D72354111 /* Book.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Book.swift; sourceTree = "<group>"; };
 		034809503A669AD4A2514911 /* rawspeed_glue.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = rawspeed_glue.cpp; sourceTree = "<group>"; };
 		034FF4FCC8034671A130FE74 /* DocxReader+Tables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DocxReader+Tables.swift"; sourceTree = "<group>"; };
+		03B4961683CB6C4009571283 /* MarkdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTests.swift; sourceTree = "<group>"; };
 		03F769249ECE3FE26FB93AC0 /* kodak_decoders.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = kodak_decoders.cpp; sourceTree = "<group>"; };
 		061290C8AA28535CC119C528 /* LzipReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LzipReader.swift; sourceTree = "<group>"; };
 		061B6529A7987395FC8E3FB7 /* MarkdownHtmlRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownHtmlRenderer.swift; sourceTree = "<group>"; };
@@ -590,6 +624,7 @@
 		3B43A56FEDD7E12DFC1CE33F /* HwpxModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HwpxModel.swift; sourceTree = "<group>"; };
 		3B4AC92BD1A823B439F192B6 /* GraphicsTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphicsTestKit.swift; sourceTree = "<group>"; };
 		3BBF46979C614FAD7447CB37 /* DragGestureStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragGestureStateTests.swift; sourceTree = "<group>"; };
+		3C60B2E574A3986001F4FA8A /* PdfiumDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PdfiumDocument.swift; sourceTree = "<group>"; };
 		3CBE6BBC008C9191BC909784 /* ahd_demosaic.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = ahd_demosaic.cpp; sourceTree = "<group>"; };
 		3D02EE3CBA1BF57774DBD360 /* FontBaselineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontBaselineTests.swift; sourceTree = "<group>"; };
 		3D6DDB49549F1F3819C7F9BC /* wblists.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = wblists.cpp; sourceTree = "<group>"; };
@@ -626,6 +661,7 @@
 		524E48B052CD40CC77A197A1 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		52D44C82D2D1380BDF3F6489 /* minolta.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = minolta.cpp; sourceTree = "<group>"; };
 		530FB0D0CE052D9460D0CFEE /* develop.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = develop.c; sourceTree = "<group>"; };
+		53A042AB42E3FB75C51914E7 /* ComicRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComicRenderingTests.swift; sourceTree = "<group>"; };
 		5491B40A401B0338C68583B7 /* ThemeStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeStyles.swift; sourceTree = "<group>"; };
 		568D3D6FDAF1C5DF38BC0583 /* OdsNumberStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OdsNumberStyles.swift; sourceTree = "<group>"; };
 		570E433A04B5D854A6AEFD38 /* NetpbmCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetpbmCodec.swift; sourceTree = "<group>"; };
@@ -695,6 +731,7 @@
 		800EB0EEB1F14BE26D3DCB81 /* makernotes.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = makernotes.cpp; sourceTree = "<group>"; };
 		80E78EBD59DADC9F9030478F /* ConversionNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversionNotifications.swift; sourceTree = "<group>"; };
 		829E8ACBD1B81DBF342F3D81 /* ProgressToastController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressToastController.swift; sourceTree = "<group>"; };
+		833DACA01537F995E7AF3EC1 /* PdfiumRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PdfiumRenderingTests.swift; sourceTree = "<group>"; };
 		836C513DF023480D49B5A9B7 /* ChapterReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterReader.swift; sourceTree = "<group>"; };
 		840742DA6924C52C07CED367 /* FontFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontFile.swift; sourceTree = "<group>"; };
 		8475289E14C662E5EFEB8CAA /* ZippedText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZippedText.swift; sourceTree = "<group>"; };
@@ -709,6 +746,7 @@
 		88D3A84DEFC326103DDDE9C5 /* HwpxWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HwpxWriter.swift; sourceTree = "<group>"; };
 		8928199470E12500CB9AC8A6 /* CubicToQuadratic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CubicToQuadratic.swift; sourceTree = "<group>"; };
 		89B2605C0E30FC56E7518B02 /* DocxReader+Styles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DocxReader+Styles.swift"; sourceTree = "<group>"; };
+		8A5A6FAD0922D142B7B4FF21 /* MarkdownConformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownConformanceTests.swift; sourceTree = "<group>"; };
 		8AECAB50498DE186D3A3868D /* FileToX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FileToX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8AF3810955CC84A76D9B41A6 /* MediaEncoding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaEncoding.swift; sourceTree = "<group>"; };
 		8C3D576F63B6A24457A7B5D6 /* OutputPathResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputPathResolverTests.swift; sourceTree = "<group>"; };
@@ -730,6 +768,7 @@
 		9445048B73D9724C9708729D /* GhostscriptConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostscriptConverter.swift; sourceTree = "<group>"; };
 		9503CF807D9789A4E86BA4C0 /* CodecLibraries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecLibraries.swift; sourceTree = "<group>"; };
 		9562682C6DDBE80CAC103E35 /* FilePath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePath.swift; sourceTree = "<group>"; };
+		95E567FCC07DB69B5AB1EFEB /* PandocTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PandocTests.swift; sourceTree = "<group>"; };
 		9601697C3617CD8422E5CE2A /* MarkdownBlockParsers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownBlockParsers.swift; sourceTree = "<group>"; };
 		961558585A559E76FB923ED5 /* XlsxReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XlsxReader.swift; sourceTree = "<group>"; };
 		98120A61BE14A99C3C58C1CA /* PanelPlacement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelPlacement.swift; sourceTree = "<group>"; };
@@ -777,6 +816,7 @@
 		B3628DD5274AA6FF1DC00649 /* OoxmlVariantTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OoxmlVariantTests.swift; sourceTree = "<group>"; };
 		B394B1F707215AEEF59591FE /* Localizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localizer.swift; sourceTree = "<group>"; };
 		B3FDDB0AEF5B2D6BF473F563 /* PdfDocumentReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PdfDocumentReader.swift; sourceTree = "<group>"; };
+		B425EFE562E97B47F1154E12 /* MarkdownConformanceData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownConformanceData.swift; sourceTree = "<group>"; };
 		B57A02BBBD60F3CCC1A345C6 /* libraw_alloc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = libraw_alloc.h; sourceTree = "<group>"; };
 		B63429708328669EF326CF9F /* postprocessing_utils_dcrdefs.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = postprocessing_utils_dcrdefs.cpp; sourceTree = "<group>"; };
 		B6836FAD616B6949ED8AD791 /* SpreadsheetConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpreadsheetConverter.swift; sourceTree = "<group>"; };
@@ -852,6 +892,7 @@
 		E38A7EA2090F6BD1D3D7C351 /* subtract_black.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = subtract_black.cpp; sourceTree = "<group>"; };
 		E3C76F975091D32F70E1FC0D /* OdsReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OdsReader.swift; sourceTree = "<group>"; };
 		E43F83DB34B8E4ECE70C4C2E /* ComparisonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComparisonTests.swift; sourceTree = "<group>"; };
+		E56E4F8F5D4B301B56734146 /* libpdfium.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libpdfium.dylib; path = Vendor/PDFium/lib/libpdfium.dylib; sourceTree = "<group>"; };
 		E578E9E22F242284186174C0 /* FormatRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatRegistry.swift; sourceTree = "<group>"; };
 		E67BC68981AA9B509F57BDA0 /* GraphicsBuilders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphicsBuilders.swift; sourceTree = "<group>"; };
 		E6F61B172FE94B20F2165832 /* postprocessing_utils.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = postprocessing_utils.cpp; sourceTree = "<group>"; };
@@ -906,6 +947,7 @@
 			files = (
 				875AC037E15454B1ACC6F98F /* libFileToXEngineKit.a in Frameworks */,
 				C36FA030A1D211F723248306 /* libCLibRaw.a in Frameworks */,
+				2FD0CA2C7CA5078CAB70BB71 /* libpdfium.dylib in Frameworks */,
 				0657C0314A00B9567F80B2DC /* libwebp in Frameworks */,
 				64AB5AE8650EB3A6BF642D5C /* libjxl in Frameworks */,
 				890DBBEDDD9ACBC8456A79DB /* brotli in Frameworks */,
@@ -930,6 +972,7 @@
 			files = (
 				A9BFA6103C3FDAC658A668F5 /* libFileToXEngineKit.a in Frameworks */,
 				3C36666DFD37291D046AA84E /* libCLibRaw.a in Frameworks */,
+				92CD36AB932068B47FD19D45 /* libpdfium.dylib in Frameworks */,
 				6010730FD3148AD354C8856D /* libwebp in Frameworks */,
 				A111A74A8D054F9E1EA227AC /* libjxl in Frameworks */,
 				3D25CD9182561CA7F0296AA7 /* brotli in Frameworks */,
@@ -1059,6 +1102,7 @@
 			children = (
 				9A7488CC58287373E1C82F2A /* PdfBuilder.swift */,
 				0D6B2EFDE6666337275A41D9 /* PdfEngineTests.swift */,
+				833DACA01537F995E7AF3EC1 /* PdfiumRenderingTests.swift */,
 				C2B7392F38CB8C59684EE5C3 /* PdfReaderTests.swift */,
 			);
 			path = Pdf;
@@ -1227,6 +1271,7 @@
 				77B7602B27B5B8378CDEE999 /* PdfDocumentReader+Page.swift */,
 				2E162160078E6D24C35DEC51 /* PdfImageSamples.swift */,
 				8C5838A8DDFCA7B148D9B97A /* PdfiumConverter.swift */,
+				3C60B2E574A3986001F4FA8A /* PdfiumDocument.swift */,
 				CF662E5136BC6B470F857948 /* PdfSharpConverter.swift */,
 				F2200F7FF90BAB2909BAC6BE /* PdfTextConverter.swift */,
 			);
@@ -1546,8 +1591,12 @@
 				276FDF14FD701A6920FA16DF /* EmlTests.swift */,
 				F03D569C974F81F7C2902999 /* HtmlCorpusTests.swift */,
 				EC33D07731284C8872799D92 /* HtmlReaderTests.swift */,
+				B425EFE562E97B47F1154E12 /* MarkdownConformanceData.swift */,
+				8A5A6FAD0922D142B7B4FF21 /* MarkdownConformanceTests.swift */,
 				486E3A2976DB5656B7883612 /* MarkdownCorpusComparisonTests.swift */,
+				03B4961683CB6C4009571283 /* MarkdownTests.swift */,
 				62283497CAE138D70290061F /* MarkupTestSupport.swift */,
+				95E567FCC07DB69B5AB1EFEB /* PandocTests.swift */,
 			);
 			path = Markup;
 			sourceTree = "<group>";
@@ -1634,6 +1683,7 @@
 			isa = PBXGroup;
 			children = (
 				3A48B8276B269005A246A832 /* CalibreEbookTests.swift */,
+				53A042AB42E3FB75C51914E7 /* ComicRenderingTests.swift */,
 				36E489849975603AA13BEE1B /* EbookBaselineTests.swift */,
 				3945A489641941BE18E1F683 /* EbookBuilders.swift */,
 				12001E38034594072D5B4D9C /* EbookFoundationTests.swift */,
@@ -1879,6 +1929,7 @@
 		E2455E5D38E7D319271BEECF /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				E56E4F8F5D4B301B56734146 /* libpdfium.dylib */,
 				160EC02A127B6CA85E1D9FF8 /* libxml2.tbd */,
 				B731EDA674BD4B2720BF7122 /* libz.tbd */,
 			);
@@ -2037,6 +2088,7 @@
 				3407F390840B824ADA3DD27B /* Sources */,
 				7BED35D1C746F85FD06D3086 /* Resources */,
 				9279B79322E08433FDAAD120 /* Frameworks */,
+				70C4235CD8572055CE4F79A6 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -2102,6 +2154,7 @@
 				736D960BA3644EC9E85DB782 /* Sources */,
 				5B2C46A1ECAB58409B5C1053 /* Resources */,
 				BD6A170272AB883015D8DDA4 /* Frameworks */,
+				6B7E4CBD061AD9405FE40933 /* Embed Frameworks */,
 				E8689EF79F1BE7B3951A0018 /* Stage bundled engines (rhwp, 7-Zip) */,
 			);
 			buildRules = (
@@ -2410,6 +2463,7 @@
 				1F7CBFB7519E3882E4991B9C /* PdfSharpConverter.swift in Sources */,
 				F409F6873D7E4C898B8A9148 /* PdfTextConverter.swift in Sources */,
 				86F3C5CB34D9985A4E2A2985 /* PdfiumConverter.swift in Sources */,
+				7581A7448C8D179E97915491 /* PdfiumDocument.swift in Sources */,
 				E51F1D53DC0D2B353C33D8D4 /* PlainText.swift in Sources */,
 				58602CA5B0DEB9231343229B /* PlainTextWriter.swift in Sources */,
 				7B62DE92B1E0C275685FBBB6 /* PptxReader+Text.swift in Sources */,
@@ -2464,6 +2518,7 @@
 				20AACC5989D9A1AA30FE9ED8 /* ArchiveTests.swift in Sources */,
 				10DE33CB567947FFA977DCFA /* CalibreEbookTests.swift in Sources */,
 				68D75935AF0233D3976C87E7 /* CameraRawTests.swift in Sources */,
+				18C03065624E82B127D0249E /* ComicRenderingTests.swift in Sources */,
 				0CFE07DB333DE0135499D8E8 /* ComparisonTests.swift in Sources */,
 				517850416EE1AB830F332CA9 /* CoreTestSupport.swift in Sources */,
 				1566D48842448900904E0A5F /* CoverArtTests.swift in Sources */,
@@ -2501,7 +2556,10 @@
 				BCBCA36C1B437D4582E69F90 /* JobQueueStagingTests.swift in Sources */,
 				473F6BDB4D67903115D996DC /* JobQueueTests.swift in Sources */,
 				F723396CE05F68906B50CDCB /* LibreOfficeFormatTests.swift in Sources */,
+				CC3F8AE2C4B3DA69DB12CE84 /* MarkdownConformanceData.swift in Sources */,
+				61A8496C1452B2F8EAA83986 /* MarkdownConformanceTests.swift in Sources */,
 				7FD7196EEE83720B7C994A2B /* MarkdownCorpusComparisonTests.swift in Sources */,
+				62AA189613E6C3839C478370 /* MarkdownTests.swift in Sources */,
 				5C900EEFE2DBBFEEB2A36C0E /* MarkupTestSupport.swift in Sources */,
 				FEBFF75DDD1B312B3B53CB25 /* MediaTests.swift in Sources */,
 				223CFB27DFDCDCFFAEDC7D95 /* NumberFormatTests.swift in Sources */,
@@ -2509,9 +2567,11 @@
 				96D7C6AAE82FA13EEC6A5894 /* OfficeTests.swift in Sources */,
 				072694D2D4EA48852367187C /* OoxmlVariantTests.swift in Sources */,
 				5613BF34EA63DAA85686EE47 /* OutputPathResolverTests.swift in Sources */,
+				4CBE9C21B5391E4436084838 /* PandocTests.swift in Sources */,
 				2841940B18607AB25EDF34AF /* PdfBuilder.swift in Sources */,
 				1E0B1F5A4F0F702C7FDA6769 /* PdfEngineTests.swift in Sources */,
 				892654F1B7B5EA1C2ACBF2B2 /* PdfReaderTests.swift in Sources */,
+				1B7DB425DAD851E96544538B /* PdfiumRenderingTests.swift in Sources */,
 				EEA065AB460579EF5B0478D2 /* ProfileSelectorTests.swift in Sources */,
 				28E340ED174614FD30890B81 /* RasterFormatTests.swift in Sources */,
 				FCF363477899402AB5C8599A /* RoutePlannerTests.swift in Sources */,
@@ -2767,11 +2827,20 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Vendor/PDFium/lib\"",
+				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/EngineHost.Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor/PDFium/lib",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -2781,7 +2850,10 @@
 				PRODUCT_NAME = FileToXEngine;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/LibRaw/FileToX/include";
+				SWIFT_INCLUDE_PATHS = (
+					"$(SRCROOT)/Vendor/LibRaw/FileToX/include",
+					"$(SRCROOT)/Vendor/PDFium/include",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -2799,7 +2871,10 @@
 				PRODUCT_NAME = FileToXEngineKit;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/LibRaw/FileToX/include";
+				SWIFT_INCLUDE_PATHS = (
+					"$(SRCROOT)/Vendor/LibRaw/FileToX/include",
+					"$(SRCROOT)/Vendor/PDFium/include",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
@@ -2836,11 +2911,18 @@
 				BUNDLE_LOADER = "";
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Vendor/PDFium/lib\"",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
-					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor/PDFium/lib",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -2848,7 +2930,10 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FILETOX_BUNDLE_ID).enginetests";
 				SDKROOT = macosx;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/LibRaw/FileToX/include";
+				SWIFT_INCLUDE_PATHS = (
+					"$(SRCROOT)/Vendor/LibRaw/FileToX/include",
+					"$(SRCROOT)/Vendor/PDFium/include",
+				);
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "";
 			};
@@ -2887,11 +2972,18 @@
 				BUNDLE_LOADER = "";
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Vendor/PDFium/lib\"",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
-					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor/PDFium/lib",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -2899,7 +2991,10 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FILETOX_BUNDLE_ID).enginetests";
 				SDKROOT = macosx;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/LibRaw/FileToX/include";
+				SWIFT_INCLUDE_PATHS = (
+					"$(SRCROOT)/Vendor/LibRaw/FileToX/include",
+					"$(SRCROOT)/Vendor/PDFium/include",
+				);
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "";
 			};
@@ -2918,7 +3013,10 @@
 				PRODUCT_NAME = FileToXEngineKit;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/LibRaw/FileToX/include";
+				SWIFT_INCLUDE_PATHS = (
+					"$(SRCROOT)/Vendor/LibRaw/FileToX/include",
+					"$(SRCROOT)/Vendor/PDFium/include",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
@@ -3060,11 +3158,20 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Vendor/PDFium/lib\"",
+				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Config/EngineHost.Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor/PDFium/lib",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
@@ -3074,7 +3181,10 @@
 				PRODUCT_NAME = FileToXEngine;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Vendor/LibRaw/FileToX/include";
+				SWIFT_INCLUDE_PATHS = (
+					"$(SRCROOT)/Vendor/LibRaw/FileToX/include",
+					"$(SRCROOT)/Vendor/PDFium/include",
+				);
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;

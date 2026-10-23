@@ -1,5 +1,8 @@
 // swift-tools-version: 6.0
 import PackageDescription
+import Foundation
+
+let pdfiumLibraryPath = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/PDFium/lib").path
 
 // The engine is a line-by-line port of C# (Filee); Swift 5 mode keeps its many shared mutable engine objects
 // compiling while the queue and host do their own locking.
@@ -24,6 +27,13 @@ let package = Package(
     ],
     targets: [
         .target(name: "FileToXCore", path: "Sources/Core"),
+        .target(
+            name: "CPDFium",
+            path: "Vendor/PDFium",
+            sources: ["CPDFium.c"],
+            publicHeadersPath: "include",
+            linkerSettings: [.linkedLibrary("pdfium"), .unsafeFlags(["-L", pdfiumLibraryPath, "-Xlinker", "-rpath", "-Xlinker", pdfiumLibraryPath])]
+        ),
         // Camera RAW decoding: LibRaw 0.22.2 (CDDL-1.0) and FileToX's shim in Vendor/LibRaw/FileToX.
         .target(
             name: "CLibRaw",
@@ -38,6 +48,7 @@ let package = Package(
             name: "FileToXEngineKit",
             dependencies: [
                 "CLibRaw",
+                "CPDFium",
                 .product(name: "libwebp", package: "libwebp-Xcode"),
                 .product(name: "libjxl", package: "libjxl-Xcode"),
                 // Google's Brotli (part of the libjxl package) for WOFF2 at Filee's quality 11.
@@ -54,6 +65,7 @@ let package = Package(
             name: "FileToXEngineTests",
             dependencies: ["FileToXEngineKit", "CLibRaw"],
             path: "Tests/Engine",
+            exclude: ["Pdf/Fixtures"],
             swiftSettings: engineSettings
         ),
     ]

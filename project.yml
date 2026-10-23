@@ -114,7 +114,7 @@ targets:
         SWIFT_VERSION: "5.0"
         # CLibRaw is only imported here (its header); the helper and the tests link it. No target dependency, so
         # LibRaw compiles alongside the Swift code instead of before it.
-        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Vendor/LibRaw/FileToX/include
+        SWIFT_INCLUDE_PATHS: [$(SRCROOT)/Vendor/LibRaw/FileToX/include, $(SRCROOT)/Vendor/PDFium/include]
         ARCHS: $(NATIVE_ARCH_ACTUAL)
         SKIP_INSTALL: YES
   # The helper app the main app starts (Contents/Helpers/FileToXEngine.app), with the bundled rhwp and 7-Zip.
@@ -132,6 +132,9 @@ targets:
     dependencies:
       - target: FileToXEngineKit
       - target: CLibRaw
+      - framework: Vendor/PDFium/lib/libpdfium.dylib
+        embed: true
+        codeSign: true
       - package: libwebp
       - package: libjxl
       - package: libjxl
@@ -140,10 +143,12 @@ targets:
       - sdk: libz.tbd
     settings:
       base:
+        LIBRARY_SEARCH_PATHS: [$(inherited), $(SRCROOT)/Vendor/PDFium/lib]
+        LD_RUNPATH_SEARCH_PATHS: [$(inherited), "@executable_path/../Frameworks", "@loader_path/../Frameworks"]
         PRODUCT_NAME: FileToXEngine
         PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).enginehost
         SWIFT_VERSION: "5.0"
-        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Vendor/LibRaw/FileToX/include
+        SWIFT_INCLUDE_PATHS: [$(SRCROOT)/Vendor/LibRaw/FileToX/include, $(SRCROOT)/Vendor/PDFium/include]
         ARCHS: $(NATIVE_ARCH_ACTUAL)
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
@@ -165,13 +170,17 @@ targets:
       Debug: Config/Base.xcconfig
       Release: Config/Base.xcconfig
     sources:
-      - Tests/Engine
+      - path: Tests/Engine
+        excludes: [Pdf/Fixtures]
       - path: Sources/Engine/Resources
         type: folder
         buildPhase: resources
     dependencies:
       - target: FileToXEngineKit
       - target: CLibRaw
+      - framework: Vendor/PDFium/lib/libpdfium.dylib
+        embed: true
+        codeSign: true
       - target: FileToXEngine
         embed: false
         link: false
@@ -183,8 +192,10 @@ targets:
       - sdk: libz.tbd
     settings:
       base:
+        LIBRARY_SEARCH_PATHS: [$(inherited), $(SRCROOT)/Vendor/PDFium/lib]
+        LD_RUNPATH_SEARCH_PATHS: [$(inherited), "@loader_path/../Frameworks"]
         PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).enginetests
-        SWIFT_INCLUDE_PATHS: $(SRCROOT)/Vendor/LibRaw/FileToX/include
+        SWIFT_INCLUDE_PATHS: [$(SRCROOT)/Vendor/LibRaw/FileToX/include, $(SRCROOT)/Vendor/PDFium/include]
         # Logic tests: the helper is a dependency only so host tests can launch it, not their test host.
         TEST_HOST: ""
         BUNDLE_LOADER: ""

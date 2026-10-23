@@ -1,8 +1,7 @@
-// Port of Filee.Engines/Ebooks/ComicBook.cs; SharpCompress → ZIP / bundled 7-Zip, PDFsharp/PDFium → CoreGraphics/PDFKit.
+// Port of Filee.Engines/Ebooks/ComicBook.cs; SharpCompress → ZIP / bundled 7-Zip, PDFsharp → CoreGraphics/PDFKit; PDFium rendering stays PDFium.
 import Foundation
 import CoreGraphics
 import ImageIO
-import PDFKit
 import UniformTypeIdentifiers
 
 enum ComicBook {
@@ -124,16 +123,13 @@ enum ComicBook {
         try zip.close(); try EbookFiles.replace(temp, output)
     }
     static func renderPdf(_ pdf: String, _ step: ConversionStep, _ folder: String, _ progress: ProgressHandler?) throws -> [String] {
-        guard let document = PDFDocument(url: URL(fileURLWithPath: pdf)) else { throw ConversionError("The PDF could not be opened.") }
+        let document = try PdfiumDocument(pdf, unreadableMessage: "The PDF could not be opened.")
         let pageNumbers = PageRange.parse(step.preset.pdf.pageRange, pageCount: document.pageCount)
         let dpi = min(600, max(36, step.preset.pdf.renderDpi)), quality = min(100, max(1, step.preset.image.quality))
         var pages: [String] = []
         for number in pageNumbers {
             try Task.checkCancellation()
-            guard let page = document.page(at: number) else { continue }
-            // Filee uses the same PDFtoImage crop box, rotation and truncated pixel size
-            // for comic pages and raster output. Keep that geometry in one renderer.
-            let image = try PdfiumConverter.render(page, dpi: dpi)
+            let image = try document.render(number, dpi: dpi)
             let file = FilePath.combine(folder, String(format: "%05d.jpg", pages.count + 1))
             var frame = ImageFrame(image: image)
             frame.properties[kCGImageDestinationLossyCompressionQuality] = ImageEncoder.jpegQuality(quality)

@@ -23,7 +23,7 @@ final class ComicRenderingTests: XCTestCase {
         let step = ConversionStep(inputPath: path, from: "pdf", to: "cbz", preset: preset,
                                   output: GraphicsTestOutput(folder: folder, name: "comic"), workDirectory: folder)
         let pages = try ComicBook.renderPdf(path, step, folder, nil)
-        let expected = try PdfiumConverter.render(PDFDocument(url: URL(fileURLWithPath: path))!.page(at: 0)!, dpi: 101)
+        let expected = try PdfiumDocument(path).render(0, dpi: 101)
         let image = try GraphicsTestKit.decode(pages[0])
         XCTAssertEqual([image.width, image.height], [expected.width, expected.height])
         XCTAssertEqual([image.width, image.height], [56, 84])

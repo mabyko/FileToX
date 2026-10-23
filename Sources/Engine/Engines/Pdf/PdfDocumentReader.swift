@@ -44,6 +44,7 @@ final class PdfDocumentReader {
     private let mediaFolder: String
     private let textOnly: Bool
     private var pictures = 0
+    private var raster: PdfiumDocument?
 
     private init(_ path: String, _ mediaFolder: String, textOnly: Bool) {
         self.path = path
@@ -191,7 +192,7 @@ final class PdfDocumentReader {
         if words.isEmpty || (rotated && !textOnly) {
             // A scan, a page of drawings, or a turned page: the rendered page keeps everything.
             content.scanned = true
-            if !textOnly { content.scanPath = try renderScan(page) }
+            if !textOnly { content.scanPath = try renderScan(index) }
             return content
         }
 
@@ -199,7 +200,7 @@ final class PdfDocumentReader {
         var items = Self.paragraphs(lines)
         if let joined = Self.joinTabbedRows(lines, items) { items = Self.paragraphs(joined) }
         content.items = items
-        if !textOnly { content.items += try pictures(page, scan, content, crop) }
+        if !textOnly { content.items += try pictures(scan, content, crop) }
         return content
     }
 
@@ -260,7 +261,7 @@ final class PdfDocumentReader {
     // ───────────────────────── Pictures ─────────────────────────
 
     /// Pictures of a text page. A picture covering the page behind text is the scan under an OCR layer: skipped.
-    private func pictures(_ page: PDFPage, _ scan: ContentScan, _ content: PageContent, _ crop: CGRect) throws -> [Item] {
+    private func pictures(_ scan: ContentScan, _ content: PageContent, _ crop: CGRect) throws -> [Item] {
         var result: [Item] = []
         var rendered: CGImage?
         for image in scan.images.prefix(200) {
@@ -283,7 +284,7 @@ final class PdfDocumentReader {
                 try FileManager.default.writeFile(path!, png)
             } else {
                 // JPEG 2000, CCITT, unusual colour spaces ...: cut the picture out of the rendered page.
-                if rendered == nil { rendered = try PdfiumConverter.render(page, dpi: Self.renderDpi) }
+                if rendered == nil { rendered = try renderPage(content.index) }
                 path = try self.crop(rendered!, bounds, content)
             }
             if let path {
@@ -323,9 +324,14 @@ final class PdfDocumentReader {
         return FilePath.combine(mediaFolder, "pdf-\(pictures).\(ext)")
     }
 
+    private func renderPage(_ index: Int) throws -> CGImage {
+        if raster == nil { raster = try PdfiumDocument(path) }
+        return try raster!.render(index, dpi: Self.renderDpi)
+    }
+
     /// The whole page as a JPEG, the format of scans.
-    private func renderScan(_ page: PDFPage) throws -> String {
-        let image = try PdfiumConverter.render(page, dpi: Self.renderDpi)
+    private func renderScan(_ index: Int) throws -> String {
+        let image = try renderPage(index)
         let path = try newMediaPath("jpg")
         var frame = ImageFrame(image: ImagePixels.flattened(image, background: (255, 255, 255)))
         frame.properties[kCGImageDestinationLossyCompressionQuality] = ImageEncoder.jpegQuality(85)
