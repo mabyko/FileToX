@@ -43,7 +43,7 @@ final class IcnsConverter: Converter {
         }
 
         guard let path = try step.output.allocate("icns") else { return [] }
-        try Data(IcnsFile.write(entries)).write(to: URL(fileURLWithPath: path))
+        try FileManager.default.writeFile(path, Data(IcnsFile.write(entries)))
         progress?(1)
         return [path]
     }

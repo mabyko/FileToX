@@ -157,6 +157,6 @@ enum NetpbmCodec {
             }
             output.append(contentsOf: rgb)
         }
-        try output.write(to: URL(fileURLWithPath: path))
+        try FileManager.default.writeFile(path, output)
     }
 }

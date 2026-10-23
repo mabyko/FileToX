@@ -114,7 +114,7 @@ enum TiffPages {
             set32(moved, at: pointerAt)
             pointerAt = moved + 2 + all.count * 12
         }
-        try Data(bytes).write(to: URL(fileURLWithPath: path))
+        try FileManager.default.writeFile(path, Data(bytes))
     }
 
     private static func u16At(_ entry: [UInt8], _ little: Bool) -> Int {

@@ -60,15 +60,17 @@ enum SvgRenderer {
         let pointsPerPixel: CGFloat = 72 / CGFloat(cssDpi)
         var mediaBox = CGRect(x: 0, y: 0, width: drawing.bounds.width * pointsPerPixel, height: drawing.bounds.height * pointsPerPixel)
         let info: [CFString: Any] = [kCGPDFContextTitle: title, kCGPDFContextCreator: "FileToX"]
-        guard let context = CGContext(URL(fileURLWithPath: output) as CFURL, mediaBox: &mediaBox, info as CFDictionary) else {
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: &mediaBox, info as CFDictionary) else {
             throw ConversionError("Could not create the PDF.")
         }
         context.beginPDFPage(nil)
         draw(drawing, into: context, size: mediaBox.size)
         context.endPDFPage()
         context.closePDF()
-        let size = (try? FileManager.default.attributesOfItem(atPath: output)[.size] as? Int) ?? 0
-        if size == 0 { throw ConversionError("Core Graphics could not write the PDF.") }
+        if data.length == 0 { throw ConversionError("Core Graphics could not write the PDF.") }
+        try FileManager.default.writeFile(output, data as Data)
     }
 
     /// Scale from CSS pixels to output pixels. Vector drawings are rendered at the size they end up at: at the preset's

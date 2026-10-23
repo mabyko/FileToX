@@ -227,8 +227,9 @@ enum ImageEncoder {
         guard let type = typeIdentifiers[format], imageIOWrites.contains(type) else {
             throw ConversionError("Images cannot be written as '\(format)' on this Mac.")
         }
-        let url = URL(fileURLWithPath: path)
-        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, type as CFString, frames.count, nil) else {
+        // Encoded in memory and written with open(2), which keeps the file name as given (NFC).
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, type as CFString, frames.count, nil) else {
             throw ConversionError("Could not create the \(format.uppercased()) file \(FilePath.fileName(path)).")
         }
         if format == "gif", frames.count > 1 {
@@ -257,9 +258,9 @@ enum ImageEncoder {
             }
         }
         guard CGImageDestinationFinalize(destination) else {
-            FileManager.default.removeIfPresent(path)
             throw ConversionError("Could not write \(FilePath.fileName(path)) as \(format.uppercased()).")
         }
+        try FileManager.default.writeFile(path, data as Data)
     }
 
     /// The frame's metadata without the source's file structure (compression, sample layout, tiles), which would

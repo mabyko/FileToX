@@ -277,10 +277,10 @@ final class PdfDocumentReader {
             var path: String?
             if let jpeg = Self.plainJpeg(image.stream) {
                 path = try newMediaPath("jpg")
-                try jpeg.write(to: URL(fileURLWithPath: path!))
+                try FileManager.default.writeFile(path!, jpeg)
             } else if let png = PdfImageSamples.png(image.stream) {
                 path = try newMediaPath("png")
-                try png.write(to: URL(fileURLWithPath: path!))
+                try FileManager.default.writeFile(path!, png)
             } else {
                 // JPEG 2000, CCITT, unusual colour spaces ...: cut the picture out of the rendered page.
                 if rendered == nil { rendered = try PdfiumConverter.render(page, dpi: Self.renderDpi) }

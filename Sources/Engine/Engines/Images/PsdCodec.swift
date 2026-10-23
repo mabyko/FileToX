@@ -91,7 +91,7 @@ enum PsdCodec {
             }
         }
         out.bytes(rle(composite, width: width, height: height, large: large, withCompression: true))
-        try Data(out.data).write(to: URL(fileURLWithPath: path))
+        try FileManager.default.writeFile(path, Data(out.data))
     }
 
     private static func resolutionInfo(_ dpi: (x: Double, y: Double)) -> [UInt8] {

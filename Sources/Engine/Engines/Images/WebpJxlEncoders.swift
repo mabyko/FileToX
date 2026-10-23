@@ -30,7 +30,7 @@ enum WebpEncoder {
             encoded = try encodePicture(first.image, config: &config)
         }
         encoded = try addMetadata(encoded, first)
-        try Data(encoded).write(to: URL(fileURLWithPath: path))
+        try FileManager.default.writeFile(path, Data(encoded))
     }
 
     private static func encodePicture(_ image: CGImage, config: inout WebPConfig) throws -> [UInt8] {
@@ -206,7 +206,7 @@ enum JpegXlEncoder {
             try check(status, encoder)
             break
         }
-        try Data(output[0..<written]).write(to: URL(fileURLWithPath: path))
+        try FileManager.default.writeFile(path, Data(output[0..<written]))
     }
 
     private static func check(_ status: JxlEncoderStatus, _ encoder: OpaquePointer) throws {

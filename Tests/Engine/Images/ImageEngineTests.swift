@@ -233,3 +233,19 @@ enum TiffTags {
         return result
     }
 }
+
+extension ImageEngineTests {
+    /// Other engines write side files through ImageEncoder.save: Korean names must stay composed (NFC) like .NET writes them.
+    func testKoreanFileNamesStayComposed() throws {
+        let name = "한글 그림.png"
+        for format in ["png", "webp", "ppm", "psd"] {
+            let path = FilePath.combine(dir, FilePath.changeExtension(name, format))
+            try ImageEncoder.save([ImageFrame(image: GraphicsTestKit.solid(8, 8, (10, 20, 30, 255)))], to: path, format: format)
+        }
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir).filter { $0.hasPrefix("한") || $0.unicodeScalars.first?.value == 0x1112 }
+        XCTAssertEqual(names.count, 4)
+        for stored in names {
+            XCTAssertEqual(Array(stored.unicodeScalars.prefix(1)).map(\.value), [0xD55C], "\(stored) is decomposed (NFD)")
+        }
+    }
+}

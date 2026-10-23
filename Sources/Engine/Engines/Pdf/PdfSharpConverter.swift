@@ -78,7 +78,7 @@ final class PdfSharpConverter: Converter, PdfMerger {
         context.closePDF()
 
         guard let path = try step.output.allocate("pdf") else { return [] }
-        try (data as Data).write(to: URL(fileURLWithPath: path))
+        try FileManager.default.writeFile(path, data as Data)
         return [path]
     }
 
@@ -142,9 +142,7 @@ final class PdfSharpConverter: Converter, PdfMerger {
     }
 
     static func save(_ document: PDFDocument, to path: String) throws {
-        guard document.write(to: URL(fileURLWithPath: path)) else {
-            FileManager.default.removeIfPresent(path)
-            throw ConversionError("Could not write \(FilePath.fileName(path)).")
-        }
+        guard let data = document.dataRepresentation() else { throw ConversionError("Could not write \(FilePath.fileName(path)).") }
+        try FileManager.default.writeFile(path, data)
     }
 }

@@ -61,7 +61,7 @@ final class VectorConverter: Converter {
         if !SvgRenderer.isGzip(bytes) { try Self.requireSvgText(bytes) }
         guard let output = try step.output.allocate("svgz") else { return [] }
         // A gzipped file named .svg is already SVGZ.
-        try (SvgRenderer.isGzip(bytes) ? bytes : try Deflate.deflate(bytes, level: 9, windowBits: 31)).write(to: URL(fileURLWithPath: output))
+        try FileManager.default.writeFile(output, SvgRenderer.isGzip(bytes) ? bytes : try Deflate.deflate(bytes, level: 9, windowBits: 31))
         return [output]
     }
 
@@ -69,7 +69,7 @@ final class VectorConverter: Converter {
         let bytes = try SvgRenderer.readSvgBytes(step.inputPath)
         try Self.requireSvgText(bytes)
         guard let output = try step.output.allocate("svg") else { return [] }
-        try bytes.write(to: URL(fileURLWithPath: output))
+        try FileManager.default.writeFile(output, bytes)
         return [output]
     }
 
@@ -92,8 +92,7 @@ final class VectorConverter: Converter {
 
         guard let output = try step.output.allocate("pdf") else { return [] }
         if kind == .pdf {
-            FileManager.default.removeIfPresent(output)
-            try FileManager.default.copyItem(atPath: step.inputPath, toPath: output)
+            try FileManager.default.writeFile(output, Data(contentsOf: URL(fileURLWithPath: step.inputPath)))
             return [output]
         }
         guard let gs = GhostscriptConverter.locate() else {

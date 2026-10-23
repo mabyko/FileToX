@@ -25,7 +25,7 @@ final class PdfTextConverter: Converter {
         }
         guard let output = try step.output.allocate("txt") else { return [] }
         // UTF-8 with BOM, so Notepad and Excel-era tools pick the right encoding for Korean and Chinese text.
-        try (Data([0xEF, 0xBB, 0xBF]) + Data(text.utf8)).write(to: URL(fileURLWithPath: output))
+        try FileManager.default.writeFile(output, Data([0xEF, 0xBB, 0xBF]) + Data(text.utf8))
         progress?(1)
         return [output]
     }
