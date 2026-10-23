@@ -127,6 +127,13 @@ final class PdfBuilder {
         return self
     }
 
+    /// Content stream operators added as they are (e.g. text in rendering mode 3, the invisible OCR layer of a scan).
+    @discardableResult
+    func raw(_ operators: String) -> PdfBuilder {
+        page.content += operators + "\n"
+        return self
+    }
+
     /// A web link over the rectangle.
     @discardableResult
     func link(_ url: String, _ x: Double, _ y: Double, _ width: Double, _ height: Double) -> PdfBuilder {

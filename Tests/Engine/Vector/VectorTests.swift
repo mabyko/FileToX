@@ -280,6 +280,21 @@ final class VectorTests: XCTestCase {
 
     // ───────────────────────── Routes ─────────────────────────
 
+    func testGraphicsRoutesUseTheExpectedEngines() {
+        let catalog = ConverterCatalog(EngineRegistry.createAll(EngineEnvironment(dataDirectory: FilePath.combine(dir, "data"))))
+        catalog.priority = AppSettings().enginePriority
+        let planner = catalog.createPlanner(["ghostscript"])
+        let expected: [(String, String, String)] = [
+            ("svg", "png", "vector"), ("svg", "pdf", "vector"), ("ai", "png", "vector,pdfium"),
+            ("eps", "png", "ghostscript"), // straight to PNG: keeps transparency (Filee #39)
+            ("svg", "eps", "vector,ghostscript"), ("raw", "jpg", "magick"), ("xcf", "psd", "magick"), ("png", "icns", "icns"),
+            ("icns", "webp", "icns"), ("pdf", "icns", "pdfium,icns"), ("psd", "pdf", "pdfsharp"),
+        ]
+        for (from, to, engines) in expected {
+            XCTAssertEqual(planner.plan(from, to)?.steps.map(\.converter.id).joined(separator: ","), engines, "\(from) → \(to)")
+        }
+    }
+
     func testGraphicsEnginesOfferFileesDirectEdges() {
         func has(_ converter: Converter, _ from: String, _ to: String) -> Bool { converter.edges.contains { $0.from == from && $0.to == to } }
         XCTAssertTrue(has(vector, "svg", "png") && has(vector, "svg", "pdf") && has(vector, "ai", "pdf") && has(vector, "svgz", "webp"))

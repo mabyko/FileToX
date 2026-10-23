@@ -204,15 +204,8 @@ final class PdfReaderTests: XCTestCase {
         // A scan with an invisible text layer (rendering mode 3), as OCR software writes it.
         let pdf = PdfBuilder().newPage()
         try pdf.picture(PdfBuilder.photo(dir, "scan.jpg", 595, 842), 0, 0, 595, 842)
+        pdf.raw("BT 3 Tr /\(pdf.font().resource) 12 Tf 50 700 Td (Recognised words) Tj ET")
         let path = try pdf.save(FilePath.combine(dir, "ocr.pdf"))
-        var content = try String(contentsOfFile: path, encoding: .isoLatin1)
-        let draw = "q 595.000 0 0 842.000 0.000 0.000 cm /Im1 Do Q\n"
-        let ocr = "BT 3 Tr /F9 12 Tf 50 700 Td (Recognised words) Tj ET\n"
-        XCTAssertTrue(content.contains(draw))
-        content = content.replacingOccurrences(of: "/Length \(draw.utf8.count)", with: "/Length \((draw + ocr).utf8.count)")
-            .replacingOccurrences(of: draw, with: draw + ocr)
-            .replacingOccurrences(of: "/Font <<  >>", with: "/Font << /F9 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >>")
-        try content.write(toFile: path, atomically: true, encoding: .isoLatin1)
 
         let recognised = try await txt(path)
         XCTAssertEqual(recognised, "Recognised words\r\n")
@@ -275,5 +268,42 @@ final class PdfReaderTests: XCTestCase {
         let cases: [(String, String?)] = [("ABCDEF+TimesNewRomanPS-BoldMT", "Times New Roman"), ("Arial-BoldMT", "Arial"), ("Helvetica-Oblique", "Arial"),
                                           ("QWERTY+MalgunGothic,Bold", "Malgun Gothic"), ("NanumGothic", "NanumGothic"), ("F1", nil), ("T3Font_2", nil)]
         for (postScript, family) in cases { XCTAssertEqual(PdfDocumentReader.fontFamily(postScript), family, postScript) }
+    }
+}
+
+/// The parts of Filee's PdfReaderTests that go through the document writers and the route planner.
+extension PdfReaderTests {
+    private func catalog() -> ConverterCatalog {
+        let catalog = ConverterCatalog(EngineRegistry.createAll(EngineEnvironment(dataDirectory: FilePath.combine(dir, "data"))))
+        catalog.priority = AppSettings().enginePriority
+        return catalog
+    }
+
+    func testPdfToDocxKeepsTheModelThroughTheWriter() async throws {
+        XCTAssertEqual(catalog().createPlanner().plan("pdf", "docx")?.steps.map(\.converter.id), ["docx-writer"])
+        let docx = try await GraphicsTestKit.convert(DocxWriterConverter(), try report(), to: "docx")
+        let model = try DocxReader.read(docx[0], FilePath.combine(dir, "readback"))
+        let paragraphs = Self.paragraphs(model).filter { !Self.textOf($0).isEmpty }
+        XCTAssertEqual(paragraphs.map { Self.textOf($0).trimmingCharacters(in: .whitespaces) },
+                       ["Annual Report 2026", "1. Introduction", Self.first, "Warning this line is italic", "Visit https://example.com",
+                        "2. Details", Self.second])
+        XCTAssertEqual(paragraphs.map(\.headingLevel), [1, 2, 0, 0, 0, 2, 0])
+        XCTAssertTrue(paragraphs.count == 7 && paragraphs[5].pageBreakBefore)
+        let entries = try ZipReader(path: docx[0]).entries.map(\.name).filter { $0.hasPrefix("word/media/") }
+        XCTAssertEqual(entries.filter { $0.hasSuffix(".jpg") }.count, 1, "\(entries)")
+        XCTAssertEqual(entries.filter { $0.hasSuffix(".png") }.count, 1, "\(entries)")
+    }
+
+    func testPdfToHwpxGoesThroughTheDocumentModel() async throws {
+        let planner = catalog().createPlanner()
+        XCTAssertEqual(planner.plan("pdf", "hwpx")?.steps.map(\.converter.id), ["hwpx-writer"])
+        XCTAssertEqual(planner.plan("pdf", "txt")?.steps.map(\.converter.id), ["pdf-text"])
+
+        let hwpx = try await GraphicsTestKit.convert(HwpxConverter(), try report(), to: "hwpx")
+        let zip = try ZipReader(path: hwpx[0])
+        let images = zip.entries.map(\.name).filter { $0.hasPrefix("BinData/") }
+        XCTAssertEqual(images.count, 2, "\(images)")
+        let section = try XCTUnwrap(try zip.data(named: "Contents/section0.xml"))
+        XCTAssertTrue(String(decoding: section, as: UTF8.self).contains("Annual Report 2026"))
     }
 }
