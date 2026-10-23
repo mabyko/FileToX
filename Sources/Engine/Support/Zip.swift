@@ -406,6 +406,9 @@ public final class ZipWriter {
 
 /// Raw deflate / inflate with zlib (also used for gzip and zlib-wrapped streams by other engines).
 public enum Deflate {
+    /// Most input bytes given to zlib at once (its counters are 32-bit); tests lower it to exercise the slicing.
+    nonisolated(unsafe) static var inputSlice = 1 << 30
+
     /// Inflates raw deflate data, handing out chunks of at most 1 MiB.
     public static func inflate(_ input: Data, windowBits: Int32 = -15, _ sink: (Data) throws -> Void) throws {
         var stream = z_stream()
@@ -415,10 +418,17 @@ public enum Deflate {
         defer { inflateEnd(&stream) }
         var output = [UInt8](repeating: 0, count: 1 << 20)
         try input.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
-            stream.next_in = UnsafeMutablePointer(mutating: raw.bindMemory(to: Bytef.self).baseAddress)
-            stream.avail_in = uInt(raw.count)
+            let base = raw.bindMemory(to: Bytef.self).baseAddress
+            var offset = 0
             var status: Int32 = Z_OK
             repeat {
+                // zlib counts input in 32 bits: larger inputs (ZIP64 entries) are handed out in slices.
+                if stream.avail_in == 0, offset < raw.count, let base {
+                    let count = min(raw.count - offset, inputSlice)
+                    stream.next_in = UnsafeMutablePointer(mutating: base + offset)
+                    stream.avail_in = uInt(count)
+                    offset += count
+                }
                 let produced: Int = output.withUnsafeMutableBytes { buffer in
                     stream.next_out = buffer.bindMemory(to: Bytef.self).baseAddress
                     stream.avail_out = uInt(buffer.count)
@@ -464,19 +474,27 @@ public enum Deflate {
             var result = Data()
             var output = [UInt8](repeating: 0, count: 256 * 1024)
             try input.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
-                stream.next_in = UnsafeMutablePointer(mutating: raw.bindMemory(to: Bytef.self).baseAddress)
-                stream.avail_in = uInt(raw.count)
-                var status: Int32 = Z_OK
+                let base = raw.bindMemory(to: Bytef.self).baseAddress
+                var offset = 0
                 repeat {
-                    let produced: Int = output.withUnsafeMutableBytes { buffer in
-                        stream.next_out = buffer.bindMemory(to: Bytef.self).baseAddress
-                        stream.avail_out = uInt(buffer.count)
-                        status = zlib.deflate(&stream, finish ? Z_FINISH : Z_NO_FLUSH)
-                        return buffer.count - Int(stream.avail_out)
-                    }
-                    guard status != Z_STREAM_ERROR else { throw ZipError.corrupt("deflate failed") }
-                    result.append(contentsOf: output[0..<produced])
-                } while finish ? status != Z_STREAM_END : stream.avail_out == 0
+                    // zlib counts input in 32 bits: hand it out in slices; only the last one may finish the stream.
+                    let count = min(raw.count - offset, Deflate.inputSlice)
+                    stream.next_in = base.map { UnsafeMutablePointer(mutating: $0 + offset) }
+                    stream.avail_in = uInt(count)
+                    offset += count
+                    let flush = finish && offset == raw.count ? Z_FINISH : Z_NO_FLUSH
+                    var status: Int32 = Z_OK
+                    repeat {
+                        let produced: Int = output.withUnsafeMutableBytes { buffer in
+                            stream.next_out = buffer.bindMemory(to: Bytef.self).baseAddress
+                            stream.avail_out = uInt(buffer.count)
+                            status = zlib.deflate(&stream, flush)
+                            return buffer.count - Int(stream.avail_out)
+                        }
+                        guard status != Z_STREAM_ERROR else { throw ZipError.corrupt("deflate failed") }
+                        result.append(contentsOf: output[0..<produced])
+                    } while flush == Z_FINISH ? status != Z_STREAM_END : stream.avail_out == 0
+                } while offset < raw.count
             }
             if finish { finished = true }
             return result

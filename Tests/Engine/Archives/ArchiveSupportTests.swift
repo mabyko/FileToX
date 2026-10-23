@@ -1,12 +1,13 @@
-// Shared helpers the archive engine relies on: ZipWriter entries with a given mode and per-chunk progress (Filee's ZIPs
-// give every entry rw-r--r--), DOS times that stay Gregorian whatever calendar the user prefers, and created names that
-// keep their composed form (FileManager would store "폴더" decomposed, NFD, unlike .NET).
+// Shared helpers the archive engine relies on: .NET path semantics per code point, zlib input of any size, ZipWriter
+// entries with a given mode and per-chunk progress (Filee's ZIPs give every entry rw-r--r--), DOS times that stay
+// Gregorian whatever calendar the user prefers, and created names that keep their composed form (FileManager would
+// store "폴더" decomposed, NFD, unlike .NET).
 
 import Foundation
 import XCTest
 @testable import FileToXEngineKit
 
-final class ArchiveZipTests: XCTestCase {
+final class ArchiveSupportTests: XCTestCase {
     private var dir = ""
 
     override func setUpWithError() throws {
@@ -55,5 +56,33 @@ final class ArchiveZipTests: XCTestCase {
         let inner = Set(try FileManager.default.contentsOfDirectory(atPath: FilePath.combine(dir, name)).map { Array($0.utf8) })
         XCTAssertEqual(inner, [Array("하위".precomposedStringWithCanonicalMapping.utf8), Array("가.txt".precomposedStringWithCanonicalMapping.utf8)])
         XCTAssertThrowsError(try FileManager.default.createDirectoryIfNeeded(FilePath.combine(dir, name + ".zip", "x")))
+    }
+
+    /// .NET looks for "/" and "." per char; Swift Characters would merge them with a following combining mark.
+    func testPathsAreSplitPerCodePointLikeDotNet() {
+        func same(_ a: String?, _ b: String, file: StaticString = #filePath, line: UInt = #line) {
+            XCTAssertEqual(a.map { Array($0.unicodeScalars) }, Array(b.unicodeScalars), file: file, line: line)
+        }
+        same(FilePath.fileName("/x/dir/\u{301}b.txt"), "\u{301}b.txt")
+        same(FilePath.directoryName("/x/dir/\u{301}b.txt"), "/x/dir")
+        same(FilePath.extension("/x/a.\u{301}b"), ".\u{301}b")
+        same(FilePath.fileNameWithoutExtension("/x/a.\u{301}b"), "a")
+        same(FilePath.changeExtension("/x/a.\u{301}b", "png"), "/x/a.png")
+        same(FilePath.fullPath("/x/a/../\u{301}b"), "/x/\u{301}b")
+        same(FilePath.combine("/x", "/\u{301}b"), "/\u{301}b")
+        same(FilePath.trimEndingSeparator("/x/\u{301}/"), "/x/\u{301}")
+    }
+
+    /// zlib takes at most 4 GiB per call; bigger inputs are handed over in slices (made tiny here to exercise it).
+    func testDeflateAndInflateHandInputInSlices() throws {
+        let data = Data((0..<100_000).map { UInt8(truncatingIfNeeded: $0 * 31 / 7) })
+        Deflate.inputSlice = 7
+        defer { Deflate.inputSlice = 1 << 30 }
+        let packed = try Deflate.deflate(data, level: 6)
+        XCTAssertEqual(try Deflate.inflate(packed), data)
+        let gzip = try Deflate.Compressor(level: 1, windowBits: 31)
+        let streamed = try gzip.compress(data.prefix(50_000), finish: false) + gzip.compress(data.suffix(50_000), finish: true)
+        XCTAssertEqual(try Deflate.inflate(streamed, windowBits: 31), data)
+        XCTAssertThrowsError(try Deflate.inflate(packed.prefix(packed.count / 2)))
     }
 }
