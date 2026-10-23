@@ -1053,7 +1053,7 @@ final class HtmlReader {
         try FileManager.default.createDirectoryIfNeeded(options.mediaFolder)
         embedded += 1
         let path = FilePath.combine(options.mediaFolder, "embedded-\(Self.guid())-\(embedded).\(ext)")
-        try data.write(to: URL(fileURLWithPath: path))
+        try FileManager.default.writeFile(path, data)
         return Self.usableImage(path, options.mediaFolder)
     }
 
@@ -1067,7 +1067,7 @@ final class HtmlReader {
             let target = FilePath.combine(mediaFolder, "\(FilePath.fileNameWithoutExtension(path))-\(guid()).png")
             do {
                 try FileManager.default.createDirectoryIfNeeded(mediaFolder)
-                try png.write(to: URL(fileURLWithPath: target))
+                try FileManager.default.writeFile(target, png) // keeps a Korean name composed (NFC)
             } catch {
                 return nil
             }
