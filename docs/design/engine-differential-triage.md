@@ -480,6 +480,19 @@ engine-count assertion now sees 23 engines. The Xcode test action passes with **
 (`settings.json`, `history.json`) reports no wire or semantic differences between the C# and Swift
 hosts; the saved files differ only in JSON key order (`build/user-data-compat-final/summary.json`).
 
+**Isolated clean build (no .NET access).** `xcodebuild clean test` on `2f03d05` ran under
+`env -i` with `PATH=/usr/bin:/bin:/usr/sbin:/sbin` (no `dotnet` anywhere on it) inside a
+`sandbox-exec` profile denying every read of `~/.dotnet`, `~/.nuget` and `/usr/local/share/dotnet`,
+with Xcode's manifest sandbox and the Swift subprocess sandbox disabled so the nested seatbelt
+does not abort them (`build/isolated.sb`, `build/xcode-isolated.log`). The clean build succeeded
+and the products contain no `dotnet*`, `libcoreclr*`, `*.dll`, `*.deps.json` or
+`*.runtimeconfig.json`. The engine bundle ran **510 tests with one failure**:
+`ProcessRunnerTests.testTimeoutKillsTheWholeTree` could not start `/bin/ps`, which the seatbelt
+profile itself blocks (`/bin/ps` fails the same way in that sandbox with no test involved); it passes
+outside. The app test bundle could not be hosted inside the sandbox ("the test runner hung before
+establishing connection", the App-Sandboxed test host cannot apply a nested sandbox); its 74 tests
+passed in the unsandboxed run above. The .NET folders in the home directory were not modified.
+
 No changes were made to Markup, Email, the RAW reader, installed applications,
 user application data, .NET or NuGet installations. No software was installed.
 All generated evidence stays in this worktree; no push or merge was performed.
