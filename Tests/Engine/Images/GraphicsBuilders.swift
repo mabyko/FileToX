@@ -1,8 +1,11 @@
-// Port of Filee.Engines.Tests/GraphicsBuilders.cs: test inputs no encoder here writes — GIMP XCF files, linear DNG camera
-// RAW files, ICNS entries in Apple's legacy RLE format, layered PSD files — and the SVG / EPS documents. (Windows
-// metafiles are Windows-only in Filee and not ported.)
+// Port of Filee.Engines.Tests/GraphicsBuilders.cs: test inputs no encoder here writes — GIMP XCF files, DNG camera RAW
+// files (linear, Bayer, lossy), ICNS entries in Apple's legacy RLE format, layered PSD files — and the SVG / EPS
+// documents. (Windows metafiles are Windows-only in Filee and not ported.)
 
+import CoreGraphics
 import Foundation
+import ImageIO
+@testable import FileToXEngineKit
 
 enum GraphicsBuilders {
     // ───────────────────────── SVG and EPS ─────────────────────────
@@ -90,34 +93,57 @@ enum GraphicsBuilders {
 
     // ───────────────────────── DNG ─────────────────────────
 
-    /// A minimal "linear" DNG (demosaiced RGB, 16 bit, uncompressed) as written by raw converters: IFD0 is a small
-    /// 8-bit preview with the DNG tags, the raw image is its SubIFD (Apple's RAW decoder wants this standard layout;
-    /// Filee's LibRaw test file had the raw image in IFD0). The left half is red, the right half blue.
-    static func linearDng(_ width: Int, _ height: Int, orientation: UInt16) -> [UInt8] {
-        var pixels = [UInt8](repeating: 0, count: width * height * 6)
+    /// How `dng` stores its raw image.
+    enum DngKind {
+        /// Demosaiced RGB, 16 bit, uncompressed: a "linear" DNG as written by raw converters.
+        case linear
+        /// One 16-bit sample per pixel behind an RGGB colour filter, uncompressed: what cameras write.
+        case bayer
+        /// Demosaiced RGB, 8 bit, JPEG-compressed: Adobe DNG Converter's lossy compression.
+        case lossy
+    }
+
+    /// A minimal DNG: IFD0 is a small 8-bit preview with the DNG tags, the raw image is its SubIFD (Apple's RAW decoder
+    /// wants this standard layout; Filee's LibRaw test file had the raw image in IFD0). The left half is red, the right
+    /// half blue.
+    static func dng(_ width: Int, _ height: Int, orientation: UInt16, kind: DngKind = .linear) -> [UInt8] {
+        var pixels: [UInt8] = []
         var preview = [UInt8](repeating: 0, count: width * height * 3)
         for y in 0..<height {
             for x in 0..<width {
                 let rgb: [UInt16] = x < width / 2 ? [50000, 3000, 3000] : [3000, 3000, 50000]
-                let i = (y * width + x) * 6
-                for c in 0..<3 {
-                    pixels[i + c * 2] = UInt8(rgb[c] & 0xFF)
-                    pixels[i + c * 2 + 1] = UInt8(rgb[c] >> 8)
-                    preview[(y * width + x) * 3 + c] = UInt8(rgb[c] >> 8)
-                }
+                for c in 0..<3 { preview[(y * width + x) * 3 + c] = UInt8(rgb[c] >> 8) }
+                // RGGB: red on even rows and columns, blue on odd ones, green elsewhere.
+                let samples = kind == .bayer ? [rgb[x % 2 + y % 2]] : rgb
+                if kind != .lossy { for value in samples { pixels += [UInt8(value & 0xFF), UInt8(value >> 8)] } }
             }
+        }
+        if kind == .lossy {
+            let data = NSMutableData()
+            let jpeg = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil)!
+            CGImageDestinationAddImage(jpeg, ImagePixels.make(preview, width, height, components: 3, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                              alpha: false), [kCGImageDestinationLossyCompressionQuality: 0.95] as CFDictionary)
+            CGImageDestinationFinalize(jpeg)
+            pixels = [UInt8](data as Data)
         }
         func u16(_ v: UInt16) -> [UInt8] { [UInt8(v & 0xFF), UInt8(v >> 8)] }
         func u32(_ v: UInt32) -> [UInt8] { [UInt8(v & 0xFF), UInt8(v >> 8 & 0xFF), UInt8(v >> 16 & 0xFF), UInt8(v >> 24)] }
         // XYZ → camera: the camera is linear sRGB, so this is the XYZ → linear sRGB matrix.
         let colorMatrix: [Int32] = [32406, -15372, -4986, -9689, 18758, 415, 557, -2040, 10570]
         typealias Entry = (tag: UInt16, type: UInt16, count: UInt32, value: [UInt8])
+        // Bits per sample, compression (1 none, 34892 lossy JPEG), photometric (34892 LinearRaw, 32803 CFA), samples.
+        let (bits, compression, photometric, samples): ([UInt8], UInt16, UInt16, UInt16) = switch kind {
+        case .linear: (u16(16) + u16(16) + u16(16), 1, 34892, 3)
+        case .bayer: (u16(16), 1, 32803, 1)
+        case .lossy: (u16(8) + u16(8) + u16(8), 34892, 34892, 3)
+        }
+        let cfa: [Entry] = kind == .bayer ? [(33421, 3, 2, u16(2) + u16(2)), (33422, 1, 4, [0, 1, 1, 2])] : []
         let rawEntries: [Entry] = [
             (254, 4, 1, u32(0)), (256, 4, 1, u32(UInt32(width))), (257, 4, 1, u32(UInt32(height))),
-            (258, 3, 3, u16(16) + u16(16) + u16(16)), (259, 3, 1, u16(1)), (262, 3, 1, u16(34892)), // LinearRaw
-            (273, 4, 1, u32(0)), (277, 3, 1, u16(3)), (278, 4, 1, u32(UInt32(height))), (279, 4, 1, u32(UInt32(pixels.count))),
-            (284, 3, 1, u16(1)), (50717, 4, 1, u32(65535)),
-        ]
+            (258, 3, UInt32(samples), bits), (259, 3, 1, u16(compression)), (262, 3, 1, u16(photometric)),
+            (273, 4, 1, u32(0)), (277, 3, 1, u16(samples)), (278, 4, 1, u32(UInt32(height))), (279, 4, 1, u32(UInt32(pixels.count))),
+            (284, 3, 1, u16(1)),
+        ] + cfa + [(50717, 4, 1, u32(kind == .lossy ? 255 : 65535))]
         let mainEntries: [Entry] = [
             (254, 4, 1, u32(1)), (256, 4, 1, u32(UInt32(width))), (257, 4, 1, u32(UInt32(height))),
             (258, 3, 3, u16(8) + u16(8) + u16(8)), (259, 3, 1, u16(1)), (262, 3, 1, u16(2)),

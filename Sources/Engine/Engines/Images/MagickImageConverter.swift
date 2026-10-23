@@ -1,5 +1,6 @@
 // Port of Filee.Engines/Magick/MagickImageConverter.cs: raster image ↔ raster image conversion. ImageMagick is replaced
-// by ImageIO (decoding, and encoding where this Mac can), libwebp / libjxl and Swift codecs (Netpbm, PSD/PSB, XCF).
+// by ImageIO (decoding, and encoding where this Mac can), LibRaw (camera RAW, as ImageMagick used it), libwebp / libjxl
+// and Swift codecs (Netpbm, PSD/PSB, XCF).
 
 import CoreGraphics
 import Foundation
@@ -15,7 +16,8 @@ final class MagickImageConverter: Converter, TiffMerger {
     let edges: [ConversionEdge] = ImageEncoder.sources.flatMap { source in ImageEncoder.writable.map { ConversionEdge(source, $0) } }
 
     func status() -> EngineStatus {
-        .available(version: "\(EngineVersions.system("ImageIO")) · libwebp \(CodecLibraries.webpVersion) · libjxl \(CodecLibraries.jxlVersion)")
+        .available(version: "\(EngineVersions.system("ImageIO")) · LibRaw \(ImageReader.libRawVersion) · libwebp \(CodecLibraries.webpVersion)"
+                       + " · libjxl \(CodecLibraries.jxlVersion)")
     }
 
     /// Writes the pages into one multi-page TIFF. Each page is flattened onto the preset's background (no alpha) at 8 bits

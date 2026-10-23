@@ -163,7 +163,7 @@ final class RasterFormatTests: XCTestCase {
         for name in ["photo.dng", "photo.raw"] { // a ".raw" file must not be taken for headerless pixels
             let path = FilePath.combine(dir, name)
             // Orientation 6: the camera was turned; the picture must be rotated 90° clockwise for display.
-            try Data(GraphicsBuilders.linearDng(60, 40, orientation: 6)).write(to: URL(fileURLWithPath: path))
+            try Data(GraphicsBuilders.dng(60, 40, orientation: 6)).write(to: URL(fileURLWithPath: path))
 
             let output = try await GraphicsTestKit.convert(engine, path, to: "jpg", name: "photo-" + name)
             let result = try GraphicsTestKit.decode(output[0]).frames[0]

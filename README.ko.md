@@ -119,4 +119,4 @@ Apple silicon에서 Xcode 테스트 32개, Swift Package 테스트 12개, 내장
 
 FileToX는 [Filee](https://github.com/KnifeLemon/Filee)에서 영감을 받아 만든 Mac 전용 파일 변환 앱이다. SwiftUI와 AppKit으로 macOS에 맞게 만들었으며, Filee의 공식 배포판이 아닌 독립 프로젝트다.
 
-FileToX는 [MIT 라이선스](LICENSE)로 배포한다. Filee의 [MIT 라이선스](docs/upstream/Filee.LICENSE)와 [외부 구성요소 고지](docs/upstream/Filee.THIRD-PARTY-NOTICES.md)를 보존한다. MIT는 각 외부 엔진의 라이선스를 대신하지 않는다. 실제 번들 고지는 helper의 `Contents/Resources/Notices`에 포함한다.
+FileToX는 [MIT 라이선스](LICENSE)로 배포한다. Filee의 [MIT 라이선스](docs/upstream/Filee.LICENSE)와 [외부 구성요소 고지](docs/upstream/Filee.THIRD-PARTY-NOTICES.md)를 보존한다. MIT는 각 외부 엔진의 라이선스를 대신하지 않는다. 카메라 RAW는 [LibRaw](https://www.libraw.org) 0.22.2로 읽으며, LibRaw는 [CDDL-1.0](docs/upstream/LibRaw.LICENSE)([고지](docs/upstream/LibRaw.THIRD-PARTY-NOTICES.md))으로 사용한다. 수정하지 않은 소스는 `Vendor/LibRaw`에 있다. 실제 번들 고지는 helper의 `Contents/Resources/Notices`에 포함한다.

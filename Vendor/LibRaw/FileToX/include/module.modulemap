@@ -1,0 +1,4 @@
+module CLibRaw {
+    header "CLibRaw.h"
+    export *
+}

@@ -5,6 +5,10 @@ import PackageDescription
 // compiling while the queue and host do their own locking.
 let engineSettings: [SwiftSetting] = [.swiftLanguageMode(.v5)]
 
+// LibRaw as the C# helper's ImageMagick built it, minus libjpeg (Vendor/LibRaw/README.FileToX.md). Thread-safe build
+// (no LIBRAW_NOTHREADS: conversions run in parallel); LibRaw's own warnings are silenced.
+let libRawDefines = ["LIBRAW_NODLL", "USE_ZLIB"]
+
 let package = Package(
     name: "FileToX",
     platforms: [.macOS(.v15)],
@@ -20,9 +24,20 @@ let package = Package(
     ],
     targets: [
         .target(name: "FileToXCore", path: "Sources/Core"),
+        // Camera RAW decoding: LibRaw 0.22.2 (CDDL-1.0) and FileToX's shim in Vendor/LibRaw/FileToX.
+        .target(
+            name: "CLibRaw",
+            path: "Vendor/LibRaw",
+            exclude: ["COPYRIGHT", "LICENSE.CDDL", "LICENSE.LGPL", "README.md", "README.FileToX.md"],
+            publicHeadersPath: "FileToX/include",
+            cSettings: libRawDefines.map { .define($0) } + [.headerSearchPath("."), .unsafeFlags(["-w"])],
+            cxxSettings: libRawDefines.map { .define($0) } + [.headerSearchPath("."), .unsafeFlags(["-w"])],
+            linkerSettings: [.linkedLibrary("z")]
+        ),
         .target(
             name: "FileToXEngineKit",
             dependencies: [
+                "CLibRaw",
                 .product(name: "libwebp", package: "libwebp-Xcode"),
                 .product(name: "libjxl", package: "libjxl-Xcode"),
                 // Google's Brotli (part of the libjxl package) for WOFF2 at Filee's quality 11.
@@ -37,7 +52,7 @@ let package = Package(
         .testTarget(name: "FileToXCoreTests", dependencies: ["FileToXCore"], path: "Tests/Core"),
         .testTarget(
             name: "FileToXEngineTests",
-            dependencies: ["FileToXEngineKit"],
+            dependencies: ["FileToXEngineKit", "CLibRaw"],
             path: "Tests/Engine",
             swiftSettings: engineSettings
         ),
