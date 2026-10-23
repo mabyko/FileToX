@@ -79,10 +79,25 @@ int ftx_jpeg_encode(const FTXJpegImage *image, unsigned char **data, unsigned lo
     jpeg_mem_dest(&info, data, length);
     info.image_width = (JDIMENSION)image->width;
     info.image_height = (JDIMENSION)image->height;
-    info.input_components = image->components == 1 ? 1 : 3;
-    info.in_color_space = image->components == 1 ? JCS_GRAYSCALE : JCS_RGB;
+    info.input_components = image->components == 1 && !image->skia ? 1 : 3;
+    info.in_color_space = info.input_components == 1 ? JCS_GRAYSCALE : JCS_RGB;
     info.data_precision = 8;
     jpeg_set_defaults(&info);
+    if (image->skia) {
+        // SkJpegEncoderMgr::initializeRGB: defaults (4:2:0, JDCT_ISLOW, JFIF 1x1 with no unit), optimize_coding,
+        // jpeg_set_quality(quality, TRUE). Skia feeds RGBA/BGRA; libjpeg-turbo converts those like RGB.
+        info.optimize_coding = TRUE;
+        jpeg_set_quality(&info, image->quality, TRUE);
+        jpeg_start_compress(&info, TRUE);
+        size_t stride = (size_t)image->width * 3;
+        while (info.next_scanline < info.image_height) {
+            JSAMPROW row = (JSAMPROW)(image->pixels + (size_t)info.next_scanline * stride);
+            jpeg_write_scanlines(&info, &row, 1);
+        }
+        jpeg_finish_compress(&info);
+        jpeg_destroy_compress(&info);
+        return 0;
+    }
     if (image->x_density > 0 && image->x_density < 32767 && image->y_density > 0 && image->y_density < 32767) {
         UINT16 x = (UINT16)image->x_density, y = (UINT16)image->y_density;
         if (x > 0 && y > 0) {

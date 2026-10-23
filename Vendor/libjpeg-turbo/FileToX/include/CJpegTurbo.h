@@ -32,6 +32,10 @@ typedef struct {
     size_t icc_length;
     const unsigned char *xmp;
     size_t xmp_length;
+    /// Nonzero: write like Skia's SkJpegEncoder (SkiaSharp 3.119, the C# helper's comic pages and PDF scans) instead
+    /// of ImageMagick: always three components, 4:2:0, the slow integer DCT, optimized Huffman tables, JFIF with no
+    /// density, no profiles. Only `pixels`, `width`, `height` and `quality` are read.
+    int skia;
 } FTXJpegImage;
 
 /// Encodes `image`. On success returns 0 and a malloc'ed buffer in `*data` (the caller frees it); otherwise returns

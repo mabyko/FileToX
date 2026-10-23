@@ -225,9 +225,7 @@ enum ImageEncoder {
             try WebpEncoder.write(frames, to: path, animation: frames.count > 1)
         case "jxl":
             try JpegXlEncoder.write(first, to: path)
-        // A frame that carries an ImageIO quality is written by ImageIO: Filee encoded those pictures with Skia, not
-        // ImageMagick (comic pages and PDF scans, see ComicBook.renderPdf and PdfDocumentReader).
-        case "jpg" where first.properties[kCGImageDestinationLossyCompressionQuality] == nil:
+        case "jpg":
             try JpegEncoder.write(first, to: path)
         default:
             try writeImageIO(frames, to: path, format: format)
@@ -314,21 +312,6 @@ enum ImageEncoder {
         }
     }
 
-    /// ImageIO quality (0…1) that gives about the IJG/ImageMagick JPEG quality `quality` (1…100): ImageIO's own
-    /// scale is far steeper (0.65 is IJG 90). Measured from the quantization tables ImageIO writes. Only for the JPEGs
-    /// Filee wrote with Skia; ImageMagick's JPEGs go through `JpegEncoder`.
-    /// shortcut: one table for every macOS; re-measure if Apple changes its JPEG encoder.
-    static func jpegQuality(_ quality: Int) -> Double {
-        jpegQualities[min(max(quality, 1), 100) - 1]
-    }
-
-    private static let jpegQualities: [Double] = [
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0875, 0.125, 0.15, 0.165, 0.1825, 0.195,
-        0.2075, 0.215, 0.225, 0.235, 0.24, 0.25, 0.255, 0.2625, 0.2625, 0.27, 0.28, 0.2875, 0.29, 0.2975, 0.3, 0.3075, 0.31, 0.315,
-        0.3175, 0.3225, 0.325, 0.33, 0.335, 0.3375, 0.345, 0.35, 0.3525, 0.3525, 0.36, 0.3675, 0.3725, 0.3775, 0.3825, 0.39, 0.395,
-        0.4, 0.405, 0.41, 0.4175, 0.4225, 0.4325, 0.44, 0.445, 0.4525, 0.46, 0.4675, 0.4775, 0.485, 0.49, 0.505, 0.515, 0.5275,
-        0.5375, 0.55, 0.5625, 0.58, 0.595, 0.6125, 0.6325, 0.65, 0.68, 0.7, 0.735, 0.7775, 0.8225, 0.885, 0.975, 0.975, 0.995, 1,
-    ]
 
     // ───────────────────────── ICO ─────────────────────────
 

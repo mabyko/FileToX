@@ -44,6 +44,31 @@ final class JpegEncoderTests: XCTestCase {
         return result
     }
 
+    /// Skia-style files (comic pages, PDF scans): SHA-256 of what the C# helper's libSkiaSharp (SkiaSharp 3.119.4,
+    /// libjpeg-turbo 2.1.5.1) wrote from the same pixels through SkJpegEncoder with SKBitmap.Encode's options.
+    func testSkiaFilesAreByteIdenticalToSkiaSharp() throws {
+        let expected: [(gray: Bool, quality: Int, sha256: String)] = [
+            (false, 50, "87a6eb98f914283fdb83e8fb366160f674a36ed144d7f6d8d7fb9be22a8ef3c0"),
+            (false, 85, "7e7f50cf7f1c3cf252c22f8b9a3c02a467280215204138dcd0fe9c00c9d71878"),
+            (false, 90, "9f6c4aa3c9d72d73e7cfee153da8300e8c2a3708bd9ba5b8876e6a773f634c65"),
+            (false, 92, "34e3f70120a86fc42e76c45e8f4257244358bab8c6639f28307d38109dfdaebc"),
+            (false, 100, "c665d3547f12649be35844fb44e46af199434133666c6800e105a2b2d51ac30e"),
+            (true, 85, "da55606feb8b3cfddc5505c58516fc0fdbf14bfae21a82f12d7ead5f52b03fcb"),
+            (true, 90, "c14e0439ba1457b497d153a38ebe855b97c2d81c38f8816b929abda30486eae1"),
+        ]
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("ftx-skia-jpeg-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        for case let (gray, quality, sha256) in expected {
+            let path = folder.appendingPathComponent("\(gray)-\(quality).jpg").path
+            try JpegEncoder.writeSkia(Self.frame(gray: gray, quality: quality).image, quality: quality, to: path)
+            let data = try Data(contentsOf: URL(fileURLWithPath: path))
+            XCTAssertEqual(Self.sha256(data), sha256, "gray \(gray) quality \(quality)")
+            let sof = Self.segments(data).first { $0.0 == 0xC0 }?.1
+            XCTAssertEqual(sof.map { Array($0[6...]) }, [1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1], "Skia always writes three components 4:2:0")
+        }
+    }
+
     func testFilesAreByteIdenticalToImageMagick() throws {
         let expected: [(gray: Bool, quality: Int, sha256: String)] = [
             (false, 50, "6ae5b6d4b29154176f8f7142331099ad9c2f28f6eafabf956e0a5459cef5e24e"),

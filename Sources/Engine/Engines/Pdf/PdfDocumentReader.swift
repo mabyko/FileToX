@@ -333,9 +333,7 @@ final class PdfDocumentReader {
     private func renderScan(_ index: Int) throws -> String {
         let image = try renderPage(index)
         let path = try newMediaPath("jpg")
-        var frame = ImageFrame(image: ImagePixels.flattened(image, background: (255, 255, 255)))
-        frame.properties[kCGImageDestinationLossyCompressionQuality] = ImageEncoder.jpegQuality(85)
-        try ImageEncoder.save([frame], to: path, format: "jpg")
+        try JpegEncoder.writeSkia(ImagePixels.flattened(image, background: (255, 255, 255)), quality: 85, to: path) // Filee: Encode(Jpeg, 85)
         return path
     }
 

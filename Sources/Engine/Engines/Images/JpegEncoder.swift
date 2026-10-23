@@ -84,6 +84,27 @@ enum JpegEncoder {
         return Data(bytes: data, count: Int(length))
     }
 
+    /// A JPEG the way Skia's encoder wrote it for the C# helper (comic pages, PDF scans): 4:2:0, optimized Huffman
+    /// tables, no density or profiles. `quality` 1…100.
+    static func writeSkia(_ image: CGImage, quality: Int, to path: String) throws {
+        let (straight, channels) = CodecPixels.straight(image)
+        let count = image.width * image.height
+        var samples = [UInt8](repeating: 0, count: count * 3)
+        for i in 0..<count { for c in 0..<3 { samples[i * 3 + c] = straight[i * channels + c] } }
+        var jpeg = FTXJpegImage()
+        (jpeg.width, jpeg.height, jpeg.components, jpeg.quality, jpeg.skia) = (Int32(image.width), Int32(image.height), 3, Int32(min(100, max(1, quality))), 1)
+        var data: UnsafeMutablePointer<UInt8>?
+        var length: UInt = 0
+        var message = [CChar](repeating: 0, count: 256)
+        let status = samples.withUnsafeBufferPointer { pixels -> Int32 in
+            jpeg.pixels = pixels.baseAddress
+            return ftx_jpeg_encode(&jpeg, &data, &length, &message)
+        }
+        defer { free(data) }
+        guard status == 0, let data else { throw ConversionError("JPEG encoding failed: " + String(cString: message)) }
+        try FileManager.default.writeFile(path, Data(bytes: data, count: Int(length)))
+    }
+
     private static func withBlob<T>(_ blob: Data?, _ body: (UnsafePointer<UInt8>?, Int) -> T) -> T {
         guard let blob, !blob.isEmpty else { return body(nil, 0) }
         return blob.withUnsafeBytes { body($0.bindMemory(to: UInt8.self).baseAddress, blob.count) }

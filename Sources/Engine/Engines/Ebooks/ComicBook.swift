@@ -131,9 +131,7 @@ enum ComicBook {
             try Task.checkCancellation()
             let image = try document.render(number, dpi: dpi)
             let file = FilePath.combine(folder, String(format: "%05d.jpg", pages.count + 1))
-            var frame = ImageFrame(image: image)
-            frame.properties[kCGImageDestinationLossyCompressionQuality] = ImageEncoder.jpegQuality(quality)
-            try ImageEncoder.save([frame], to: file, format: "jpg")
+            try JpegEncoder.writeSkia(image, quality: quality, to: file) // Filee: bitmap.Encode(Jpeg, quality)
             pages.append(file); progress?(0.9 * Double(pages.count) / Double(max(1, pageNumbers.count)))
         }
         return pages

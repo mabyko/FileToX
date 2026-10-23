@@ -114,8 +114,9 @@ cases, three ICO cases, three SVG cases and three image-to-markup resource cases
 The PDFium follow-up below resolves all 43 PDF raster FAILs, and the JPEG/resize
 parity work resolves the six JPEG and three ICO cases; the two were measured on
 separate branches, so the combined replay after merging is recorded in the final
-ledger. Expected remaining non-CAD FAILs: the three Skia-encoded PDF-page JPEGs,
-three SVG and three image-to-markup cases. The
+ledger. The three Skia-encoded PDF-page JPEGs were then resolved on the merged branch
+(see the ImageIO JPEG encoding section), leaving three SVG and three image-to-markup
+cases as the expected non-CAD FAILs. The
 Calibre OCR and SNB subsections retain evidence from the first fixed run, but
 neither remains FAIL in the final run.
 
@@ -263,11 +264,16 @@ libjpeg-turbo 3.2.0 (the version inside the C# helper's Magick.Native) set up li
 | `auto-045-mkv-to-hwpx` | FAIL 27.914 dB / 0.993128 | FAIL 27.914 dB / 0.993128 |
 | `auto-076-webm-to-hwpx` | FAIL 27.920 dB / 0.993238 | FAIL 27.920 dB / 0.993238 |
 
-The three remaining cases are not ImageMagick JPEGs: their route is video → PDF → CBZ/HWPX, and the embedded
+The three remaining cases were not ImageMagick JPEGs: their route is video → PDF → CBZ/HWPX, and the embedded
 picture is a PDF page that Filee rendered with PDFium and encoded with **Skia** (`ComicBook.RenderPdf` at the preset
 quality, `PdfDocumentReader`'s scan at 85). The C# files show it: IJG tables of quality 90/85 with 4:2:0 sampling
-and optimized Huffman tables, which ImageMagick would have written 4:4:4 at 90. By decision these Skia JPEGs stay
-on ImageIO; they belong with the PDF raster group below (the page pixels differ too). The other ImageMagick JPEG
+and optimized Huffman tables, which ImageMagick would have written 4:4:4 at 90. **Resolved after the PDFium and
+libjpeg-turbo merges:** `JpegEncoder.writeSkia` drives the same libjpeg-turbo with SkJpegEncoder's settings (three
+components, 4:2:0, slow integer DCT, optimized Huffman tables, JFIF without density, no profiles).
+`JpegEncoderTests.testSkiaFilesAreByteIdenticalToSkiaSharp` pins seven encodings to the bytes the installed helper's
+libSkiaSharp (SkiaSharp 3.119.4, libjpeg-turbo 2.1.5.1) writes from the same pixels. Replayed on the merged branch
+(`build/engine-compare/candidate-skia3`, `comparison-skia3`): all three cases **PASS**; the CBZ page and both HWPX
+`BinData` pictures are byte-identical to the C# files, so the PDFium page pixels match too. The other ImageMagick JPEG
 routes also improved: twelve preset/option JPEG cases (`builtin-to-jpg`, `option-*`) went WARN → PASS byte-identical,
 `builtin-jpg-70` 39.848 → 46.066 dB (its JPEG XL source is decoded by ImageIO, not libjxl).
 The only lower scores are `auto-012-txt-to-jpg` and `auto-113-odt-to-jpg` (36.323 → 36.291 and 36.316 → 36.285 dB,
