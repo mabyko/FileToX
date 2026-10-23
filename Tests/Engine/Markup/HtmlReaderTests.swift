@@ -349,6 +349,8 @@ final class HtmlCssTests: XCTestCase {
         XCTAssertEqual(CssValues.length("96px", 1000), 7200)
         XCTAssertEqual(CssValues.length("1in", 1000), 7200)
         XCTAssertNil(CssValues.length("auto", 1000))
+        XCTAssertEqual(HwpxUnits.parseLength("99999999999999999999999"), Int(Int32.max)) // saturates like .NET's (int)
+        XCTAssertEqual(HwpxUnits.parseLength("-99999999999999999999999pt"), Int(Int32.min))
         XCTAssertEqual(CssValues.fontSize("larger", 1000), 1200)
         XCTAssertEqual(CssValues.fontSize("1pt", 1000), 100)
         XCTAssertEqual(CssValues.fontSize("500pt", 1000), 20000)
