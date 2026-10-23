@@ -1,7 +1,6 @@
 // Port of tests/Filee.Engines.Tests/CadTests.cs: DWG / DXF without AutoCAD — DXF ↔ DWG and the built-in renderer
 // (PDF, SVG, PNG). Drawings come from CadBuilder; outputs are parsed back (DXF reader, SVG XML, CGPDFDocument,
-// pixels). Conversions run the converter directly; tests that need the DWG reader / DXF and DWG writers or the image
-// engine skip until those ports are merged.
+// pixels). Conversions run the converter directly.
 
 import CoreGraphics
 import Foundation
@@ -45,28 +44,16 @@ final class CadTests: XCTestCase {
         super.tearDown()
     }
 
-    /// Converts like the job queue does for one file and returns the single output. Conversions that reach a part
-    /// still being ported (image engine, DWG I/O) skip the test.
+    /// Converts like the job queue does for one file and returns the single output.
     private func convert(_ input: String, _ target: String, _ preset: Preset? = nil) async throws -> String {
         var preset = preset ?? Preset()
         if preset.targetFormat != target { preset.targetFormat = target }
         let work = newFolder()
         let step = ConversionStep(inputPath: input, from: FilePath.extension(input).dropFirst().lowercased(), to: target, preset: preset,
                                   output: CadTestOutput(newFolder(), FilePath.fileNameWithoutExtension(input)), workDirectory: work)
-        do {
-            let outputs = try await CadConverter().convert(step, progress: nil)
-            XCTAssertEqual(outputs.count, 1)
-            return try XCTUnwrap(outputs.first)
-        } catch let error where "\(error)".contains("not ported yet") {
-            throw XCTSkip("needs a port that is not merged yet: \(error)")
-        }
-    }
-
-    /// shortcut: until the DWG object reader port is merged, a DWG reads back without its blocks; drop this then.
-    private func skipUnlessDwgObjectsAreRead(_ dwg: String) throws {
-        if (try? CadFile.read(dwg, "dwg"))?.blockRecords?[ACad.BlockRecord.modelSpaceName] == nil {
-            throw XCTSkip("needs the DWG object reader port to read the written DWG back")
-        }
+        let outputs = try await CadConverter().convert(step, progress: nil)
+        XCTAssertEqual(outputs.count, 1)
+        return try XCTUnwrap(outputs.first)
     }
 
     private func sampleDxf() throws -> String { try CadBuilder.sample().save(newFolder(), "도면.dxf") }
@@ -81,11 +68,8 @@ final class CadTests: XCTestCase {
         }
     }
 
-    func testDxfToDwgIsConvertedByTheCadEngine() throws {
+    func testDxfToDwgIsConvertedByTheCadEngine() {
         let converter = CadConverter()
-        guard converter.edges.contains(where: { $0.from == "dxf" && $0.to == "dwg" }) else {
-            throw XCTSkip("needs the DWG writer port: the dxf → dwg edge comes back with it")
-        }
         XCTAssertEqual(converter.edges.firstIndex { $0.from == "dxf" && $0.to == "dwg" }, 1)
     }
 
@@ -97,7 +81,6 @@ final class CadTests: XCTestCase {
 
         let dwg = try await convert(source, "dwg")
         XCTAssertEqual(Array(try Data(contentsOf: URL(fileURLWithPath: dwg)).prefix(6)), Array("AC1032".utf8))
-        try skipUnlessDwgObjectsAreRead(dwg)
         let fromDwg = try CadFile.read(dwg, "dwg")
         XCTAssertEqual(CadBuilder.census(fromDwg), expected)
 
@@ -125,7 +108,6 @@ final class CadTests: XCTestCase {
         XCTAssertEqual(CadBuilder.census(try CadFile.read(binary, "dxf")), CadBuilder.census(try CadFile.read(ascii, "dxf")))
 
         let dwg = try await convert(binary, "dwg")
-        try skipUnlessDwgObjectsAreRead(dwg)
         XCTAssertEqual(CadBuilder.census(try CadFile.read(binary, "dxf")), CadBuilder.census(try CadFile.read(dwg, "dwg")))
     }
 

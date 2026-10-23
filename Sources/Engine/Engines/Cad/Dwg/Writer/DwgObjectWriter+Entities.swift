@@ -473,11 +473,9 @@ extension ACad.DwgObjectWriter {
         for point in leaderLine.points { writer.write3BitDouble(point) }
         writer.writeBitLong(leaderLine.breakInfoCount)
         if leaderLine.breakInfoCount > 0 {
-            // `SegmentIndex` / `StartEndPoints` of the 3.8.0 model.
-            let pairs = leaderLine.breakInfo.flatMap(\.pairs)
-            writer.writeBitLong(leaderLine.breakInfo.last?.segmentIndex ?? 0)
-            writer.writeBitLong(Int32(pairs.count))
-            for pair in pairs {
+            writer.writeBitLong(leaderLine.segmentIndex)
+            writer.writeBitLong(Int32(leaderLine.startEndPoints.count))
+            for pair in leaderLine.startEndPoints {
                 writer.write3BitDouble(pair.startPoint)
                 writer.write3BitDouble(pair.endPoint)
             }
