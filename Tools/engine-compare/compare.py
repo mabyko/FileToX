@@ -6,19 +6,72 @@ from difflib import SequenceMatcher
 import json
 from pathlib import Path
 import sys
+import tempfile
+import zipfile
+from functools import lru_cache
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fingerprint import native, normalized, sha256
+from fingerprint import native, normalized, sha256, command
 from hostwire import write_json
+from semantic import xml_text, document_text, tar_entries, generated_calibre_cover, rst_dimensions
 
 
 def ratio(a, b):
-    return SequenceMatcher(None, normalized(a), normalized(b), autojunk=False).ratio()
+    a, b = normalized(a), normalized(b)
+    return 1.0 if a == b else SequenceMatcher(None, a, b, autojunk=False).ratio()
 
 
 def entries_equal(a, b):
     return [(e["name"], e.get("directory", False), e.get("sha256")) for e in a] == [
             (e["name"], e.get("directory", False), e.get("sha256")) for e in b]
+
+
+@lru_cache(maxsize=128)
+def picture_scores(left, right):
+    if left == right:
+        return {"sameGeometry": True, "frames": [{"psnr": 99, "ssim": 1}]}
+    with tempfile.TemporaryDirectory(prefix="filetox-picture-compare-") as folder:
+        paths = [Path(folder) / name for name in ("left", "right")]
+        for path, data in zip(paths, (left, right)): path.write_bytes(data)
+        scores = native("compare", *paths)
+        if generated_calibre_cover(left) and generated_calibre_cover(right) and scores.get("sameGeometry"):
+            # Calibre chooses a random theme/layout when it generates a cover.
+            # Require the same recognized title/author, not merely the COM marker.
+            a, b = (native("ocr", p)["text"] for p in paths)
+            scores["generatedCoverTextMatches"] = bool(a) and a == b
+            scores["recognizedText"] = [a, b]
+        return scores
+
+
+def picture_below_threshold(scores, thresholds):
+    return not scores.get("generatedCoverTextMatches") and any(
+        f["psnr"] < thresholds["psnr"] or f["ssim"] < thresholds["ssim"] for f in scores["frames"])
+
+
+def pictures_equal(left, right, thresholds, metrics):
+    if len(left) != len(right): return "Embedded picture count changed"
+    for index, (a, b) in enumerate(zip(left, right)):
+        if a[0] != b[0]: return "Embedded picture media type changed"
+        scores = picture_scores(a[1], b[1])
+        metrics[str(index + 1)] = scores
+        if not scores.get("sameGeometry"): return "Embedded picture geometry changed"
+        if picture_below_threshold(scores, thresholds):
+            return "Embedded picture similarity below threshold"
+    return None
+
+
+def media_packets(path):
+    # Container IDs/timestamps are omitted; encoded payloads and packet timing stay strict.
+    result = json.loads(command(["/opt/homebrew/bin/ffprobe", "-v", "error", "-show_packets", "-show_streams",
+        "-show_data_hash", "sha256", "-show_entries",
+        "packet=stream_index,pts,dts,duration,size,data_hash:stream=extradata_hash", "-of", "json", path]))
+    # FFprobe includes stream tag subsections even with restricted show_entries.
+    for stream in result.get("streams", []):
+        tags = stream.get("tags", {})
+        for key in ("file_package_umid", "material_package_umid", "creation_time"):
+            tags.pop(key, None)
+        if not tags: stream.pop("tags", None)
+    return result
 
 
 def compare_output(a, b, left, right, thresholds):
@@ -65,15 +118,34 @@ def compare_output(a, b, left, right, thresholds):
         if not any(p["text"] for p in ma["pages"]):
             reasons.append("PDF has no extractable text; comparison checks page geometry only")
     elif kind == "text":
-        metrics["textRatio"] = ratio(a["text"], b["text"])
+        try:
+            ta, pa = document_text(a["text"], left.suffix.lower() if left else "")
+            tb, pb = document_text(b["text"], right.suffix.lower() if right else "")
+            if left and right and left.suffix.lower() == right.suffix.lower() == ".rst":
+                ta, tb, deltas = rst_dimensions(ta, tb)
+                metrics["dimensionDeltaPoints"] = deltas
+            metrics["textRatio"] = ratio(ta, tb)
+            problem = pictures_equal(pa, pb, thresholds, metrics.setdefault("pictures", {}))
+            if problem: return "FAIL", [problem], metrics
+            if any(p.get("generatedCoverTextMatches") for p in metrics["pictures"].values()):
+                reasons.append("Generated Calibre cover layout differs; recognized text matches")
+        except (OSError, RuntimeError, ValueError) as error:
+            return "WARN", ["Embedded picture comparison unavailable: " + str(error)], metrics
         if metrics["textRatio"] < thresholds["text"]:
             return "FAIL", ["Normalized text similarity below threshold"], metrics
+        if ta == tb and not pa: return "PASS", [], metrics
     elif kind in ("archive", "zip"):
         ea, eb = ma["entries"], mb["entries"]
+        if kind == "archive" and left and right:
+            ta, tb = tar_entries(left), tar_entries(right)
+            if ta is not None and tb is not None:
+                equal = ta == tb
+                return ("PASS" if equal else "FAIL"), ([] if equal else ["TAR member names/types/content changed"]), metrics
         if [e["name"] for e in ea] != [e["name"] for e in eb]:
             return "FAIL", ["Container entry names changed"], metrics
         if kind == "archive":
             if not entries_equal(ea, eb): return "FAIL", ["Archive entry content hashes changed"], metrics
+            return "PASS", [], metrics
         else:
             parts_a, parts_b = ma.get("keyParts", {}), mb.get("keyParts", {})
             part_scores = {}
@@ -81,21 +153,42 @@ def compare_output(a, b, left, right, thresholds):
                 if x["sha256"] == y["sha256"]: continue
                 name = x["name"]
                 if name not in parts_a or name not in parts_b:
+                    if Path(name).suffix.lower() in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".tiff", ".bmp", ".svg") and left and right:
+                        try:
+                            with zipfile.ZipFile(left) as za, zipfile.ZipFile(right) as zb:
+                                scores = picture_scores(za.read(name), zb.read(name))
+                            metrics.setdefault("pictures", {})[name] = scores
+                            if not scores.get("sameGeometry"): return "FAIL", ["Embedded picture geometry changed: " + name], metrics
+                            if picture_below_threshold(scores, thresholds):
+                                return "FAIL", ["Embedded picture similarity below threshold: " + name], metrics
+                            reasons.append(("Generated Calibre cover layout differs; recognized text matches: " if scores.get("generatedCoverTextMatches") else "Embedded picture encoding changed: ") + name)
+                            continue
+                        except (OSError, RuntimeError, ValueError) as error:
+                            return "WARN", ["Embedded picture comparison unavailable: " + str(error)], metrics
                     return "FAIL", ["Binary document part changed: " + name], metrics
-                score = ratio(parts_a[name], parts_b[name])
+                ta, tb = xml_text(parts_a[name], name), xml_text(parts_b[name], name)
+                score = ratio(ta, tb)
                 part_scores[name] = score
                 if score < thresholds["text"]:
-                    return "FAIL", ["Document XML similarity below threshold: " + name], {"partRatios": part_scores}
+                    metrics["partRatios"] = part_scores
+                    return "FAIL", ["Document XML similarity below threshold: " + name], metrics
             metrics["partRatios"] = part_scores
+            if not reasons and all(score == 1 for score in part_scores.values()): return "PASS", [], metrics
     elif kind == "media":
         if len(ma["streams"]) != len(mb["streams"]): return "FAIL", ["Media stream count changed"], metrics
         for x, y in zip(ma["streams"], mb["streams"]):
-            for key in ("codec_type", "codec_name", "width", "height", "sample_rate", "channels", "sample_fmt"):
+            for key in ("codec_type", "codec_name", "width", "height", "sample_rate", "channels", "sample_fmt", "pix_fmt", "r_frame_rate"):
                 if x.get(key) != y.get(key): return "FAIL", ["Media stream field changed: " + key], metrics
         duration_a, duration_b = ma["duration"], mb["duration"]
         metrics["durationRelativeError"] = abs(duration_a-duration_b)/max(duration_a, 1e-6)
         if metrics["durationRelativeError"] > 0.02:
             return "FAIL", ["Media duration changed by more than 2%"], metrics
+        if left and right:
+            try:
+                if media_packets(left) == media_packets(right): return "PASS", [], metrics
+                reasons.append("Encoded media packets or timing differ; structure is within thresholds")
+            except (OSError, RuntimeError, ValueError) as error:
+                reasons.append("Media packet comparison unavailable: " + str(error))
     elif kind == "font":
         if ma != mb: return "FAIL", ["Font table tags or glyph count changed"], metrics
     else:
