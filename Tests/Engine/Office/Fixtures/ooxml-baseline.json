@@ -1,0 +1,672 @@
+{
+  "docm-docx": {
+    "from": "docm",
+    "to": "docx",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQud29yZHByb2Nlc3NpbmdtbC5kb2N1bWVudC5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "docm-docx-macros": {
+    "from": "docm",
+    "to": "docx",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48UmVsYXRpb25zaGlwcyB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzIj48UmVsYXRpb25zaGlwIElkPSJySWQxIiBUeXBlPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvb2ZmaWNlRG9jdW1lbnQvMjAwNi9yZWxhdGlvbnNoaXBzL29mZmljZURvY3VtZW50IiBUYXJnZXQ9Ii93b3JkL2RvY3VtZW50LnhtbCIgLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQud29yZHByb2Nlc3NpbmdtbC5kb2N1bWVudC5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48UmVsYXRpb25zaGlwcyB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzIj48UmVsYXRpb25zaGlwIElkPSJySWRFeHRlcm5hbCIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9oeXBlcmxpbmsiIFRhcmdldD0iaHR0cHM6Ly9leGFtcGxlLmNvbS92YmFQcm9qZWN0LmJpbiIgVGFyZ2V0TW9kZT0iRXh0ZXJuYWwiIC8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "docm-dotm": {
+    "from": "docm",
+    "to": "dotm",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtd29yZC50ZW1wbGF0ZS5tYWNyb0VuYWJsZWRUZW1wbGF0ZS5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "docm-dotm-macros": {
+    "from": "docm",
+    "to": "dotm",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "word/macro0.xml": "PG1hY3JvLz4=",
+      "word/macro1.xml": "PG1hY3JvLz4=",
+      "word/macro2.xml": "PG1hY3JvLz4=",
+      "word/macro3.xml": "PG1hY3JvLz4=",
+      "word/vbaProject.bin": "0M8R4A==",
+      "word/_rels/vbaProject.bin.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0idiIgVHlwZT0ibWFjcm8iIFRhcmdldD0ibWFjcm8wLnhtbCIvPjwvUmVsYXRpb25zaGlwcz4=",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtd29yZC50ZW1wbGF0ZS5tYWNyb0VuYWJsZWRUZW1wbGF0ZS5tYWluK3htbCIgLz48RGVmYXVsdCBFeHRlbnNpb249ImJpbiIgQ29udGVudFR5cGU9ImFwcGxpY2F0aW9uL3ZuZC5tcy1vZmZpY2UudmJhUHJvamVjdCIgLz48T3ZlcnJpZGUgUGFydE5hbWU9Ii93b3JkL21hY3JvMC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtd29yZC52YmFEYXRhK3htbCIgLz48T3ZlcnJpZGUgUGFydE5hbWU9Ii93b3JkL21hY3JvMS54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtd29yZC5rZXlNYXBDdXN0b21pemF0aW9ucyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9tYWNybzIueG1sIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm1zLW9mZmljZS52YmFQcm9qZWN0U2lnbmF0dXJlQWdpbGUiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9tYWNybzMueG1sIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm1zLW9mZmljZS52YmFQcm9qZWN0U2lnbmF0dXJlVjMiIC8+PC9UeXBlcz4=",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PFJlbGF0aW9uc2hpcCBJZD0ibTAiIFR5cGU9Im1hY3JvIiBUYXJnZXQ9Im1hY3JvMC54bWwiLz48UmVsYXRpb25zaGlwIElkPSJtMSIgVHlwZT0ibWFjcm8iIFRhcmdldD0ibWFjcm8xLnhtbCIvPjxSZWxhdGlvbnNoaXAgSWQ9Im0yIiBUeXBlPSJtYWNybyIgVGFyZ2V0PSJtYWNybzIueG1sIi8+PFJlbGF0aW9uc2hpcCBJZD0ibTMiIFR5cGU9Im1hY3JvIiBUYXJnZXQ9Im1hY3JvMy54bWwiLz48UmVsYXRpb25zaGlwIElkPSJySWRWYmEiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vb2ZmaWNlLzIwMDYvcmVsYXRpb25zaGlwcy92YmFQcm9qZWN0IiBUYXJnZXQ9Ii4vdmJhUHJvamVjdC5iaW4iLz48L1JlbGF0aW9uc2hpcHM+"
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "word/macro0.xml",
+      "word/macro1.xml",
+      "word/macro2.xml",
+      "word/macro3.xml",
+      "word/vbaProject.bin",
+      "word/_rels/vbaProject.bin.rels",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "docm-dotx": {
+    "from": "docm",
+    "to": "dotx",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQud29yZHByb2Nlc3NpbmdtbC50ZW1wbGF0ZS5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "docx-docm": {
+    "from": "docx",
+    "to": "docm",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtd29yZC5kb2N1bWVudC5tYWNyb0VuYWJsZWQubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "docx-dotm": {
+    "from": "docx",
+    "to": "dotm",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtd29yZC50ZW1wbGF0ZS5tYWNyb0VuYWJsZWRUZW1wbGF0ZS5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "docx-dotx": {
+    "from": "docx",
+    "to": "dotx",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQud29yZHByb2Nlc3NpbmdtbC50ZW1wbGF0ZS5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "dotm-docm": {
+    "from": "dotm",
+    "to": "docm",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtd29yZC5kb2N1bWVudC5tYWNyb0VuYWJsZWQubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "dotm-docx": {
+    "from": "dotm",
+    "to": "docx",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQud29yZHByb2Nlc3NpbmdtbC5kb2N1bWVudC5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "dotm-dotx": {
+    "from": "dotm",
+    "to": "dotx",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQud29yZHByb2Nlc3NpbmdtbC50ZW1wbGF0ZS5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "dotm-dotx-macros": {
+    "from": "dotm",
+    "to": "dotx",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48UmVsYXRpb25zaGlwcyB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzIj48UmVsYXRpb25zaGlwIElkPSJySWQxIiBUeXBlPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvb2ZmaWNlRG9jdW1lbnQvMjAwNi9yZWxhdGlvbnNoaXBzL29mZmljZURvY3VtZW50IiBUYXJnZXQ9Ii93b3JkL2RvY3VtZW50LnhtbCIgLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQud29yZHByb2Nlc3NpbmdtbC50ZW1wbGF0ZS5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48UmVsYXRpb25zaGlwcyB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzIj48UmVsYXRpb25zaGlwIElkPSJySWRFeHRlcm5hbCIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9oeXBlcmxpbmsiIFRhcmdldD0iaHR0cHM6Ly9leGFtcGxlLmNvbS92YmFQcm9qZWN0LmJpbiIgVGFyZ2V0TW9kZT0iRXh0ZXJuYWwiIC8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "dotx-docm": {
+    "from": "dotx",
+    "to": "docm",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtd29yZC5kb2N1bWVudC5tYWNyb0VuYWJsZWQubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "dotx-docx": {
+    "from": "dotx",
+    "to": "docx",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQud29yZHByb2Nlc3NpbmdtbC5kb2N1bWVudC5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "dotx-dotm": {
+    "from": "dotx",
+    "to": "dotm",
+    "entries": {
+      "word/document.xml": "PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0PuunpO2BrOuhnOqwgCDsnojrjZgg66y47IScPC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50Pg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvd29yZC9kb2N1bWVudC54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "word/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtd29yZC50ZW1wbGF0ZS5tYWNyb0VuYWJsZWRUZW1wbGF0ZS5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "word/_rels/document.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "word/document.xml",
+      "_rels/.rels",
+      "word/media/picture.png",
+      "[Content_Types].xml",
+      "word/_rels/document.xml.rels"
+    ]
+  },
+  "potx-ppsx": {
+    "from": "potx",
+    "to": "ppsx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwuc2xpZGVzaG93Lm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "potx-pptm": {
+    "from": "potx",
+    "to": "pptm",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtcG93ZXJwb2ludC5wcmVzZW50YXRpb24ubWFjcm9FbmFibGVkLm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "potx-pptx": {
+    "from": "potx",
+    "to": "pptx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwucHJlc2VudGF0aW9uLm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "ppsx-potx": {
+    "from": "ppsx",
+    "to": "potx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwudGVtcGxhdGUubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "ppsx-pptm": {
+    "from": "ppsx",
+    "to": "pptm",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtcG93ZXJwb2ludC5wcmVzZW50YXRpb24ubWFjcm9FbmFibGVkLm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "ppsx-pptx": {
+    "from": "ppsx",
+    "to": "pptx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwucHJlc2VudGF0aW9uLm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "pptm-potx": {
+    "from": "pptm",
+    "to": "potx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwudGVtcGxhdGUubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "pptm-ppsx": {
+    "from": "pptm",
+    "to": "ppsx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwuc2xpZGVzaG93Lm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "pptm-pptx": {
+    "from": "pptm",
+    "to": "pptx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwucHJlc2VudGF0aW9uLm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "pptm-pptx-macros": {
+    "from": "pptm",
+    "to": "pptx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48UmVsYXRpb25zaGlwcyB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzIj48UmVsYXRpb25zaGlwIElkPSJySWQxIiBUeXBlPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvb2ZmaWNlRG9jdW1lbnQvMjAwNi9yZWxhdGlvbnNoaXBzL29mZmljZURvY3VtZW50IiBUYXJnZXQ9Ii9wcHQvcHJlc2VudGF0aW9uLnhtbCIgLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwucHJlc2VudGF0aW9uLm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48UmVsYXRpb25zaGlwcyB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzIj48UmVsYXRpb25zaGlwIElkPSJySWRFeHRlcm5hbCIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9oeXBlcmxpbmsiIFRhcmdldD0iaHR0cHM6Ly9leGFtcGxlLmNvbS92YmFQcm9qZWN0LmJpbiIgVGFyZ2V0TW9kZT0iRXh0ZXJuYWwiIC8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "pptx-potx": {
+    "from": "pptx",
+    "to": "potx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwudGVtcGxhdGUubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "pptx-ppsx": {
+    "from": "pptx",
+    "to": "ppsx",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQucHJlc2VudGF0aW9ubWwuc2xpZGVzaG93Lm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "pptx-pptm": {
+    "from": "pptx",
+    "to": "pptm",
+    "entries": {
+      "ppt/presentation.xml": "PHA6cHJlc2VudGF0aW9uIHhtbG5zOnA9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wcmVzZW50YXRpb25tbC8yMDA2L21haW4iPjxwOnNsZFN6IGN4PSIxMjE5MjAwMCIgY3k9IjY4NTgwMDAiLz48L3A6cHJlc2VudGF0aW9uPg==",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiLz48L1JlbGF0aW9uc2hpcHM+",
+      "ppt/media/picture.png": "AQIDBA==",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIvcHB0L3ByZXNlbnRhdGlvbi54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQubXMtcG93ZXJwb2ludC5wcmVzZW50YXRpb24ubWFjcm9FbmFibGVkLm1haW4reG1sIiAvPjwvVHlwZXM+",
+      "ppt/_rels/presentation.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "ppt/presentation.xml",
+      "_rels/.rels",
+      "ppt/media/picture.png",
+      "[Content_Types].xml",
+      "ppt/_rels/presentation.xml.rels"
+    ]
+  },
+  "xlsm-xlsx": {
+    "from": "xlsm",
+    "to": "xlsx",
+    "entries": {
+      "xl/workbook.xml": "PHdvcmtib29rIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvc3ByZWFkc2hlZXRtbC8yMDA2L21haW4iIHhtbG5zOnI9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMiPjxib29rVmlld3M+PHdvcmtib29rVmlldyBhY3RpdmVUYWI9IjIiIGZpcnN0U2hlZXQ9IjEiLz48L2Jvb2tWaWV3cz48c2hlZXRzPjxzaGVldCBuYW1lPSJCZWZvcmUiIHNoZWV0SWQ9IjEiIHI6aWQ9InJJZDEiLz48c2hlZXQgbmFtZT0iQWZ0ZXIiIHNoZWV0SWQ9IjIiIHI6aWQ9InJJZDIiLz48L3NoZWV0cz48ZGVmaW5lZE5hbWVzPjxkZWZpbmVkTmFtZSBuYW1lPSJiZWZvcmUiIGxvY2FsU2hlZXRJZD0iMCI+QTE8L2RlZmluZWROYW1lPjxkZWZpbmVkTmFtZSBuYW1lPSJtYWNybyIgbG9jYWxTaGVldElkPSIxIj5BMTwvZGVmaW5lZE5hbWU+PGRlZmluZWROYW1lIG5hbWU9ImFmdGVyIiBsb2NhbFNoZWV0SWQ9IjIiPkExPC9kZWZpbmVkTmFtZT48ZGVmaW5lZE5hbWUgbmFtZT0iZ2xvYmFsIj5BMTwvZGVmaW5lZE5hbWU+PC9kZWZpbmVkTmFtZXM+PC93b3JrYm9vaz4=",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIveGwvd29ya2Jvb2sueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg==",
+      "xl/media/picture.png": "AQIDBA==",
+      "xl/worksheets/sheet1.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjFzdDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "xl/worksheets/sheet2.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjJuZDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIveGwvd29ya2Jvb2sueG1sIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLW9mZmljZWRvY3VtZW50LnNwcmVhZHNoZWV0bWwuc2hlZXQubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "xl/_rels/workbook.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDEueG1sIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMiIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDIueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "xl/workbook.xml",
+      "_rels/.rels",
+      "xl/media/picture.png",
+      "xl/worksheets/sheet1.xml",
+      "xl/worksheets/sheet2.xml",
+      "[Content_Types].xml",
+      "xl/_rels/workbook.xml.rels"
+    ]
+  },
+  "xlsm-xlsx-macros": {
+    "from": "xlsm",
+    "to": "xlsx",
+    "entries": {
+      "_rels/.rels": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48UmVsYXRpb25zaGlwcyB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzIj48UmVsYXRpb25zaGlwIElkPSJySWQxIiBUeXBlPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvb2ZmaWNlRG9jdW1lbnQvMjAwNi9yZWxhdGlvbnNoaXBzL29mZmljZURvY3VtZW50IiBUYXJnZXQ9Ii94bC93b3JrYm9vay54bWwiIC8+PC9SZWxhdGlvbnNoaXBzPg==",
+      "xl/media/picture.png": "AQIDBA==",
+      "xl/worksheets/sheet1.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjFzdDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "xl/worksheets/sheet2.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjJuZDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIveGwvd29ya2Jvb2sueG1sIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLW9mZmljZWRvY3VtZW50LnNwcmVhZHNoZWV0bWwuc2hlZXQubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "xl/_rels/workbook.xml.rels": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48UmVsYXRpb25zaGlwcyB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzIj48UmVsYXRpb25zaGlwIElkPSJySWRFeHRlcm5hbCIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9oeXBlcmxpbmsiIFRhcmdldD0iaHR0cHM6Ly9leGFtcGxlLmNvbS92YmFQcm9qZWN0LmJpbiIgVGFyZ2V0TW9kZT0iRXh0ZXJuYWwiIC8+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDEueG1sIiAvPjxSZWxhdGlvbnNoaXAgSWQ9InJJZDIiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvd29ya3NoZWV0IiBUYXJnZXQ9IndvcmtzaGVldHMvc2hlZXQyLnhtbCIgLz48L1JlbGF0aW9uc2hpcHM+",
+      "xl/workbook.xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48d29ya2Jvb2sgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9zcHJlYWRzaGVldG1sLzIwMDYvbWFpbiIgeG1sbnM6cj0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcyI+PGJvb2tWaWV3cz48d29ya2Jvb2tWaWV3IC8+PC9ib29rVmlld3M+PHNoZWV0cz48c2hlZXQgbmFtZT0iQmVmb3JlIiBzaGVldElkPSIxIiByOmlkPSJySWQxIiAvPjxzaGVldCBuYW1lPSJBZnRlciIgc2hlZXRJZD0iMiIgcjppZD0icklkMiIgLz48L3NoZWV0cz48ZGVmaW5lZE5hbWVzPjxkZWZpbmVkTmFtZSBuYW1lPSJiZWZvcmUiIGxvY2FsU2hlZXRJZD0iMCI+QTE8L2RlZmluZWROYW1lPjxkZWZpbmVkTmFtZSBuYW1lPSJhZnRlciIgbG9jYWxTaGVldElkPSIxIj5BMTwvZGVmaW5lZE5hbWU+PGRlZmluZWROYW1lIG5hbWU9Imdsb2JhbCI+QTE8L2RlZmluZWROYW1lPjwvZGVmaW5lZE5hbWVzPjwvd29ya2Jvb2s+"
+    },
+    "order": [
+      "_rels/.rels",
+      "xl/media/picture.png",
+      "xl/worksheets/sheet1.xml",
+      "xl/worksheets/sheet2.xml",
+      "[Content_Types].xml",
+      "xl/_rels/workbook.xml.rels",
+      "xl/workbook.xml"
+    ]
+  },
+  "xlsm-xltx": {
+    "from": "xlsm",
+    "to": "xltx",
+    "entries": {
+      "xl/workbook.xml": "PHdvcmtib29rIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvc3ByZWFkc2hlZXRtbC8yMDA2L21haW4iIHhtbG5zOnI9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMiPjxib29rVmlld3M+PHdvcmtib29rVmlldyBhY3RpdmVUYWI9IjIiIGZpcnN0U2hlZXQ9IjEiLz48L2Jvb2tWaWV3cz48c2hlZXRzPjxzaGVldCBuYW1lPSJCZWZvcmUiIHNoZWV0SWQ9IjEiIHI6aWQ9InJJZDEiLz48c2hlZXQgbmFtZT0iQWZ0ZXIiIHNoZWV0SWQ9IjIiIHI6aWQ9InJJZDIiLz48L3NoZWV0cz48ZGVmaW5lZE5hbWVzPjxkZWZpbmVkTmFtZSBuYW1lPSJiZWZvcmUiIGxvY2FsU2hlZXRJZD0iMCI+QTE8L2RlZmluZWROYW1lPjxkZWZpbmVkTmFtZSBuYW1lPSJtYWNybyIgbG9jYWxTaGVldElkPSIxIj5BMTwvZGVmaW5lZE5hbWU+PGRlZmluZWROYW1lIG5hbWU9ImFmdGVyIiBsb2NhbFNoZWV0SWQ9IjIiPkExPC9kZWZpbmVkTmFtZT48ZGVmaW5lZE5hbWUgbmFtZT0iZ2xvYmFsIj5BMTwvZGVmaW5lZE5hbWU+PC9kZWZpbmVkTmFtZXM+PC93b3JrYm9vaz4=",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIveGwvd29ya2Jvb2sueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg==",
+      "xl/media/picture.png": "AQIDBA==",
+      "xl/worksheets/sheet1.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjFzdDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "xl/worksheets/sheet2.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjJuZDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIveGwvd29ya2Jvb2sueG1sIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLW9mZmljZWRvY3VtZW50LnNwcmVhZHNoZWV0bWwudGVtcGxhdGUubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "xl/_rels/workbook.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDEueG1sIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMiIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDIueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "xl/workbook.xml",
+      "_rels/.rels",
+      "xl/media/picture.png",
+      "xl/worksheets/sheet1.xml",
+      "xl/worksheets/sheet2.xml",
+      "[Content_Types].xml",
+      "xl/_rels/workbook.xml.rels"
+    ]
+  },
+  "xlsx-xlsm": {
+    "from": "xlsx",
+    "to": "xlsm",
+    "entries": {
+      "xl/workbook.xml": "PHdvcmtib29rIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvc3ByZWFkc2hlZXRtbC8yMDA2L21haW4iIHhtbG5zOnI9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMiPjxib29rVmlld3M+PHdvcmtib29rVmlldyBhY3RpdmVUYWI9IjIiIGZpcnN0U2hlZXQ9IjEiLz48L2Jvb2tWaWV3cz48c2hlZXRzPjxzaGVldCBuYW1lPSJCZWZvcmUiIHNoZWV0SWQ9IjEiIHI6aWQ9InJJZDEiLz48c2hlZXQgbmFtZT0iQWZ0ZXIiIHNoZWV0SWQ9IjIiIHI6aWQ9InJJZDIiLz48L3NoZWV0cz48ZGVmaW5lZE5hbWVzPjxkZWZpbmVkTmFtZSBuYW1lPSJiZWZvcmUiIGxvY2FsU2hlZXRJZD0iMCI+QTE8L2RlZmluZWROYW1lPjxkZWZpbmVkTmFtZSBuYW1lPSJtYWNybyIgbG9jYWxTaGVldElkPSIxIj5BMTwvZGVmaW5lZE5hbWU+PGRlZmluZWROYW1lIG5hbWU9ImFmdGVyIiBsb2NhbFNoZWV0SWQ9IjIiPkExPC9kZWZpbmVkTmFtZT48ZGVmaW5lZE5hbWUgbmFtZT0iZ2xvYmFsIj5BMTwvZGVmaW5lZE5hbWU+PC9kZWZpbmVkTmFtZXM+PC93b3JrYm9vaz4=",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIveGwvd29ya2Jvb2sueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg==",
+      "xl/media/picture.png": "AQIDBA==",
+      "xl/worksheets/sheet1.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjFzdDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "xl/worksheets/sheet2.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjJuZDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIveGwvd29ya2Jvb2sueG1sIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm1zLWV4Y2VsLnNoZWV0Lm1hY3JvRW5hYmxlZC5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "xl/_rels/workbook.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDEueG1sIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMiIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDIueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "xl/workbook.xml",
+      "_rels/.rels",
+      "xl/media/picture.png",
+      "xl/worksheets/sheet1.xml",
+      "xl/worksheets/sheet2.xml",
+      "[Content_Types].xml",
+      "xl/_rels/workbook.xml.rels"
+    ]
+  },
+  "xlsx-xltx": {
+    "from": "xlsx",
+    "to": "xltx",
+    "entries": {
+      "xl/workbook.xml": "PHdvcmtib29rIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvc3ByZWFkc2hlZXRtbC8yMDA2L21haW4iIHhtbG5zOnI9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMiPjxib29rVmlld3M+PHdvcmtib29rVmlldyBhY3RpdmVUYWI9IjIiIGZpcnN0U2hlZXQ9IjEiLz48L2Jvb2tWaWV3cz48c2hlZXRzPjxzaGVldCBuYW1lPSJCZWZvcmUiIHNoZWV0SWQ9IjEiIHI6aWQ9InJJZDEiLz48c2hlZXQgbmFtZT0iQWZ0ZXIiIHNoZWV0SWQ9IjIiIHI6aWQ9InJJZDIiLz48L3NoZWV0cz48ZGVmaW5lZE5hbWVzPjxkZWZpbmVkTmFtZSBuYW1lPSJiZWZvcmUiIGxvY2FsU2hlZXRJZD0iMCI+QTE8L2RlZmluZWROYW1lPjxkZWZpbmVkTmFtZSBuYW1lPSJtYWNybyIgbG9jYWxTaGVldElkPSIxIj5BMTwvZGVmaW5lZE5hbWU+PGRlZmluZWROYW1lIG5hbWU9ImFmdGVyIiBsb2NhbFNoZWV0SWQ9IjIiPkExPC9kZWZpbmVkTmFtZT48ZGVmaW5lZE5hbWUgbmFtZT0iZ2xvYmFsIj5BMTwvZGVmaW5lZE5hbWU+PC9kZWZpbmVkTmFtZXM+PC93b3JrYm9vaz4=",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIveGwvd29ya2Jvb2sueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg==",
+      "xl/media/picture.png": "AQIDBA==",
+      "xl/worksheets/sheet1.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjFzdDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "xl/worksheets/sheet2.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjJuZDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIveGwvd29ya2Jvb2sueG1sIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLW9mZmljZWRvY3VtZW50LnNwcmVhZHNoZWV0bWwudGVtcGxhdGUubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "xl/_rels/workbook.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDEueG1sIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMiIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDIueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "xl/workbook.xml",
+      "_rels/.rels",
+      "xl/media/picture.png",
+      "xl/worksheets/sheet1.xml",
+      "xl/worksheets/sheet2.xml",
+      "[Content_Types].xml",
+      "xl/_rels/workbook.xml.rels"
+    ]
+  },
+  "xltx-xlsm": {
+    "from": "xltx",
+    "to": "xlsm",
+    "entries": {
+      "xl/workbook.xml": "PHdvcmtib29rIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvc3ByZWFkc2hlZXRtbC8yMDA2L21haW4iIHhtbG5zOnI9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMiPjxib29rVmlld3M+PHdvcmtib29rVmlldyBhY3RpdmVUYWI9IjIiIGZpcnN0U2hlZXQ9IjEiLz48L2Jvb2tWaWV3cz48c2hlZXRzPjxzaGVldCBuYW1lPSJCZWZvcmUiIHNoZWV0SWQ9IjEiIHI6aWQ9InJJZDEiLz48c2hlZXQgbmFtZT0iQWZ0ZXIiIHNoZWV0SWQ9IjIiIHI6aWQ9InJJZDIiLz48L3NoZWV0cz48ZGVmaW5lZE5hbWVzPjxkZWZpbmVkTmFtZSBuYW1lPSJiZWZvcmUiIGxvY2FsU2hlZXRJZD0iMCI+QTE8L2RlZmluZWROYW1lPjxkZWZpbmVkTmFtZSBuYW1lPSJtYWNybyIgbG9jYWxTaGVldElkPSIxIj5BMTwvZGVmaW5lZE5hbWU+PGRlZmluZWROYW1lIG5hbWU9ImFmdGVyIiBsb2NhbFNoZWV0SWQ9IjIiPkExPC9kZWZpbmVkTmFtZT48ZGVmaW5lZE5hbWUgbmFtZT0iZ2xvYmFsIj5BMTwvZGVmaW5lZE5hbWU+PC9kZWZpbmVkTmFtZXM+PC93b3JrYm9vaz4=",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIveGwvd29ya2Jvb2sueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg==",
+      "xl/media/picture.png": "AQIDBA==",
+      "xl/worksheets/sheet1.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjFzdDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "xl/worksheets/sheet2.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjJuZDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIveGwvd29ya2Jvb2sueG1sIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm1zLWV4Y2VsLnNoZWV0Lm1hY3JvRW5hYmxlZC5tYWluK3htbCIgLz48L1R5cGVzPg==",
+      "xl/_rels/workbook.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDEueG1sIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMiIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDIueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "xl/workbook.xml",
+      "_rels/.rels",
+      "xl/media/picture.png",
+      "xl/worksheets/sheet1.xml",
+      "xl/worksheets/sheet2.xml",
+      "[Content_Types].xml",
+      "xl/_rels/workbook.xml.rels"
+    ]
+  },
+  "xltx-xlsx": {
+    "from": "xltx",
+    "to": "xlsx",
+    "entries": {
+      "xl/workbook.xml": "PHdvcmtib29rIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvc3ByZWFkc2hlZXRtbC8yMDA2L21haW4iIHhtbG5zOnI9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMiPjxib29rVmlld3M+PHdvcmtib29rVmlldyBhY3RpdmVUYWI9IjIiIGZpcnN0U2hlZXQ9IjEiLz48L2Jvb2tWaWV3cz48c2hlZXRzPjxzaGVldCBuYW1lPSJCZWZvcmUiIHNoZWV0SWQ9IjEiIHI6aWQ9InJJZDEiLz48c2hlZXQgbmFtZT0iQWZ0ZXIiIHNoZWV0SWQ9IjIiIHI6aWQ9InJJZDIiLz48L3NoZWV0cz48ZGVmaW5lZE5hbWVzPjxkZWZpbmVkTmFtZSBuYW1lPSJiZWZvcmUiIGxvY2FsU2hlZXRJZD0iMCI+QTE8L2RlZmluZWROYW1lPjxkZWZpbmVkTmFtZSBuYW1lPSJtYWNybyIgbG9jYWxTaGVldElkPSIxIj5BMTwvZGVmaW5lZE5hbWU+PGRlZmluZWROYW1lIG5hbWU9ImFmdGVyIiBsb2NhbFNoZWV0SWQ9IjIiPkExPC9kZWZpbmVkTmFtZT48ZGVmaW5lZE5hbWUgbmFtZT0iZ2xvYmFsIj5BMTwvZGVmaW5lZE5hbWU+PC9kZWZpbmVkTmFtZXM+PC93b3JrYm9vaz4=",
+      "_rels/.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy9vZmZpY2VEb2N1bWVudCIgVGFyZ2V0PSIveGwvd29ya2Jvb2sueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg==",
+      "xl/media/picture.png": "AQIDBA==",
+      "xl/worksheets/sheet1.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjFzdDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "xl/worksheets/sheet2.xml": "PHdvcmtzaGVldCB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3NwcmVhZHNoZWV0bWwvMjAwNi9tYWluIj48c2hlZXREYXRhPjxyb3cgcj0iMSI+PGMgcj0iQTEiIHQ9ImlubGluZVN0ciI+PGlzPjx0PjJuZDwvdD48L2lzPjwvYz48L3Jvdz48L3NoZWV0RGF0YT48L3dvcmtzaGVldD4=",
+      "[Content_Types].xml": "77u/PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz48VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiIC8+PERlZmF1bHQgRXh0ZW5zaW9uPSJyZWxzIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLXBhY2thZ2UucmVsYXRpb25zaGlwcyt4bWwiIC8+PE92ZXJyaWRlIFBhcnROYW1lPSIveGwvd29ya2Jvb2sueG1sIiBDb250ZW50VHlwZT0iYXBwbGljYXRpb24vdm5kLm9wZW54bWxmb3JtYXRzLW9mZmljZWRvY3VtZW50LnNwcmVhZHNoZWV0bWwuc2hlZXQubWFpbit4bWwiIC8+PC9UeXBlcz4=",
+      "xl/_rels/workbook.xml.rels": "PFJlbGF0aW9uc2hpcHMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvcmVsYXRpb25zaGlwcyI+PFJlbGF0aW9uc2hpcCBJZD0icklkRXh0ZXJuYWwiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvaHlwZXJsaW5rIiBUYXJnZXQ9Imh0dHBzOi8vZXhhbXBsZS5jb20vdmJhUHJvamVjdC5iaW4iIFRhcmdldE1vZGU9IkV4dGVybmFsIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMSIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDEueG1sIi8+PFJlbGF0aW9uc2hpcCBJZD0icklkMiIgVHlwZT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcy93b3Jrc2hlZXQiIFRhcmdldD0id29ya3NoZWV0cy9zaGVldDIueG1sIi8+PC9SZWxhdGlvbnNoaXBzPg=="
+    },
+    "order": [
+      "xl/workbook.xml",
+      "_rels/.rels",
+      "xl/media/picture.png",
+      "xl/worksheets/sheet1.xml",
+      "xl/worksheets/sheet2.xml",
+      "[Content_Types].xml",
+      "xl/_rels/workbook.xml.rels"
+    ]
+  }
+}

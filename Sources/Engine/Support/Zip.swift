@@ -93,9 +93,7 @@ public final class ZipReader {
 
     /// Streams an entry into a new file at `path` (the caller checks the name is safe).
     public func extract(_ entry: Entry, to path: String) throws {
-        guard FileManager.default.createFile(atPath: path, contents: nil), let handle = FileHandle(forWritingAtPath: path) else {
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: path])
-        }
+        let handle = try ZipWriter.create(path, O_WRONLY)
         defer { try? handle.close() }
         try read(entry) { try handle.write(contentsOf: $0) }
     }
@@ -198,6 +196,9 @@ public final class ZipReader {
         return TextEncodings.decode(bytes, codePage: 437)
     }
 
+    /// DOS dates are Gregorian local time, whatever calendar the user's locale prefers (Buddhist, Japanese …).
+    static var dosCalendar: Calendar { Calendar(identifier: .gregorian) }
+
     static func dosDate(date: UInt16, time: UInt16) -> Date {
         var components = DateComponents()
         components.year = Int(date >> 9) + 1980
@@ -206,7 +207,7 @@ public final class ZipReader {
         components.hour = Int(time >> 11)
         components.minute = Int((time >> 5) & 0x3F)
         components.second = Int(time & 0x1F) * 2
-        return Calendar.current.date(from: components) ?? Date(timeIntervalSince1970: 315_532_800)
+        return dosCalendar.date(from: components) ?? Date(timeIntervalSince1970: 315_532_800)
     }
 }
 
@@ -229,10 +230,14 @@ public final class ZipWriter {
 
     /// Creates (or truncates) the archive at `path`.
     public init(path: String) throws {
-        guard FileManager.default.createFile(atPath: path, contents: nil), let handle = FileHandle(forUpdatingAtPath: path) else {
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: path])
-        }
-        self.handle = handle
+        handle = try Self.create(path, O_RDWR)
+    }
+
+    /// Creates or truncates a file with open(2), which keeps the name as given (FileManager.createFile stores it NFD).
+    static func create(_ path: String, _ access: Int32) throws -> FileHandle {
+        let descriptor = open(path, access | O_CREAT | O_TRUNC | O_CLOEXEC, 0o666)
+        guard descriptor >= 0 else { throw FilePath.writeError(errno, path) }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     }
 
     deinit { if !closed { try? handle.close() } }
@@ -248,11 +253,13 @@ public final class ZipWriter {
         try add(name, data: Data(text.utf8), level: level, date: date)
     }
 
-    /// Adds a file from disk, streamed. Its modification date and permissions are kept unless given.
-    public func add(_ name: String, contentsOf path: String, level: ZipCompressionLevel = .optimal, date: Date? = nil) throws {
+    /// Adds a file from disk, streamed. Its modification date and permissions are kept unless given; `progress` gets the
+    /// byte count of every chunk read.
+    public func add(_ name: String, contentsOf path: String, level: ZipCompressionLevel = .optimal, date: Date? = nil,
+                    unixMode: UInt16? = nil, progress: ((Int) -> Void)? = nil) throws {
         let attributes = try FileManager.default.attributesOfItem(atPath: path)
         let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
-        let mode = UInt16(truncatingIfNeeded: (attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0o644)
+        let mode = unixMode ?? UInt16(truncatingIfNeeded: (attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0o644)
         guard let input = FileHandle(forReadingAtPath: path) else { throw CocoaError(.fileReadUnknown, userInfo: [NSFilePathErrorKey: path]) }
         defer { try? input.close() }
         try addEntry(name, level: level, date: date ?? (attributes[.modificationDate] as? Date) ?? Date(),
@@ -260,6 +267,7 @@ public final class ZipWriter {
             while let chunk = try input.read(upToCount: 1 << 20), !chunk.isEmpty {
                 try Task.checkCancellation()
                 try feed(chunk)
+                progress?(chunk.count)
             }
         }
     }
@@ -388,7 +396,7 @@ public final class ZipWriter {
     }
 
     static func dosDateTime(_ date: Date) -> (time: UInt16, date: UInt16) {
-        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        let c = ZipReader.dosCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
         let year = min(max((c.year ?? 1980) - 1980, 0), 127)
         let time = UInt16((c.hour ?? 0) << 11 | (c.minute ?? 0) << 5 | (c.second ?? 0) / 2)
         let day = UInt16(year << 9 | (c.month ?? 1) << 5 | (c.day ?? 1))
@@ -398,6 +406,9 @@ public final class ZipWriter {
 
 /// Raw deflate / inflate with zlib (also used for gzip and zlib-wrapped streams by other engines).
 public enum Deflate {
+    /// Most input bytes given to zlib at once (its counters are 32-bit); tests lower it to exercise the slicing.
+    nonisolated(unsafe) static var inputSlice = 1 << 30
+
     /// Inflates raw deflate data, handing out chunks of at most 1 MiB.
     public static func inflate(_ input: Data, windowBits: Int32 = -15, _ sink: (Data) throws -> Void) throws {
         var stream = z_stream()
@@ -407,10 +418,17 @@ public enum Deflate {
         defer { inflateEnd(&stream) }
         var output = [UInt8](repeating: 0, count: 1 << 20)
         try input.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
-            stream.next_in = UnsafeMutablePointer(mutating: raw.bindMemory(to: Bytef.self).baseAddress)
-            stream.avail_in = uInt(raw.count)
+            let base = raw.bindMemory(to: Bytef.self).baseAddress
+            var offset = 0
             var status: Int32 = Z_OK
             repeat {
+                // zlib counts input in 32 bits: larger inputs (ZIP64 entries) are handed out in slices.
+                if stream.avail_in == 0, offset < raw.count, let base {
+                    let count = min(raw.count - offset, inputSlice)
+                    stream.next_in = UnsafeMutablePointer(mutating: base + offset)
+                    stream.avail_in = uInt(count)
+                    offset += count
+                }
                 let produced: Int = output.withUnsafeMutableBytes { buffer in
                     stream.next_out = buffer.bindMemory(to: Bytef.self).baseAddress
                     stream.avail_out = uInt(buffer.count)
@@ -456,19 +474,27 @@ public enum Deflate {
             var result = Data()
             var output = [UInt8](repeating: 0, count: 256 * 1024)
             try input.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
-                stream.next_in = UnsafeMutablePointer(mutating: raw.bindMemory(to: Bytef.self).baseAddress)
-                stream.avail_in = uInt(raw.count)
-                var status: Int32 = Z_OK
+                let base = raw.bindMemory(to: Bytef.self).baseAddress
+                var offset = 0
                 repeat {
-                    let produced: Int = output.withUnsafeMutableBytes { buffer in
-                        stream.next_out = buffer.bindMemory(to: Bytef.self).baseAddress
-                        stream.avail_out = uInt(buffer.count)
-                        status = zlib.deflate(&stream, finish ? Z_FINISH : Z_NO_FLUSH)
-                        return buffer.count - Int(stream.avail_out)
-                    }
-                    guard status != Z_STREAM_ERROR else { throw ZipError.corrupt("deflate failed") }
-                    result.append(contentsOf: output[0..<produced])
-                } while finish ? status != Z_STREAM_END : stream.avail_out == 0
+                    // zlib counts input in 32 bits: hand it out in slices; only the last one may finish the stream.
+                    let count = min(raw.count - offset, Deflate.inputSlice)
+                    stream.next_in = base.map { UnsafeMutablePointer(mutating: $0 + offset) }
+                    stream.avail_in = uInt(count)
+                    offset += count
+                    let flush = finish && offset == raw.count ? Z_FINISH : Z_NO_FLUSH
+                    var status: Int32 = Z_OK
+                    repeat {
+                        let produced: Int = output.withUnsafeMutableBytes { buffer in
+                            stream.next_out = buffer.bindMemory(to: Bytef.self).baseAddress
+                            stream.avail_out = uInt(buffer.count)
+                            status = zlib.deflate(&stream, flush)
+                            return buffer.count - Int(stream.avail_out)
+                        }
+                        guard status != Z_STREAM_ERROR else { throw ZipError.corrupt("deflate failed") }
+                        result.append(contentsOf: output[0..<produced])
+                    } while flush == Z_FINISH ? status != Z_STREAM_END : stream.avail_out == 0
+                } while offset < raw.count
             }
             if finish { finished = true }
             return result

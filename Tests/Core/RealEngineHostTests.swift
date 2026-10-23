@@ -7,13 +7,7 @@ import XCTest
 
 final class RealEngineHostTests: XCTestCase {
     func testLanguageChangesReachHostWithoutRestartAndSettingsPersist() async throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        let executable = ProcessInfo.processInfo.environment["FILETOX_TEST_HOST"].map(URL.init(fileURLWithPath:))
-            ?? root.appendingPathComponent("build/engine-host/osx-arm64/Debug/FileToXEngine.app/Contents/MacOS/FileToXEngine")
-        guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-            throw XCTSkip("Build the engine host first with Tools/build-engine-host.sh.")
-        }
+        let executable = try engineHelper()
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -70,13 +64,7 @@ final class RealEngineHostTests: XCTestCase {
 
     @MainActor
     func testBundledHostConvertsImagesPDFAndArchivesThroughSwiftClient() async throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        let executable = ProcessInfo.processInfo.environment["FILETOX_TEST_HOST"].map(URL.init(fileURLWithPath:))
-            ?? root.appendingPathComponent("build/engine-host/osx-arm64/Debug/FileToXEngine.app/Contents/MacOS/FileToXEngine")
-        guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-            throw XCTSkip("Build the engine host first with Tools/build-engine-host.sh.")
-        }
+        let executable = try engineHelper()
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let host = EngineHost(executableURL: executable, dataDirectory: folder.appendingPathComponent("host"))
@@ -162,4 +150,15 @@ final class RealEngineHostTests: XCTestCase {
         XCTAssertTrue(CGImageDestinationFinalize(destination))
         return url
     }
+}
+
+/// The Swift engine helper: `FILETOX_TEST_HOST`, else the one `swift build` put next to this test bundle.
+private func engineHelper() throws -> URL {
+    if let path = ProcessInfo.processInfo.environment["FILETOX_TEST_HOST"] { return URL(fileURLWithPath: path) }
+    let products = Bundle(for: RealEngineHostTests.self).bundleURL.deletingLastPathComponent()
+    let candidates = [products.appendingPathComponent("FileToXEngine"), products.appendingPathComponent("FileToXEngine.app/Contents/MacOS/FileToXEngine")]
+    guard let executable = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }) else {
+        throw XCTSkip("Build the engine helper first (swift build --product FileToXEngine).")
+    }
+    return executable
 }
