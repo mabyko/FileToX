@@ -269,6 +269,58 @@ final class PdfReaderTests: XCTestCase {
                                           ("QWERTY+MalgunGothic,Bold", "Malgun Gothic"), ("NanumGothic", "NanumGothic"), ("F1", nil), ("T3Font_2", nil)]
         for (postScript, family) in cases { XCTAssertEqual(PdfDocumentReader.fontFamily(postScript), family, postScript) }
     }
+
+    func testParallelTextKeepsPageOrderRepeatedHeadersAndStyleChanges() async throws {
+        let pdf = PdfBuilder()
+        for index in 0..<17 {
+            pdf.newPage()
+            let regular = pdf.font(), bold = pdf.font(bold: true), italic = pdf.font(italic: true)
+            pdf.line("Repeated report header", 9, regular, 50, 30)
+            pdf.line("Page \(index + 1)", 9, regular, 280, 815)
+            pdf.line("Section \(index)", 18, bold, 50, 160)
+            let lead = "Plain words "
+            pdf.line(lead, 12, regular, 50, 200)
+            pdf.line("red words", 12, regular, 50 + pdf.width(lead, 12, regular), 200, color: (255, 0, 0))
+            pdf.line("Italic words", 12, italic, 50, 240)
+            pdf.line("Last paragraph \(index).", 10, regular, 50, 280)
+        }
+        let path = try pdf.save(FilePath.combine(dir, "parallel.pdf"))
+        let serial = try PdfDocumentReader.read(path, FilePath.combine(dir, "media"))
+        let parallel = try await PdfDocumentReader.readText(path)
+        let expected = (0..<17).map { "Section \($0)\r\n\r\nPlain words red words\r\n\r\nItalic words\r\n\r\nLast paragraph \($0)." }
+            .joined(separator: "\r\n\r\n") + "\r\n"
+        XCTAssertEqual(PdfDocumentReader.plainText(parallel), expected)
+        XCTAssertEqual(PdfDocumentReader.plainText(parallel), PdfDocumentReader.plainText(serial))
+        let serialParagraphs = Self.paragraphs(serial), parallelParagraphs = Self.paragraphs(parallel)
+        XCTAssertEqual(serialParagraphs.map(\.format), parallelParagraphs.map(\.format))
+        XCTAssertEqual(serialParagraphs.map(\.headingLevel), parallelParagraphs.map(\.headingLevel))
+        XCTAssertEqual(serialParagraphs.map(\.pageBreakBefore), parallelParagraphs.map(\.pageBreakBefore))
+        let serialRuns = serialParagraphs.flatMap(\.inlines).compactMap { $0 as? HText }
+        let parallelRuns = parallelParagraphs.flatMap(\.inlines).compactMap { $0 as? HText }
+        XCTAssertEqual(serialRuns.map(\.text), parallelRuns.map(\.text))
+        XCTAssertEqual(serialRuns.map(\.format), parallelRuns.map(\.format))
+        let formats = parallelRuns.map(\.format)
+        XCTAssertTrue(formats.contains { $0.color == "#FF0000" })
+        XCTAssertTrue(formats.contains { $0.italic == true })
+        XCTAssertTrue(formats.contains { $0.bold == true })
+    }
+
+    func testCancelledParallelTextReadThrows() async throws {
+        let pdf = PdfBuilder()
+        for index in 0..<17 {
+            pdf.newPage().line("Paragraph \(index)", 12, pdf.font(), 50, 200)
+        }
+        let path = try pdf.save(FilePath.combine(dir, "cancelled.pdf"))
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await PdfDocumentReader.readText(path)
+        }
+        do {
+            _ = try await task.value
+            XCTFail("A cancelled text read must stop before returning a document")
+        } catch is CancellationError {
+        }
+    }
 }
 
 /// The parts of Filee's PdfReaderTests that go through the document writers and the route planner.

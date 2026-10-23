@@ -9,6 +9,9 @@ import Foundation
 import PDFKit
 
 extension PdfDocumentReader {
+    // PDFKit constructs attributes through a shared Foundation table; concurrent construction contends on every glyph.
+    private static let attributedStringLock = NSLock()
+
     /// A letter of the page: one character (or composed sequence) with its glyph box in page space.
     struct PageLetter {
         var text: String
@@ -37,7 +40,7 @@ extension PdfDocumentReader {
     /// `characterBounds(at:)` counts the text without the line separators PDFKit puts between lines (its spaces between
     /// words do count), so its index runs behind the string's by the separators seen so far.
     static func pageWords(_ page: PDFPage, scan: ContentScan) -> [PageWord] {
-        guard let text = page.string, let attributed = page.attributedString else { return [] }
+        guard let text = page.string, let attributed = attributedStringLock.withLock({ page.attributedString }) else { return [] }
         let string = text as NSString
         guard string.length == attributed.length else { return [] }
         var words: [PageWord] = []
@@ -59,6 +62,11 @@ extension PdfDocumentReader {
         }
         var index = 0
         var separators = 0
+        var attributeRange = NSRange()
+        var font: NSFont?
+        var fontName = ""
+        var traits: CTFontSymbolicTraits = []
+        var color: CGColor?
         while index < string.length {
             let range = string.rangeOfComposedCharacterSequence(at: index)
             index = range.location + range.length
@@ -74,13 +82,17 @@ extension PdfDocumentReader {
             }
             let box = page.characterBounds(at: range.location - separators)
             guard box.width.isFinite, box.height.isFinite, !(box.width == 0 && box.height == 0) else { continue }
-            let attributes = attributed.attributes(at: range.location, effectiveRange: nil)
-            let font = attributes[.font] as? NSFont
+            if !NSLocationInRange(range.location, attributeRange) {
+                let attributes = attributed.attributes(at: range.location, effectiveRange: &attributeRange)
+                font = attributes[.font] as? NSFont
+                fontName = font?.fontName ?? ""
+                traits = font.map { CTFontGetSymbolicTraits($0) } ?? []
+                color = fillColor(attributes)
+            }
             let size = font?.pointSize ?? max(1, box.height)
-            let traits = font.map { CTFontGetSymbolicTraits($0) } ?? []
-            var letter = PageLetter(text: character, box: box, baseline: box.minY, size: size, fontName: font?.fontName ?? "",
+            var letter = PageLetter(text: character, box: box, baseline: box.minY, size: size, fontName: fontName,
                                     bold: traits.contains(.traitBold), italic: traits.contains(.traitItalic),
-                                    color: fillColor(attributes), mode: 0, horizontal: true)
+                                    color: color, mode: 0, horizontal: true)
             if let run = scan.run(at: CGPoint(x: box.midX, y: box.midY)) {
                 letter.mode = run.mode
                 letter.horizontal = run.horizontal

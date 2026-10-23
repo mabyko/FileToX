@@ -58,8 +58,36 @@ final class PdfDocumentReader {
     }
 
     /// Reads only the text, including invisible text (the OCR layer of scanned PDFs); pictures and scans are left out.
-    static func readText(_ path: String) throws -> HDocument {
-        try PdfDocumentReader(path, "", textOnly: true).readDocument()
+    static func readText(_ path: String) async throws -> HDocument {
+        try Task.checkCancellation()
+        let reader = PdfDocumentReader(path, "", textOnly: true)
+        let pdf = try reader.openDocument()
+        let title = nullIfBlank(pdf.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String)
+        let workers = min(8, ProcessInfo.processInfo.activeProcessorCount, pdf.pageCount)
+        if workers <= 1 { return try reader.readDocument() }
+        let pageCount = pdf.pageCount
+        let pages = try await withThrowingTaskGroup(of: [PageContent].self) { group in
+            for worker in 0..<workers {
+                group.addTask {
+                    // PDFKit documents and their page caches stay on one worker.
+                    let reader = PdfDocumentReader(path, "", textOnly: true)
+                    let pdf = try reader.openDocument()
+                    var pages: [PageContent] = []
+                    for index in (worker * pageCount / workers)..<((worker + 1) * pageCount / workers) {
+                        try Task.checkCancellation()
+                        try autoreleasepool {
+                            if let page = pdf.page(at: index) { pages.append(try reader.readPage(page, index)) }
+                        }
+                    }
+                    return pages
+                }
+            }
+            var pages: [PageContent] = []
+            for try await batch in group { pages += batch }
+            return pages.sorted { $0.index < $1.index }
+        }
+        try Task.checkCancellation()
+        return reader.buildDocument(pages, title)
     }
 
     // ───────────────────────── Model of a page ─────────────────────────
@@ -134,12 +162,16 @@ final class PdfDocumentReader {
 
     // ───────────────────────── Document ─────────────────────────
 
-    private func readDocument() throws -> HDocument {
+    private func openDocument() throws -> PDFDocument {
         guard let pdf = PDFDocument(url: URL(fileURLWithPath: path)) else {
             throw ConversionError("\(FilePath.fileName(path)) is not a PDF file that can be read.")
         }
         if pdf.isLocked { throw Self.passwordProtected() }
+        return pdf
+    }
 
+    private func readDocument() throws -> HDocument {
+        let pdf = try openDocument()
         var pages: [PageContent] = []
         for index in 0..<pdf.pageCount {
             try Task.checkCancellation()
@@ -147,9 +179,13 @@ final class PdfDocumentReader {
             pages.append(try readPage(page, index))
         }
 
+        let title = Self.nullIfBlank(pdf.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String)
+        return buildDocument(pages, title)
+    }
+
+    private func buildDocument(_ pages: [PageContent], _ title: String?) -> HDocument {
         Self.removeRepeatedHeadersAndFooters(pages)
         for page in pages where !page.scanned { page.items = Self.readingOrder(page.items) }
-        let title = Self.nullIfBlank(pdf.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String)
         return build(pages, title)
     }
 
@@ -172,6 +208,7 @@ final class PdfDocumentReader {
 
         let scan = page.pageRef.map(Self.scanContent) ?? ContentScan()
         var words: [TextWord] = []
+        var previousFormat: (letter: PageLetter, size: Double, format: HCharFormat)?
         for word in Self.pageWords(page, scan: scan) {
             let letters = word.letters
             guard letters.allSatisfy(\.horizontal) else { continue }
@@ -184,9 +221,19 @@ final class PdfDocumentReader {
             let size = Self.median(letters.map { Double($0.size) })
             let center = CGPoint(x: box.midX, y: box.midY)
             let link = links.first { $0.bounds.contains(center) }?.uri
+            let letter = letters[0]
+            let format: HCharFormat
+            if let previous = previousFormat, previous.size == size, previous.letter.fontName == letter.fontName,
+               previous.letter.bold == letter.bold, previous.letter.italic == letter.italic,
+               previous.letter.mode == letter.mode, previous.letter.color == letter.color {
+                format = previous.format
+            } else {
+                format = Self.format(letter, size)
+                previousFormat = (letter, size, format)
+            }
             words.append(TextWord(text: Self.cleanText(text), left: Double(box.minX), right: Double(box.maxX), top: Double(box.maxY),
                                   bottom: Double(box.minY), baseline: Double(word.baseline - crop.minY), size: max(1, size),
-                                  format: Self.format(letters[0], size), link: link))
+                                  format: format, link: link))
         }
 
         if words.isEmpty || (rotated && !textOnly) {
@@ -600,12 +647,11 @@ final class PdfDocumentReader {
             for (w, word) in line.words.enumerated() {
                 let text = word.text
                 if let (previousText, previousFormat, previousLink) = pieces.last {
-                    let previous = Array(previousText)
                     if w > 0 && line.tabs.contains(w) {
                         pieces.append(("\t", word.format, nil))
                     } else if w > 0 {
                         pieces[pieces.count - 1] = (previousText + " ", previousFormat, previousLink)
-                    } else if previousText.hasSuffix("-") && previous.count > 1 && previous[previous.count - 2].isLetter
+                    } else if previousText.hasSuffix("-") && previousText.dropLast().last?.isLetter == true
                                 && text.first?.isLowercase == true {
                         pieces[pieces.count - 1] = (String(previousText.dropLast()), previousFormat, previousLink) // hyphenated at the line end
                     } else if endedEarly(item, l) {

@@ -18,7 +18,7 @@ final class PdfTextConverter: Converter {
 
     func convert(_ step: ConversionStep, progress: ProgressHandler?) async throws -> [String] {
         progress?(0.1)
-        let text = PdfDocumentReader.plainText(try PdfDocumentReader.readText(step.inputPath))
+        let text = PdfDocumentReader.plainText(try await PdfDocumentReader.readText(step.inputPath))
         try Task.checkCancellation()
         if text.isEmpty {
             throw ConversionError("The PDF contains no text (it may be scanned; Filee does not recognise text in images).")
