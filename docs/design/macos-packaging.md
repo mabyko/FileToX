@@ -4,7 +4,7 @@
 
 현재 빌드 입력은 `Package.swift`, `project.yml`, `Tools/stage-bundled-engines.sh`다.
 엔진·helper 실행 파일·테스트·네이티브 라이브러리(LibRaw, PDFium, libjpeg-turbo, libwebp, libjxl)는 `Package.swift` 한 곳에만 정의한다.
-`project.yml`은 그 패키지를 로컬 패키지로 참조하고, SwiftPM이 만들 수 없는 것만 더한다: 앱 번들 두 개(앱, helper), 서명, PDFium dylib 포함, rhwp·7-Zip 스테이징, 앱 테스트 번들. 엔진 리소스는 패키지의 리소스 번들(`FileToX_FileToXEngineKit.bundle`)로 helper와 테스트 번들에 복사된다.
+앱이 helper와 통신하는 `Sources/Core`(`FileToXCore`)도 패키지 제품이며 앱 타깃은 `import FileToXCore`로 쓴다(그래서 Core의 API는 `public`이다). `project.yml`은 그 패키지를 로컬 패키지로 참조하고, SwiftPM이 만들 수 없는 것만 더한다: 앱 번들 두 개(앱, helper), 서명, PDFium dylib 포함, rhwp·7-Zip 스테이징, 앱 테스트 번들. 엔진 리소스는 패키지의 리소스 번들(`FileToX_FileToXEngineKit.bundle`)로 helper와 테스트 번들에 복사된다.
 변환 helper는 Swift 실행 파일이며 .NET runtime·NuGet DLL·JIT entitlement를 포함하지 않는다.
 macOS 15 이상, arm64/x86_64를 각각 `ARCHS=$(NATIVE_ARCH_ACTUAL)`로 빌드한다.
 아래의 기존 .NET 설계는 전환 전 조사 기록이며 현재 빌드·서명 지침으로 적용하지 않는다.

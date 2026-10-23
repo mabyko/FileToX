@@ -1,3 +1,4 @@
+import FileToXCore
 import AppKit
 @preconcurrency import ApplicationServices
 import Observation

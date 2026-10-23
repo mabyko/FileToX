@@ -21,6 +21,7 @@ targets:
     sources:
       - path: Sources
         excludes:
+          - Core # the package's FileToXCore product below
           - Engine
           - EngineMain
       - path: Resources
@@ -57,6 +58,8 @@ targets:
         NSHighResolutionCapable: true
         NSHumanReadableCopyright: "FileToX · Inspired by Filee"
     dependencies:
+      - package: Engine
+        product: FileToXCore
       - target: FileToXEngine
         embed: true
         codeSign: false
@@ -141,6 +144,8 @@ targets:
       - Tests/App
     dependencies:
       - target: FileToX
+      - package: Engine
+        product: FileToXCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).tests

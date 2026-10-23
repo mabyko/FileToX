@@ -1,11 +1,11 @@
 import Foundation
 import Darwin
 
-struct HostLineBuffer {
-    static let maximumLength = 4 * 1024 * 1024
-    private(set) var remainder = Data()
+public struct HostLineBuffer {
+    public static let maximumLength = 4 * 1024 * 1024
+    public private(set) var remainder = Data()
 
-    mutating func append(_ data: Data) throws -> [Data] {
+    public mutating func append(_ data: Data) throws -> [Data] {
         remainder.append(data)
         var lines: [Data] = []
         while let newline = remainder.firstIndex(of: 10) {
@@ -24,7 +24,7 @@ struct HostLineBuffer {
     }
 }
 
-actor EngineHost {
+public actor EngineHost {
     private struct WireMessage: Decodable {
         let v: Int
         let id: String?
@@ -60,7 +60,7 @@ actor EngineHost {
     private var cancelTimeouts: [String: Task<Void, Never>] = [:]
     private var finishedJobIDs: [String] = []
 
-    init(executableURL: URL? = nil, dataDirectory: URL? = nil) {
+    public init(executableURL: URL? = nil, dataDirectory: URL? = nil) {
         self.executableURL = executableURL ?? Bundle.main.bundleURL
             .appendingPathComponent("Contents/Helpers/FileToXEngine.app/Contents/MacOS/FileToXEngine")
         self.dataDirectory = dataDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -70,10 +70,10 @@ actor EngineHost {
         eventsContinuation = pair.continuation
     }
 
-    func events() -> AsyncStream<HostEvent> { stream }
-    func diagnostics() -> String { String(decoding: stderr, as: UTF8.self) }
+    public func events() -> AsyncStream<HostEvent> { stream }
+    public func diagnostics() -> String { String(decoding: stderr, as: UTF8.self) }
 
-    func start() async throws -> HostHello {
+    public func start() async throws -> HostHello {
         if let hello { return hello }
         guard !shuttingDown else { throw HostError(code: "shutdown", message: "변환 엔진이 종료 중입니다.") }
         if process == nil { try launch() }
@@ -298,11 +298,11 @@ actor EngineHost {
         }
     }
 
-    func catalog() async throws -> HostCatalog { try await request(HostCatalog.self, method: "catalog.get") }
-    func resolve(paths: [String]) async throws -> HostSelection {
+    public func catalog() async throws -> HostCatalog { try await request(HostCatalog.self, method: "catalog.get") }
+    public func resolve(paths: [String]) async throws -> HostSelection {
         try await request(HostSelection.self, method: "selection.resolve", params: ["paths": .array(paths.map(JSONValue.string))])
     }
-    func startJob(paths: [String], presetId: String? = nil, targetFormat: String? = nil, preset: JSONValue? = nil) async throws -> String {
+    public func startJob(paths: [String], presetId: String? = nil, targetFormat: String? = nil, preset: JSONValue? = nil) async throws -> String {
         struct Accepted: Decodable, Sendable { let jobId: String }
         var params: [String: JSONValue] = ["paths": .array(paths.map(JSONValue.string))]
         if let presetId { params["presetId"] = .string(presetId) }
@@ -310,7 +310,7 @@ actor EngineHost {
         if let preset { params["preset"] = preset }
         return try await request(Accepted.self, method: "job.start", params: params).jobId
     }
-    func cancel(jobId: String) async throws {
+    public func cancel(jobId: String) async throws {
         _ = try await request(JSONValue.self, method: "job.cancel", params: ["jobId": .string(jobId)])
         guard !finishedJobIDs.contains(jobId), cancelTimeouts[jobId] == nil else { return }
         let generation = runID
@@ -323,19 +323,19 @@ actor EngineHost {
         guard generation == runID, cancelTimeouts[jobId] != nil else { return }
         failHost(HostError(code: "cancel_timeout", message: "취소에 응답하지 않는 엔진을 종료했습니다. 다른 대기 작업도 중단됐습니다."), restart: !shuttingDown)
     }
-    func history() async throws -> [HostHistory] {
+    public func history() async throws -> [HostHistory] {
         struct History: Decodable, Sendable { let entries: [HostHistory] }
         return try await request(History.self, method: "history.get").entries
     }
-    func clearHistory() async throws { _ = try await request(JSONValue.self, method: "history.clear") }
-    func library() async throws -> HostLibrary { try await request(HostLibrary.self, method: "library.get") }
-    func saveLibrary(baseRevision: Int, presets: [JSONValue], profiles: [JSONValue]) async throws -> HostLibrary {
+    public func clearHistory() async throws { _ = try await request(JSONValue.self, method: "history.clear") }
+    public func library() async throws -> HostLibrary { try await request(HostLibrary.self, method: "library.get") }
+    public func saveLibrary(baseRevision: Int, presets: [JSONValue], profiles: [JSONValue]) async throws -> HostLibrary {
         try await request(HostLibrary.self, method: "library.save", params: ["baseRevision": .number(Double(baseRevision)), "presets": .array(presets), "profiles": .array(profiles)])
     }
-    func saveSettings(baseRevision: Int, settings: JSONValue) async throws -> HostLibrary {
+    public func saveSettings(baseRevision: Int, settings: JSONValue) async throws -> HostLibrary {
         try await request(HostLibrary.self, method: "settings.save", params: ["baseRevision": .number(Double(baseRevision)), "settings": settings])
     }
-    func shutdown() async {
+    public func shutdown() async {
         shuttingDown = true
         restartTask?.cancel(); restartTask = nil
         try? input?.close(); input = nil

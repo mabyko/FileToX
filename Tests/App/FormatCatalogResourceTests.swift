@@ -1,3 +1,4 @@
+import FileToXCore
 import Foundation
 import XCTest
 @testable import FileToX
