@@ -42,7 +42,7 @@
 | `font` | 자체 코드 + Brotli | 이식 + Apple Compression(Brotli) | 중 |
 | `email` | MimeKitLite | MIME 파서(다중 파트·인코딩·RFC 2047·문자 집합)를 Swift로 구현 | 중 |
 | `ffmpeg` | 외부 FFmpeg | 같은 실행 파일 | 하 |
-| `cad` | ACadSharp·SkiaSharp | DXF 읽기·쓰기와 장면·렌더링을 Swift·CoreGraphics로 이식. **DWG는 4절** | 상 |
+| `cad` | ACadSharp·SkiaSharp | DXF 읽기·쓰기, DWG 읽기(AC1014–AC1032)·쓰기(AC1032), 장면·렌더링을 Swift·CoreGraphics로 이식 완료. 세부는 4절 | 상 |
 | `ebook` | 자체 코드 + ImageMagick·PdfSharp·PDFtoImage·SharpCompress | 이식 + ImageIO·PDFKit(쪽 편집)·PDFium(래스터)·7-Zip | 중 |
 | `pandoc`, `ghostscript`, `calibre`, `libreoffice` | 외부 프로그램 | 같은 실행 파일·인자 | 하 |
 

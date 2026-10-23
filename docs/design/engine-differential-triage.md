@@ -32,17 +32,29 @@ All paths below are relative to the named worktree, unless absolute.
 | First fixed helper | 75 | 243 | 531 | 60 |
 | Final helper (`cd35b98`) | **73** | **244** | **532** | **58** |
 | JPEG/resize parity (`feat/jpeg-resize-parity`) | **67** | **233** | **549** | **52** |
+| Merged branch with PDFium, JPEG/resize, Skia JPEG and CAD (`2fd553f`) | **8** | **263** | **578** | **7** |
 
 The last row is a later replay of the same corpus, cases and engine paths with the helper of branch
 `feat/jpeg-resize-parity` (libjpeg-turbo JPEG writing and ImageMagick's resize, see the two "resolved" sections
 below). Evidence in worktree `t3-4b2d90a6`: `build/engine-compare/candidate-jpeg-final`,
 `comparison-jpeg-final/report.json` and `build/jpeg-parity/final-delta.txt` (every changed case, before → after).
 
-The final non-CAD result is **58 FAIL / 244 WARN / 532 PASS** across 834 cases.
-All 849 conversions were replayed, with **zero harness errors and zero inspection
-errors**. Their raw states are 771 completed and 78 failed; the latter include 15
-missing CAD routes and 63 conversion failures also present in the reference.
-Matching expected errors can PASS the differential.
+The pre-merge non-CAD result was **58 FAIL / 244 WARN / 532 PASS** across 834 cases
+(raw states 771 completed and 78 failed, including the 15 then-missing CAD routes).
+
+**Final result on the merged integration branch (`2fd553f`): 8 FAIL / 263 WARN / 578 PASS
+across all 849 cases**, replayed with `.build/release/FileToXEngine` from the README command
+(`build/engine-compare/candidate-final2`, `comparison-final2/report.json`, logs
+`candidate-final2.log` and `compare-final2.log` in worktree `t3-6fdca402`). Zero harness and
+inspection errors; raw states 786 completed and 63 failed, the same 63 conversion failures
+that the reference also fails. The 15 CAD cases are now 5 PASS, 9 WARN and 1 FAIL. The eight
+FAILs are all in groups already classified below and none is a new engine defect:
+
+| Cases | Group | Classification |
+| --- | --- | --- |
+| `auto-064-svg-to-{jp2,jpg,jxl}` | CoreSVG versus Svg.Skia rendering | b: accepted backend choice |
+| `auto-061-psd-to-html`, `auto-077-webp-to-html`, `auto-101-gif-to-md`, `auto-086-dxf-to-md` | Image-to-markup resource packaging | c (reference): the C# Markdown/HTML references `assets/image1.jpg` but the C# output contains no such file; Swift writes the picture as a `_files` sidecar. `auto-086` joins the group now that the CAD route exists. |
+| `auto-067-tcr-to-txtz` | Calibre generated cover | a: random cover theme (`images/img0001.jpg`), flips between replays |
 
 The comparator removes 39 original FAILs without changing output artifacts. The
 engine replay removes nine more FAILs relative to the normalized original run;
@@ -458,6 +470,15 @@ archive skips and Core archive assertions; supplying the existing path resolves
 those prerequisite failures without installing or changing anything. The final
 engine-only command and replay results are recorded below. Logs remain under
 `build/engine-compare/{build-tests-verified,all-tests-verified,engine-tests-verified,harness-tests-resumed}.log`.
+
+### Merged-branch verification
+
+On `2fd553f` (PDFium, libjpeg-turbo/resize, Skia JPEG and CAD merged): `swift build --build-tests`
+and `swift test` run **510 engine tests (46 skipped) and 12 Core tests with zero failures**; the
+engine-count assertion now sees 23 engines. The Xcode test action passes with **74 app tests and
+510 engine tests**. `Tools/engine-compare/core-host-compat.py` against a copy of the real user data
+(`settings.json`, `history.json`) reports no wire or semantic differences between the C# and Swift
+hosts; the saved files differ only in JSON key order (`build/user-data-compat-final/summary.json`).
 
 No changes were made to Markup, Email, the RAW reader, installed applications,
 user application data, .NET or NuGet installations. No software was installed.
