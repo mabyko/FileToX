@@ -2,7 +2,8 @@
 // an HTML 4 tree, so the conversion below repairs the places where it differs from the HTML5 tree AngleSharp builds
 // and the reader would lose or add text: the newline after <pre>, cells without a row, content after </body>, stray
 // content inside tables (moved in front, like HTML5's foster parenting), <image> outside SVG, prefixed names such as
-// mbp:pagebreak and o:p, and C1 numeric references (&#150;), which HTML5 reads as Windows-1252.
+// mbp:pagebreak and o:p, C1 numeric references (&#150;), which HTML5 reads as Windows-1252, and HTML5's character
+// references (names libxml2 does not know, names without ";", numbers it drops).
 
 import Foundation
 import libxml2
@@ -136,7 +137,7 @@ enum HtmlDom {
         // They pass through as the noncharacters U+FDD0 + code (UTF-8 EF B7 90+code) and come back in `cleaned`.
         var bytes: [UInt8] = []
         bytes.reserveCapacity(text.utf8.count)
-        for byte in text.utf8 {
+        for byte in characterReferences(Array(text.utf8)) {
             if byte < 0x20 && byte != 0x09 && byte != 0x0A && byte != 0x0D && byte != 0 {
                 bytes += [0xEF, 0xB7, 0x90 + byte]
             } else {
@@ -249,6 +250,190 @@ enum HtmlDom {
     private static let endBreak = try! NSRegularExpression(pattern: #"</br\s*>"#, options: .caseInsensitive)
     private static let titleElement = try! NSRegularExpression(pattern: #"(<title\b[^>]*>)(.*?)(</title\s*>)"#, options: [.caseInsensitive, .dotMatchesLineSeparators])
     private static let xmpElement = try! NSRegularExpression(pattern: #"(<xmp\b[^>]*>)(.*?)(</xmp\s*>)"#, options: [.caseInsensitive, .dotMatchesLineSeparators])
+
+    // MARK: Character references
+
+    /// The names HTML5 also reads without the ";" ("&copy 2020").
+    private static let legacyNames: Set<String> = [
+        "AElig", "AMP", "Aacute", "Acirc", "Agrave", "Aring", "Atilde", "Auml", "COPY", "Ccedil", "ETH", "Eacute", "Ecirc",
+        "Egrave", "Euml", "GT", "Iacute", "Icirc", "Igrave", "Iuml", "LT", "Ntilde", "Oacute", "Ocirc", "Ograve", "Oslash",
+        "Otilde", "Ouml", "QUOT", "REG", "THORN", "Uacute", "Ucirc", "Ugrave", "Uuml", "Yacute", "aacute", "acirc", "acute",
+        "aelig", "agrave", "amp", "aring", "atilde", "auml", "brvbar", "ccedil", "cedil", "cent", "copy", "curren", "deg",
+        "divide", "eacute", "ecirc", "egrave", "eth", "euml", "frac12", "frac14", "frac34", "gt", "iacute", "icirc", "iexcl",
+        "igrave", "iquest", "iuml", "laquo", "lt", "macr", "micro", "middot", "nbsp", "not", "ntilde", "oacute", "ocirc",
+        "ograve", "ordf", "ordm", "oslash", "otilde", "ouml", "para", "plusmn", "pound", "quot", "raquo", "reg", "sect", "shy",
+        "sup1", "sup2", "sup3", "szlig", "thorn", "times", "uacute", "ucirc", "ugrave", "uml", "uuml", "yacute", "yen", "yuml",
+    ]
+
+    /// Character references as HTML5 (AngleSharp) reads them, rewritten as numeric references libxml2 reads the same
+    /// way: libxml2 knows only HTML 4's names, needs the ";" and drops numbers it does not allow. Comments,
+    /// declarations, end tags and the text of <script> and <style> stay as they are (libxml2 does not read references
+    /// there either).
+    private static func characterReferences(_ input: [UInt8]) -> [UInt8] {
+        guard input.contains(0x26) else { return input }
+        let count = input.count
+        var output: [UInt8] = []
+        output.reserveCapacity(count + count / 8)
+        func at(_ index: Int) -> UInt8 { index < count ? input[index] : 0 }
+        func isLetter(_ byte: UInt8) -> Bool { (0x61...0x7A).contains(byte | 0x20) }
+        func isDigit(_ byte: UInt8) -> Bool { (0x30...0x39).contains(byte) }
+        func isSpace(_ byte: UInt8) -> Bool { byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0C || byte == 0x0D }
+        func emit(_ value: UInt32) { output += Array("&#x\(String(value, radix: 16, uppercase: true));".utf8) }
+
+        /// Writes the reference at `start` ("&…") and returns where the text goes on.
+        func reference(_ start: Int, inAttribute: Bool) -> Int {
+            var index = start + 1
+            if at(index) == 0x3B { // AngleSharp reads "&;" as "&"
+                output += Array("&amp;".utf8)
+                return index + 1
+            }
+            if at(index) == 0x23 { // "#"
+                index += 1
+                let hex = at(index) | 0x20 == 0x78
+                if hex { index += 1 }
+                let digits = index
+                var value: UInt32 = 0
+                while index < count {
+                    let byte = input[index]
+                    let digit: UInt32
+                    if isDigit(byte) {
+                        digit = UInt32(byte - 0x30)
+                    } else if hex, (0x61...0x66).contains(byte | 0x20) {
+                        digit = UInt32((byte | 0x20) - 0x61 + 10)
+                    } else {
+                        break
+                    }
+                    value = min(value * (hex ? 16 : 10) + digit, 0x110000)
+                    index += 1
+                }
+                guard index > digits else { // "&#" without digits is text
+                    output += Array("&amp;".utf8)
+                    return start + 1
+                }
+                if at(index) == 0x3B { index += 1 }
+                switch value {
+                case 0, 0xD800...0xDFFF, 0x110000...: emit(0xFFFD)
+                case 0x01...0x08, 0x0B, 0x0C, 0x0E...0x1F: output.append(UInt8(value)) // kept, see the control characters in parse
+                default: emit(value)
+                }
+                return index
+            }
+            var end = index
+            while end < count, end - index < 32, isLetter(input[end]) || isDigit(input[end]) { end += 1 }
+            if end > index, at(end) == 0x3B,
+               let value = Markdown.EntityHelper.decodeEntity(String(decoding: input[index..<end], as: UTF8.self)) {
+                for scalar in value.unicodeScalars { emit(scalar.value) }
+                return end + 1
+            }
+            // The longest legacy name; in an attribute value not when "=", a letter or a digit follows.
+            for length in stride(from: min(end - index, 6), through: 2, by: -1) {
+                let name = String(decoding: input[index..<(index + length)], as: UTF8.self)
+                guard legacyNames.contains(name), let value = Markdown.EntityHelper.decodeEntity(name) else { continue }
+                let next = at(index + length)
+                if inAttribute && (next == 0x3D || isLetter(next) || isDigit(next)) { break }
+                for scalar in value.unicodeScalars { emit(scalar.value) }
+                return index + length
+            }
+            output.append(0x26)
+            return start + 1
+        }
+
+        /// Copies through the first `terminator` at or after `start` (or to the end) and returns the index after it.
+        func copy(from start: Int, through terminator: [UInt8]) -> Int {
+            var index = start
+            while index < count {
+                if input[index] == terminator[0], input[index...].starts(with: terminator) {
+                    index += terminator.count
+                    output += input[start..<index]
+                    return index
+                }
+                index += 1
+            }
+            output += input[start..<count]
+            return count
+        }
+
+        /// Copies a comment from after "<!--": "<!-->" and "<!--->" end at once, "--!>" ends it like "-->" (libxml2).
+        func comment(_ start: Int) -> Int {
+            if at(start) == 0x3E { return copy(from: start, through: [0x3E]) }
+            if at(start) == 0x2D && at(start + 1) == 0x3E { return copy(from: start, through: [0x3E]) }
+            var index = start
+            while index < count {
+                if input[index] == 0x2D && at(index + 1) == 0x2D {
+                    if at(index + 2) == 0x3E { return copy(from: start, through: [0x2D, 0x2D, 0x3E]) }
+                    if at(index + 2) == 0x21 && at(index + 3) == 0x3E { return copy(from: start, through: [0x2D, 0x2D, 0x21, 0x3E]) }
+                }
+                index += 1
+            }
+            output += input[start..<count]
+            return count
+        }
+
+        /// Copies a start tag from its name on, with the references in its attribute values read, then the text of
+        /// <script> and <style>, which libxml2 reads raw up to "</" and the element's name.
+        func startTag(_ start: Int) -> Int {
+            var index = start
+            while index < count, !isSpace(input[index]), input[index] != 0x3E, input[index] != 0x2F { index += 1 }
+            let name = Array(input[start..<index]).map { isLetter($0) ? $0 | 0x20 : $0 }
+            output += input[start..<index]
+            var selfClosing = false
+            while index < count, input[index] != 0x3E {
+                let byte = input[index]
+                guard byte == 0x3D else { // "=" starts a value
+                    selfClosing = byte == 0x2F && at(index + 1) == 0x3E
+                    output.append(byte)
+                    index += 1
+                    continue
+                }
+                output.append(byte)
+                index += 1
+                while index < count, isSpace(input[index]) { output.append(input[index]); index += 1 }
+                let quote = at(index)
+                if quote == 0x22 || quote == 0x27 {
+                    output.append(quote)
+                    index += 1
+                    while index < count, input[index] != quote {
+                        if input[index] == 0x26 { index = reference(index, inAttribute: true) } else { output.append(input[index]); index += 1 }
+                    }
+                    if index < count { output.append(quote); index += 1 }
+                } else {
+                    while index < count, !isSpace(input[index]), input[index] != 0x3E {
+                        if input[index] == 0x26 { index = reference(index, inAttribute: true) } else { output.append(input[index]); index += 1 }
+                    }
+                }
+            }
+            if index < count { output.append(0x3E); index += 1 }
+            guard !selfClosing, name == Array("script".utf8) || name == Array("style".utf8) else { return index }
+            let start = index
+            while index < count {
+                if input[index] == 0x3C, at(index + 1) == 0x2F,
+                   input[(index + 2)...].prefix(name.count).map({ isLetter($0) ? $0 | 0x20 : $0 }) == name {
+                    break
+                }
+                index += 1
+            }
+            output += input[start..<index]
+            return index
+        }
+
+        var index = 0
+        while index < count {
+            let byte = input[index]
+            if byte == 0x26 { index = reference(index, inAttribute: false); continue }
+            output.append(byte)
+            index += 1
+            guard byte == 0x3C else { continue }
+            if at(index) == 0x21 && at(index + 1) == 0x2D && at(index + 2) == 0x2D {
+                output += [0x21, 0x2D, 0x2D]
+                index = comment(index + 3)
+            } else if at(index) == 0x21 || at(index) == 0x3F || at(index) == 0x2F { // <!…>, <?…>, </…>
+                index = copy(from: index, through: [0x3E])
+            } else if isLetter(at(index)) {
+                index = startTag(index)
+            }
+        }
+        return output
+    }
 
     private static func repair(_ root: Element) {
         moveAfterBodyContent(root)

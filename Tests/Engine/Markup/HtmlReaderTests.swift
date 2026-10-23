@@ -181,6 +181,25 @@ final class HtmlReaderTests: XCTestCase {
         XCTAssertEqual(text(paragraphs[6]), "쪽\u{0C}나눔") // libxml2 would drop the form feed
     }
 
+    func testCharacterReferencesAreReadAsHtml5ReadsThem() throws {
+        // Expected values: Filee's reader (AngleSharp) on the same text.
+        let content = try parse("""
+            <title>T &check; &copy 1</title>
+            <p>&copy 2020 &amp more &lt3 &notit; &notin; &AMP; &Amp; &copyx &fjlig; &NotEqualTilde;</p>
+            <p>&#65 &#x; &#0; &#x110000; &#128; &#1; x&;y</p>
+            <p><a href="?a=1&copy=2&copyx&copy 3&check;&amp&lt3">l</a></p>
+            <!-- &check; --><script>"&check;"</script><style>p::after { content: "&check;" }</style><p>AT&T &amp;check;</p>
+            """)
+
+        XCTAssertEqual(content.title, "T ✓ © 1")
+        let texts = paragraphs(content).map(text)
+        XCTAssertEqual(texts.count, 4)
+        XCTAssertEqual(Array(texts[0].unicodeScalars), Array("© 2020 & more <3 ¬it; ∉ & &Amp; ©x fj \u{2242}\u{338}".unicodeScalars))
+        XCTAssertEqual(texts[1], "A &#x; \u{FFFD} \u{FFFD} € \u{1} x&y")
+        XCTAssertEqual(HDocumentWalker.inlines(content.blocks).compactMap { ($0 as? HLink)?.target }, ["?a=1&copy=2&copyx© 3✓&&lt3"])
+        XCTAssertEqual(texts[3], "AT&T &check;")
+    }
+
     func testReadOptionsMapLinksAndIds() throws {
         let folder = try newFolder()
         let options = HtmlReadOptions(baseFolder: folder, mediaFolder: folder,
