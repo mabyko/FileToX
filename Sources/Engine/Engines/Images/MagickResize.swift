@@ -128,13 +128,13 @@ enum MagickResize {
     private static let quantumScale = 1.0 / 255.0
 
     /// ClampToQuantum (Q8, no HDRI).
-    private static func clamp(_ value: Double) -> UInt8 {
+    static func clamp(_ value: Double) -> UInt8 {
         guard value > 0 else { return 0 }
         return value >= 255 ? 255 : UInt8(value + 0.5)
     }
 
     /// MagickSafeReciprocal.
-    private static func reciprocal(_ x: Double) -> Double {
+    static func reciprocal(_ x: Double) -> Double {
         x > -epsilon && x < epsilon ? 1.0 / epsilon : 1.0 / x
     }
 

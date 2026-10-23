@@ -89,14 +89,21 @@ final class IcnsConverter: Converter {
 
     /// 8-bit RGBA PNG (ImageMagick's PNG32), also for grayscale pictures.
     private static func png32(_ image: CGImage) throws -> [UInt8] {
-        var bitmap = ImagePixels.bitmap(image)
-        bitmap.gray = nil
-        bitmap.hasAlpha = true
+        // Straight samples (premultiplying would round semi-transparent pixels); gray is spread over R, G and B.
+        let (samples, channels, space) = ImagePixels.straight(image)
+        let colors = ImagePixels.hasAlpha(image) ? channels - 1 : channels
+        var rgba = [UInt8](repeating: 255, count: image.width * image.height * 4)
+        for i in 0..<image.width * image.height {
+            for c in 0..<3 { rgba[i * 4 + c] = samples[i * channels + (colors == 1 ? 0 : c)] }
+            if colors < channels { rgba[i * 4 + 3] = samples[i * channels + colors] }
+        }
+        let rgbSpace = colors == 1 ? CGColorSpace(name: CGColorSpace.sRGB)! : space
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
             throw ConversionError("Could not create a PNG encoder.")
         }
-        CGImageDestinationAddImage(destination, ImagePixels.image(bitmap), nil)
+        CGImageDestinationAddImage(destination, ImagePixels.make(rgba, image.width, image.height, components: 4, space: rgbSpace, alpha: true,
+                                                                 premultiplied: false), nil)
         guard CGImageDestinationFinalize(destination) else { throw ConversionError("Could not encode the icon as PNG.") }
         return [UInt8](data as Data)
     }

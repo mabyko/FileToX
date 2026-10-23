@@ -73,4 +73,16 @@ final class MagickResizeTests: XCTestCase {
         XCTAssertEqual(ImagePixels.resized(gray, width: 20, height: 15).colorSpace?.model, .monochrome)
         XCTAssertTrue(ImagePixels.resized(gray, width: 40, height: 30) === gray, "the same size is left alone")
     }
+
+    func testAlphaRemovalIsImageMagicksFlatten() {
+        // Alpha(AlphaOption.Remove) over Filee's default white and another colour, from the same straight samples.
+        let rgba = ImagePixels.make(Self.samples(alpha: true), 41, 29, components: 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, alpha: true,
+                                    premultiplied: false)
+        for (background, sha256) in [((UInt8(255), UInt8(255), UInt8(255)), "98268e6079748d348f34ba99b1fed7cc38aa5014ef17b3d31985748b88c53dc7"),
+                                     ((0x33, 0x66, 0x99), "c79877f5c6ef9460c1cd52643fba0cc2832be7083dbecd54391213c7a180125d")] {
+            let flat = ImagePixels.flattened(rgba, background: background)
+            XCTAssertFalse(ImagePixels.hasAlpha(flat))
+            XCTAssertEqual(Self.sha256(ImagePixels.straight(flat).samples), sha256, "\(background)")
+        }
+    }
 }
