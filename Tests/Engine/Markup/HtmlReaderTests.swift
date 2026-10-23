@@ -273,6 +273,10 @@ final class HtmlReaderTests: XCTestCase {
         XCTAssertTrue(HtmlReader.decode(TextEncodings.encode("<?xml version=\"1.0\" encoding=\"windows-1251\"?><html><body>\(russian)</body></html>", encoding: cp1251)).contains(russian))
         XCTAssertTrue(HtmlReader.decode(Data([0xFF, 0xFE]) + TextEncodings.encode("<p>\(korean)</p>", encoding: .utf16LittleEndian)).contains(korean))
         XCTAssertTrue(HtmlReader.decode(Data("<p>\(korean)</p>".utf8)).contains(korean)) // undeclared UTF-8
+        XCTAssertTrue(HtmlReader.decode(TextEncodings.encode("<p>\(korean)</p>", encoding: cp949)).contains(korean) || HtmlReader.ansiCodePage != 949)
+        if HtmlReader.ansiCodePage == 949 { // invalid UTF-8 without a charset: .NET's CP949 decoder (a lead byte takes the next byte)
+            XCTAssertEqual(HtmlReader.decode(Data("Caf\u{E9} cr\u{E8}me".unicodeScalars.map { UInt8($0.value) })), "Caf?cr?e")
+        }
     }
 
     func testXhtmlSelfClosedElementsDoNotSwallowThePage() throws {

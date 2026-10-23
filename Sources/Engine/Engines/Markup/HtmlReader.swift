@@ -186,7 +186,8 @@ final class HtmlReader {
             return TextEncodings.decode(bytes, encoding: encoding)
         }
         if let text = String(data: bytes, encoding: .utf8) { return text }
-        return TextEncodings.decode(bytes, codePage: ansiCodePage)
+        // .NET's decoder: a CP949 lead byte takes the next byte, and an invalid pair is one "?".
+        return EmlCharsets.decode(ArraySlice(bytes), codePage: ansiCodePage)
     }
 
     /// The Windows ANSI code page of the user's language, as .NET's `CultureInfo.CurrentCulture.TextInfo.ANSICodePage`.
