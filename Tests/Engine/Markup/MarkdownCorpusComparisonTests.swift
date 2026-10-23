@@ -23,6 +23,8 @@ final class MarkdownCorpusComparisonTests: XCTestCase {
             let actual: String
             do {
                 actual = plainText ? try Markdown.toPlainText(input, pipeline) : try Markdown.toHtml(input, pipeline)
+            } catch let error as Markdown.DepthLimitError {
+                actual = "!!EXCEPTION ArgumentException: \(error.localizedDescription)"
             } catch {
                 actual = "!!EXCEPTION \(error)"
             }

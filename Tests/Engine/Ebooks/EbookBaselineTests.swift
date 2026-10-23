@@ -62,6 +62,12 @@ with Host(manifest["host"], copies=manifest.get("copies"), scratch=manifest_path
             let regex = try! NSRegularExpression(pattern: pattern)
             value = regex.stringByReplacingMatches(in: value, range: NSRange(location: 0, length: (value as NSString).length), withTemplate: replacement)
         }
+        // XmlWriter chooses p4 here while the libxml2-backed writer chooses p1; namespace URIs are identical.
+        let declarations = EbookRegex.matches(#"xmlns:(p\d+)="([^"]+)""#, value).map { EbookRegex.group($0, value, 1) }
+        for prefix in declarations {
+            value = value.replacingOccurrences(of: "xmlns:" + prefix + "=", with: "xmlns:auto=")
+            value = value.replacingOccurrences(of: prefix + ":", with: "auto:")
+        }
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     func testComicExifOrientationAgainstInstalledCSharp() async throws {
@@ -120,6 +126,37 @@ with Host(manifest["host"], copies=manifest.get("copies"), scratch=manifest_path
                 let lhs = try a.data(for: entry), rhs = try XCTUnwrap(b.data(named: entry.name))
                 if entry.name.hasSuffix(".txt") || entry.name.hasSuffix(".css") { XCTAssertEqual(lhs, rhs, "\(format): \(entry.name)") }
                 else { XCTAssertEqual(canonical(String(decoding: lhs, as: UTF8.self)), canonical(String(decoding: rhs, as: UTF8.self)), "\(format): \(entry.name)") }
+            }
+        }
+    }
+    func testRichEbookExportsAgainstInstalledCSharp() async throws {
+        let epub = try EbookBuilders.epub(folder), fb2 = try EbookBuilders.fb2(folder)
+        let mobi = try save("source.mobi", EbookBuilders.mobi(Data("<html><body><h1>Title</h1><p>Ünïcödé 한글 <b>bold</b>.</p></body></html>".utf8), [], EbookBuilders.MobiOptions(title: "Mobi comparison")))
+        var cases: [[String: Any]] = [
+            ["id": "fb2-epub", "input": fb2, "target": "epub"],
+            ["id": "mobi-epub", "input": mobi, "target": "epub"]
+        ]
+        for target in ["fb2", "htmlz", "txtz", "html", "txt", "md"] { cases.append(["id": "epub-" + target, "input": epub, "target": target]) }
+        let results = try await baseline(cases)
+        for item in cases {
+            let id = item["id"] as! String, input = item["input"] as! String, target = item["target"] as! String
+            let from = FormatRegistry.detect(input)!.id
+            let native = try await convert(input, from, target), cs = try output(XCTUnwrap(results[id]))
+            if ["epub", "htmlz", "txtz"].contains(target) {
+                let a = try ZipReader(path: native), b = try ZipReader(path: cs)
+                XCTAssertEqual(a.entries.map(\.name), b.entries.map(\.name), id)
+                for entry in a.entries {
+                    let left = try a.data(for: entry), right = try XCTUnwrap(b.data(named: entry.name))
+                    if entry.name.hasSuffix(".png") || entry.name.hasSuffix(".jpg") { XCTAssertEqual(left, right, "\(id): \(entry.name)") }
+                    else { XCTAssertEqual(canonical(String(decoding: left, as: UTF8.self)), canonical(String(decoding: right, as: UTF8.self)), "\(id): \(entry.name)") }
+                }
+            } else {
+                var left = try String(contentsOfFile: native, encoding: .utf8), right = try String(contentsOfFile: cs, encoding: .utf8)
+                if target == "md" {
+                    left = left.replacingOccurrences(of: EbookFiles.uriEscape(FilePath.fileNameWithoutExtension(native) + "_files"), with: "IMAGES")
+                    right = right.replacingOccurrences(of: EbookFiles.uriEscape(FilePath.fileNameWithoutExtension(cs) + "_files"), with: "IMAGES")
+                }
+                XCTAssertEqual(canonical(left), canonical(right), id)
             }
         }
     }

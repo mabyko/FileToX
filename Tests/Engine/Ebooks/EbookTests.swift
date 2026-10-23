@@ -168,6 +168,19 @@ final class EbookTests: EbookTestCase {
         XCTAssertEqual(book.metadata.title, "별빛 이야기"); XCTAssertEqual(HDocumentWalker.images(book.document).count, 1)
         XCTAssertTrue(PlainTextWriter.write(book.document).contains("밤하늘에"))
     }
+    func testEpubDocxEpubRoundTrip() async throws {
+        let source = try EbookBuilders.epub(folder)
+        let docx = try await convert(source, "epub", "docx", Preset(), DocxWriterConverter())
+        let epub = try await convert(docx, "docx", "epub"), text = try epubText(epub)
+        for expected in ["첫 번째 장", "밤하늘에 별이 반짝였다.", "두 번째 장", "주석 내용입니다."] { XCTAssertTrue(text.contains(expected), expected) }
+    }
+    func testEpubToPdfStartsEachChapterOnItsOwnPage() async throws {
+        let rhwp = RhwpConverter()
+        guard rhwp.status().isAvailable else { throw XCTSkip("bundled rhwp not found") }
+        let source = try EbookBuilders.epub(folder), hwpx = try await convert(source, "epub", "hwpx")
+        let pdf = try await convert(hwpx, "hwpx", "pdf", Preset(), rhwp)
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: pdf))).pageCount, 3)
+    }
     func testEpubToHwpxPreservesChapterPageBreaks() async throws {
         let output = try await convert(EbookBuilders.epub(folder), "epub", "hwpx"), zip = try ZipReader(path: output)
         let section = try XCTUnwrap(zip.string(named: "Contents/section0.xml"))
