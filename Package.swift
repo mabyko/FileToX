@@ -13,10 +13,21 @@ let package = Package(
         .library(name: "FileToXEngineKit", targets: ["FileToXEngineKit"]),
         .executable(name: "FileToXEngine", targets: ["FileToXEngine"]),
     ],
+    dependencies: [
+        // WebP and JPEG XL encoders (ImageIO only decodes them): Google's libwebp and libjxl, built from source.
+        .package(url: "https://github.com/SDWebImage/libwebp-Xcode.git", exact: "1.6.0"),
+        .package(url: "https://github.com/SDWebImage/libjxl-Xcode.git", exact: "0.10.4"),
+    ],
     targets: [
         .target(name: "FileToXCore", path: "Sources/Core"),
         .target(
             name: "FileToXEngineKit",
+            dependencies: [
+                .product(name: "libwebp", package: "libwebp-Xcode"),
+                .product(name: "libjxl", package: "libjxl-Xcode"),
+                // Google's Brotli (part of the libjxl package) for WOFF2 at Filee's quality 11.
+                .product(name: "brotli", package: "libjxl-Xcode"),
+            ],
             path: "Sources/Engine",
             resources: [.copy("Resources")],
             swiftSettings: engineSettings,

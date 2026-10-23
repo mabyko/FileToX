@@ -279,3 +279,24 @@ private final class LineBox: @unchecked Sendable {
     func add(_ line: String) { lock.withLock { storage.append(line) } }
     var values: [String] { lock.withLock { storage } }
 }
+
+final class CodecLibraryTests: XCTestCase {
+    func testEncoderLibrariesAreLinked() {
+        XCTAssertEqual(CodecLibraries.webpVersion, "1.6.0")
+        XCTAssertTrue(CodecLibraries.jxlVersion.hasPrefix("0.10."), CodecLibraries.jxlVersion)
+    }
+}
+
+final class ComposedNameTests: XCTestCase {
+    func testHelpersKeepComposedKoreanNames() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ftx-nfc-\(UUID().uuidString)").path
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        let folder = FilePath.combine(root, "한글 폴더")
+        try FileManager.default.createDirectoryIfNeeded(folder)
+        try FileManager.default.writeFile(FilePath.combine(folder, "문서.txt"), Data("x".utf8))
+        let names = try FileManager.default.contentsOfDirectory(atPath: root) + FileManager.default.contentsOfDirectory(atPath: folder)
+        XCTAssertEqual(names.sorted(), ["문서.txt", "한글 폴더"].sorted())
+        for name in names { XCTAssertEqual(Array(name.unicodeScalars), Array(name.precomposedStringWithCanonicalMapping.unicodeScalars), name) }
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: FilePath.combine(folder, "문서.txt"))), Data("x".utf8))
+    }
+}
