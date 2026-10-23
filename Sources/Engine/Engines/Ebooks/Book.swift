@@ -84,15 +84,23 @@ enum EbookFiles {
             let jpeg = !alpha && ["image/webp", "image/avif", "image/jxl", "image/tiff"].contains(mediaType ?? "")
             try FileManager.default.createDirectoryIfNeeded(folder)
             let file = FilePath.combine(folder, "\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()).\(jpeg ? "jpg" : "png")")
-            guard let destination = CGImageDestinationCreateWithURL(URL(fileURLWithPath: file) as CFURL, (jpeg ? UTType.jpeg.identifier : UTType.png.identifier) as CFString, 1, nil) else { return nil }
-            var properties: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.9]
-            if let info = ImageSupport.info(path) {
+            let info = ImageSupport.info(path)
+            if jpeg {
+                // ImageMagick's JPEG at quality 90.
+                var frame = ImageFrame(image: image, dpi: info?.dpiX.map { ($0, info?.dpiY ?? $0) })
+                frame.properties[ImageFrame.qualityKey] = 90
+                try JpegEncoder.write(frame, to: file)
+                return (file, "image/jpeg")
+            }
+            guard let destination = CGImageDestinationCreateWithURL(URL(fileURLWithPath: file) as CFURL, UTType.png.identifier as CFString, 1, nil) else { return nil }
+            var properties: [CFString: Any] = [:]
+            if let info {
                 if let x = info.dpiX { properties[kCGImagePropertyDPIWidth] = x }
                 if let y = info.dpiY { properties[kCGImagePropertyDPIHeight] = y }
             }
             CGImageDestinationAddImage(destination, image, properties as CFDictionary)
             guard CGImageDestinationFinalize(destination) else { return nil }
-            return (file, jpeg ? "image/jpeg" : "image/png")
+            return (file, "image/png")
         } catch { return nil }
     }
 

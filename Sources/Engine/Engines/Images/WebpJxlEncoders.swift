@@ -247,8 +247,14 @@ enum CodecPixels {
         return (icc, exif(metadata), xmp(metadata))
     }
 
+    private static let exifNamespaces: Set<String> = [kCGImageMetadataNamespaceExif as String, kCGImageMetadataNamespaceExifAux as String,
+                                                      kCGImageMetadataNamespaceExifEX as String, kCGImageMetadataNamespaceTIFF as String]
+
     /// EXIF of the metadata as ImageIO serializes it: the APP1 payload of a one-pixel JPEG, without "Exif\0\0".
     private static func exif(_ metadata: CGImageMetadata) -> Data? {
+        // Metadata without EXIF/TIFF tags (a PNG's, for one) has no EXIF profile in ImageMagick; ImageIO would still write one.
+        let tags = (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? []
+        guard tags.contains(where: { (CGImageMetadataTagCopyNamespace($0) as String?).map(exifNamespaces.contains) == true }) else { return nil }
         let pixel = ImagePixels.make([0, 0, 0], 1, 1, components: 3, space: CGColorSpace(name: CGColorSpace.sRGB)!, alpha: false)
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil) else { return nil }
@@ -268,8 +274,6 @@ enum CodecPixels {
     }
 
     private static func xmp(_ metadata: CGImageMetadata) -> Data? {
-        let exifNamespaces: Set<String> = [kCGImageMetadataNamespaceExif as String, kCGImageMetadataNamespaceExifAux as String,
-                                           kCGImageMetadataNamespaceExifEX as String, kCGImageMetadataNamespaceTIFF as String]
         let rest = CGImageMetadataCreateMutable()
         var any = false
         for tag in (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? [] {
