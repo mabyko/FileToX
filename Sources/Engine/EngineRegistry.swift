@@ -10,8 +10,14 @@ public enum EngineRegistry {
         // Engines are appended here as they are ported, in Filee's order:
         // magick, pdfsharp, pdfium, rhwp, unhwp, markdown, spreadsheet, ooxml, hwpx-writer, archive, vector, icns,
         // font, docx-writer, pdf-text, email, ffmpeg, cad, ebook, pandoc, ghostscript, calibre, libreoffice.
-        _ = environment
-        converters += []
+        converters.append(RhwpConverter())
+        converters.append(UnhwpConverter())
+        converters.append(SpreadsheetConverter())
+        converters.append(OoxmlConverter())
+        converters.append(HwpxConverter())
+        converters.append(FontConverter())
+        converters.append(DocxWriterConverter())
+        converters.append(LibreOfficeConverter(environment))
         return converters
     }
 

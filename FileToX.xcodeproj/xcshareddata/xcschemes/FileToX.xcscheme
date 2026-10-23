@@ -23,6 +23,34 @@
          </BuildActionEntry>
          <BuildActionEntry
             buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "C855A15C42D8924432598E61"
+               BuildableName = "FileToXEngine.app"
+               BlueprintName = "FileToXEngine"
+               ReferencedContainer = "container:FileToX.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "8E1039F465CFF6FF84F0A797"
+               BuildableName = "FileToXEngineTests.xctest"
+               BlueprintName = "FileToXEngineTests"
+               ReferencedContainer = "container:FileToX.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
             buildForRunning = "NO"
             buildForProfiling = "NO"
             buildForArchiving = "NO"
@@ -61,6 +89,17 @@
                BlueprintIdentifier = "998EFF4C5F7796C9F05ECA13"
                BuildableName = "FileToXTests.xctest"
                BlueprintName = "FileToXTests"
+               ReferencedContainer = "container:FileToX.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "8E1039F465CFF6FF84F0A797"
+               BuildableName = "FileToXEngineTests.xctest"
+               BlueprintName = "FileToXEngineTests"
                ReferencedContainer = "container:FileToX.xcodeproj">
             </BuildableReference>
          </TestableReference>
