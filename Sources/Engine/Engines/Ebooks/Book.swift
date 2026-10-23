@@ -147,6 +147,11 @@ enum EbookFiles {
         return enumerator.compactMap { $0 as? String }.map { FilePath.combine(folder, $0) }.filter { FileManager.default.fileExists($0) }
     }
 
+    static func uriUnescape(_ value: String) -> String {
+        // Decode valid escape runs independently: malformed escapes and raw UTF-16 pairs stay intact.
+        EbookRegex.replace(#"(?:%[0-9A-Fa-f]{2})+"#, value) { MarkupConvert.unescapeDataString(EbookRegex.group($0, value)) }
+    }
+
     static func uriEscape(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~")) ?? value
     }

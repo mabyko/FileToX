@@ -340,7 +340,7 @@ final class MarkdownReader {
             guard let url = URL(string: target), url.isFileURL, url.path.hasPrefix("/") else { return nil }
             path = url.path
         } else {
-            path = HtmlReader.unescapeDataString(target)
+            path = MarkupConvert.unescapeDataString(target)
         }
         if path.contains("\0") { return nil }
         let candidate = path.hasPrefix("/") ? path : FilePath.combine(baseFolder, path)

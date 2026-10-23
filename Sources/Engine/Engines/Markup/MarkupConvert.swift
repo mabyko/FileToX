@@ -48,4 +48,50 @@ enum MarkupConvert {
         }
         return result
     }
+
+    /// `Uri.UnescapeDataString`: %XX sequences that form UTF-8 are decoded, others stay escaped.
+    static func unescapeDataString(_ text: String) -> String {
+        guard text.contains("%") else { return text }
+        let units = Array(text.utf16)
+        var output = ""
+        var i = 0
+        func hex(_ unit: UInt16) -> UInt8? {
+            switch unit {
+            case 0x30...0x39: UInt8(unit - 0x30)
+            case 0x41...0x46: UInt8(unit - 0x37)
+            case 0x61...0x66: UInt8(unit - 0x57)
+            default: nil
+            }
+        }
+        while i < units.count {
+            var bytes: [UInt8] = []
+            var escapes: [String] = []
+            while i + 2 < units.count, units[i] == 0x25, let high = hex(units[i + 1]), let low = hex(units[i + 2]) {
+                bytes.append(high << 4 | low)
+                escapes.append(String(decoding: units[i..<i + 3], as: UTF16.self))
+                i += 3
+            }
+            if !bytes.isEmpty {
+                var parser = Unicode.UTF8.ForwardParser()
+                var iterator = bytes.makeIterator()
+                var consumed = 0
+                loop: while true {
+                    switch parser.parseScalar(from: &iterator) {
+                    case .valid(let encoded):
+                        output.unicodeScalars.append(Unicode.UTF8.decode(encoded))
+                        consumed += encoded.count
+                    case .error(let length):
+                        output += escapes[consumed..<consumed + length].joined()
+                        consumed += length
+                    case .emptyInput:
+                        break loop
+                    }
+                }
+                continue
+            }
+            output += String(decoding: [units[i]], as: UTF16.self)
+            i += 1
+        }
+        return output
+    }
 }

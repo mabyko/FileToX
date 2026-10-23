@@ -18,7 +18,7 @@ final class OpfPackage {
         for item in root.elements().filter({ $0.name.localName == "manifest" }).flatMap({ $0.elements().filter { $0.name.localName == "item" } }) {
             guard let id = item.attributeValue("id"), let href = item.attributeValue("href") else { continue }
             let relative = String(href.split(separator: "#", omittingEmptySubsequences: false)[0])
-            if let path = EbookFiles.safePath(folder, relative.removingPercentEncoding ?? relative), package.manifest[id] == nil {
+            if let path = EbookFiles.safePath(folder, EbookFiles.uriUnescape(relative)), package.manifest[id] == nil {
                 let value = OpfItem(id: id, path: path, mediaType: (item.attributeValue("media-type") ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), properties: item.attributeValue("properties") ?? "")
                 package.manifest[id] = value; package.manifestItems.append(value)
             }
@@ -50,7 +50,7 @@ final class OpfPackage {
         let container = FilePath.combine(bookFolder, "META-INF", "container.xml")
         if FileManager.default.fileExists(container) {
             let rootFile = try loadXml(container).root.descendantsAndSelf().first { $0.name.localName == "rootfile" && ($0.attributeValue("media-type") ?? "application/oebps-package+xml") == "application/oebps-package+xml" }
-            if let fullPath = rootFile?.attributeValue("full-path"), let path = EbookFiles.safePath(bookFolder, fullPath.removingPercentEncoding ?? fullPath), FileManager.default.fileExists(path) { return path }
+            if let fullPath = rootFile?.attributeValue("full-path"), let path = EbookFiles.safePath(bookFolder, EbookFiles.uriUnescape(fullPath)), FileManager.default.fileExists(path) { return path }
         }
         guard let path = EbookFiles.files(bookFolder).first(where: { FilePath.extension($0) == ".opf" }) else {
             throw ConversionError("This is not a valid EPUB file: it has no package document (content.opf).")

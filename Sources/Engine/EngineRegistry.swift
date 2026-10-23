@@ -12,12 +12,15 @@ public enum EngineRegistry {
         // font, docx-writer, pdf-text, email, ffmpeg, cad, ebook, pandoc, ghostscript, calibre, libreoffice.
         converters.append(RhwpConverter())
         converters.append(UnhwpConverter())
+        converters.append(MarkdownConverter())
         converters.append(SpreadsheetConverter())
         converters.append(OoxmlConverter())
         converters.append(HwpxConverter())
         converters.append(FontConverter())
         converters.append(DocxWriterConverter())
+        converters.append(EmlConverter())
         converters.append(EbookConverter())
+        converters.append(PandocConverter())
         converters.append(CalibreConverter())
         converters.append(LibreOfficeConverter(environment))
         return converters

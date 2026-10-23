@@ -133,6 +133,16 @@ final class EbookFoundationTests: EbookTestCase {
         let duplicate = try save("dup.opf", Data("<package><metadata/><manifest><item id='x' href='first'/><item id='x' href='second'/></manifest><spine><itemref idref='x'/></spine></package>".utf8))
         XCTAssertEqual(try OpfPackage.load(duplicate).spine.first?.path, path("first"))
     }
+    func testOpfAndChapterLinksDecodeValidEscapesBesideMalformedOnes() throws {
+        XCTAssertEqual(EbookFiles.uriUnescape("a%20%zz%20😀%E9"), "a %zz 😀%E9")
+        let chapter = try save("a %zz 😀.xhtml", Data("<html><body><h1>Title</h1><p><a href='a%20%zz%20😀.xhtml#note'>note</a></p><p id='note'>Content</p></body></html>".utf8))
+        let opf = try save("escapes.opf", Data("<package><metadata/><manifest><item id='c' href='a%20%zz%20😀.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='c'/></spine></package>".utf8))
+        let package = try OpfPackage.load(opf)
+        XCTAssertEqual(package.spine.first?.path, chapter)
+        let document = try ChapterReader.read(package.spine.map(\.path), folder), all = inlines(document)
+        let link = try XCTUnwrap(all.compactMap { $0 as? HLink }.first)
+        XCTAssertTrue(all.compactMap { $0 as? HBookmark }.contains { "#" + $0.name == link.target })
+    }
     func testEpubDrmAllowsOnlyFontObfuscation() throws {
         for (index, algorithm) in ["http://www.idpf.org/2008/embedding", "http://ns.adobe.com/pdf/enc#RC", "http://www.w3.org/2001/04/xmlenc#aes128-cbc"].enumerated() {
             let zipPath = path("drm\(index).epub"), zip = try ZipWriter(path: zipPath)

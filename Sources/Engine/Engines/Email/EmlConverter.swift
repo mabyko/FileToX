@@ -111,18 +111,18 @@ final class EmlConverter: Converter {
                 body = replace(headBlock, html, "")
             }
         } else {
-            body = "<pre class=\"filee-mail-text\">\(htmlEncode(message.textBody ?? ""))</pre>"
+            body = "<pre class=\"filee-mail-text\">\(MarkupConvert.htmlEncode(message.textBody ?? ""))</pre>"
         }
 
         var page = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n"
-        page += "<title>\(htmlEncode(message.subject ?? ""))</title>\n"
+        page += "<title>\(MarkupConvert.htmlEncode(message.subject ?? ""))</title>\n"
         page += "<style>\n.filee-mail-headers { border-collapse: collapse; margin: 0 0 12px 0; font-family: sans-serif; font-size: 14px; }\n"
         page += ".filee-mail-headers th { text-align: left; vertical-align: top; padding: 2px 16px 2px 0; color: #555; font-weight: 600; }\n"
         page += ".filee-mail-headers td { padding: 2px 0; }\n"
         page += ".filee-mail-text { white-space: pre-wrap; font-family: inherit; }\n</style>\n"
         page += styles
         page += "</head>\n<body>\n<table class=\"filee-mail-headers\">\n"
-        for (name, value) in headers(message) { page += "<tr><th>\(name)</th><td>\(htmlEncode(value))</td></tr>\n" }
+        for (name, value) in headers(message) { page += "<tr><th>\(name)</th><td>\(MarkupConvert.htmlEncode(value))</td></tr>\n" }
         page += "</table>\n<hr>\n"
         page += body
         page += "\n</body>\n</html>\n"
@@ -147,7 +147,7 @@ final class EmlConverter: Converter {
             let range = match.result.range
             result += text.substring(with: NSRange(location: position, length: range.location - position))
             position = range.location + range.length
-            let id = unescapeDataString(match.text(1))
+            let id = MarkupConvert.unescapeDataString(match.text(1))
             guard let part = parts[ignoreCaseKey(id)], part.content != nil else {
                 result += match.text(0)
                 continue
@@ -260,28 +260,6 @@ final class EmlConverter: Converter {
         return String(decoding: units, as: UTF16.self)
     }
 
-    /// `WebUtility.HtmlEncode`: < > " ' & as entities, U+00A0–U+00FF and characters outside the BMP as numeric ones.
-    static func htmlEncode(_ text: String) -> String {
-        var result = ""
-        result.reserveCapacity(text.utf8.count)
-        for scalar in text.unicodeScalars {
-            switch scalar {
-            case "<": result += "&lt;"
-            case ">": result += "&gt;"
-            case "\"": result += "&quot;"
-            case "'": result += "&#39;"
-            case "&": result += "&amp;"
-            default:
-                if (0xA0...0xFF).contains(scalar.value) || scalar.value > 0xFFFF {
-                    result += "&#\(scalar.value);"
-                } else {
-                    result.unicodeScalars.append(scalar)
-                }
-            }
-        }
-        return result
-    }
-
     /// `WebUtility.HtmlDecode`: numeric references and the HTML 4.01 entities; anything else stays as it is.
     static func htmlDecode(_ text: String) -> String {
         guard text.contains("&") else { return text }
@@ -341,52 +319,6 @@ final class EmlConverter: Converter {
         }
         guard !text.isEmpty, text.utf8.allSatisfy({ $0 >= 0x30 && $0 <= 0x39 }), let value = UInt32(text) else { return nil }
         return negative && value != 0 ? nil : value
-    }
-
-    /// `Uri.UnescapeDataString`: %XX sequences that form UTF-8 are decoded, others stay escaped.
-    static func unescapeDataString(_ text: String) -> String {
-        guard text.contains("%") else { return text }
-        let units = Array(text.utf16)
-        var output = ""
-        var i = 0
-        func hex(_ unit: UInt16) -> UInt8? {
-            switch unit {
-            case 0x30...0x39: UInt8(unit - 0x30)
-            case 0x41...0x46: UInt8(unit - 0x37)
-            case 0x61...0x66: UInt8(unit - 0x57)
-            default: nil
-            }
-        }
-        while i < units.count {
-            var bytes: [UInt8] = []
-            var escapes: [String] = []
-            while i + 2 < units.count, units[i] == 0x25, let high = hex(units[i + 1]), let low = hex(units[i + 2]) {
-                bytes.append(high << 4 | low)
-                escapes.append(String(decoding: units[i..<i + 3], as: UTF16.self))
-                i += 3
-            }
-            if !bytes.isEmpty {
-                var parser = Unicode.UTF8.ForwardParser()
-                var iterator = bytes.makeIterator()
-                var consumed = 0
-                loop: while true {
-                    switch parser.parseScalar(from: &iterator) {
-                    case .valid(let encoded):
-                        output.unicodeScalars.append(Unicode.UTF8.decode(encoded))
-                        consumed += encoded.count
-                    case .error(let length):
-                        output += escapes[consumed..<consumed + length].joined()
-                        consumed += length
-                    case .emptyInput:
-                        break loop
-                    }
-                }
-                continue
-            }
-            output += String(decoding: [units[i]], as: UTF16.self)
-            i += 1
-        }
-        return output
     }
 
     // MARK: Patterns
