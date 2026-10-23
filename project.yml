@@ -97,6 +97,19 @@ targets:
         INFOPLIST_FILE: Config/EngineHost.Info.plist
         ENABLE_DEBUG_DYLIB: NO
         SKIP_INSTALL: YES
+      configs:
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+          # A generated CODE_SIGN_ENTITLEMENTS input creates a build cycle; pass it to codesign after the script.
+          OTHER_CODE_SIGN_FLAGS: [$(inherited), --entitlements, $(DERIVED_FILE_DIR)/EngineHost.entitlements]
+    preBuildScripts:
+      - name: Prepare helper signing entitlements
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        inputFiles: [$(SRCROOT)/Tools/prepare-engine-entitlements.py]
+        outputFiles: [$(DERIVED_FILE_DIR)/EngineHost.entitlements]
+        script: |
+          python3 -I "$SRCROOT/Tools/prepare-engine-entitlements.py" "$SCRIPT_OUTPUT_FILE_0" "${EXPANDED_CODE_SIGN_IDENTITY:--}"
     postBuildScripts:
       - name: Stage bundled engines (rhwp, 7-Zip)
         basedOnDependencyAnalysis: false
