@@ -52,7 +52,7 @@ extension ACad.DxfWriter {
             return false
         }
         switch entity {
-        case is E.Seqend, is E.UnknownEntity:
+        case is E.Seqend, is E.UnknownEntity, is E.MechanicalEntity, is E.Wall:
             return false
         case is E.Shape:
             return writeShapes
