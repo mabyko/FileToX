@@ -1,20 +1,6 @@
 // Temporary cross-group APIs. The integrator removes this file after merging their implementations.
 import Foundation
 
-enum MarkdownReader {
-    static func read(_ markdown: String, _ baseFolder: String) throws -> HDocument {
-        throw ConversionError("not ported yet")
-    }
-    static func resolveImage(_ target: String?, _ baseFolder: String) throws -> String? {
-        throw ConversionError("not ported yet")
-    }
-}
-enum PandocAstReader {
-    static func read(_ ast: Any, _ resolveImage: (String) -> String?) throws -> HDocument {
-        throw ConversionError("not ported yet")
-    }
-}
-enum PandocConverter { static func locate() -> String? { nil } }
 enum PdfDocumentReader {
     static func read(_ path: String, _ mediaFolder: String) throws -> HDocument {
         throw ConversionError("not ported yet")
