@@ -131,8 +131,10 @@ final class SpreadsheetFormatTests: OfficeTestCase {
             })
         XCTAssertEqual(converter.edges.first, ConversionEdge("xlsx", "ods"))
         XCTAssertEqual(converter.edges.last, ConversionEdge("tsv", "csv"))
+        // Registered in Filee's order relative to each other (other engines sit between them).
         XCTAssertEqual(
-            EngineRegistry.createAll(EngineEnvironment(dataDirectory: folder)).map(\.id),
+            EngineRegistry.createAll(EngineEnvironment(dataDirectory: folder)).map(\.id)
+                .filter { ["spreadsheet", "ooxml", "libreoffice"].contains($0) },
             ["spreadsheet", "ooxml", "libreoffice"])
     }
     func testEmptyWorkbookAndUnicodeSpacing() throws {
