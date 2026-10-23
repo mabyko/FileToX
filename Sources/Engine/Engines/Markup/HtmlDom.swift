@@ -131,18 +131,21 @@ enum HtmlDom {
     /// Parses HTML text (already decoded) into a document. Never loads anything from the network.
     static func parse(_ html: String) -> Document {
         // HTML5 input preprocessing: CR LF and lone CR become LF.
-        var text = rawText(html.contains("\r") ? html.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n") : html)
+        let text = rawText(html.utf8.contains(0x0D) ? html.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n") : html)
         // libxml2 drops control characters XML does not allow (the form feeds of licence texts); HTML5 keeps them.
-        // They pass through as the noncharacters U+FDD0 + code and come back in `cleaned`.
-        if text.utf8.contains(where: { $0 < 0x20 && $0 != 0x09 && $0 != 0x0A && $0 != 0x0D && $0 != 0 }) {
-            text = String(String.UnicodeScalarView(text.unicodeScalars.map {
-                $0.value < 0x20 && $0.value != 0x09 && $0.value != 0x0A && $0.value != 0x0D && $0.value != 0 ? Unicode.Scalar(0xFDD0 + $0.value)! : $0
-            }))
+        // They pass through as the noncharacters U+FDD0 + code (UTF-8 EF B7 90+code) and come back in `cleaned`.
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(text.utf8.count)
+        for byte in text.utf8 {
+            if byte < 0x20 && byte != 0x09 && byte != 0x0A && byte != 0x0D && byte != 0 {
+                bytes += [0xEF, 0xB7, 0x90 + byte]
+            } else {
+                bytes.append(byte)
+            }
         }
         let options = Int32(HTML_PARSE_RECOVER.rawValue | HTML_PARSE_NONET.rawValue | HTML_PARSE_NOERROR.rawValue
             | HTML_PARSE_NOWARNING.rawValue | HTML_PARSE_NODEFDTD.rawValue | HTML_PARSE_IGNORE_ENC.rawValue
             | XML_PARSE_HUGE.rawValue)
-        let bytes = Array(text.utf8)
         guard !bytes.isEmpty, bytes.count < Int(Int32.max), let context = htmlNewParserCtxt() else { return Document(nil) }
         defer { htmlFreeParserCtxt(context) }
         context.pointee.sax.pointee.startElement = { parser, name, attributes in
