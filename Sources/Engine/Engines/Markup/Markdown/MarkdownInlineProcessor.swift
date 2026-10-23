@@ -25,7 +25,8 @@ extension Markdown {
         private var byCharacter: [Char: [InlineParser]] = [:]
         let globalParsers: [InlineParser]?
         let postInlineProcessors: [PostInlineProcessor]
-        private let openingSet: Set<Char>
+        // 0: literal, 1: parser, 2: autolink only (ordinary words can stay in the literal scan).
+        private let openingCharacters: [UInt8]
 
         init(_ parsers: [InlineParser]) {
             self.parsers = parsers
@@ -41,15 +42,22 @@ extension Markdown {
             }
             globalParsers = global.isEmpty ? nil : global
             postInlineProcessors = parsers.compactMap { $0 as? PostInlineProcessor }
-            openingSet = Set(byCharacter.keys)
+            var openingCharacters = [UInt8](repeating: 0, count: 65536)
+            for (c, candidates) in byCharacter {
+                openingCharacters[c.int] = global.isEmpty && candidates.count == 1 && candidates[0] is AutoLinkParser ? 2 : 1
+            }
+            self.openingCharacters = openingCharacters
         }
 
         func parsersForOpeningCharacter(_ c: Char) -> [InlineParser]? { byCharacter[c] }
 
-        /// The first position in `start...end` holding an opening character, or -1.
+        /// The first possible parser opening in `start...end`, or -1.
         func indexOfOpeningCharacter(_ text: [Char], _ start: Int, _ end: Int) -> Int {
             guard start <= end else { return -1 }
-            for i in start...end where openingSet.contains(text[i]) { return i }
+            for i in start...end {
+                let kind = openingCharacters[text[i].int]
+                if kind == 1 || (kind == 2 && AutoLinkParser.hasSchemePrefix(Slice(text, i, end))) { return i }
+            }
             return -1
         }
     }

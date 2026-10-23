@@ -341,6 +341,20 @@ extension Markdown {
                         continue
                     }
                 }
+                // The validated separator row is discarded below; it needs no cell syntax trees.
+                if aligns != nil && table.count == 1 {
+                    while let previous = delimiter.previousSibling,
+                          !(previous is LineBreakInline), !(previous is PipeTableDelimiterInline) {
+                        previous.remove()
+                    }
+                    if isLine {
+                        table.add(row!)
+                        row = nil
+                    } else {
+                        delimiter.remove()
+                    }
+                    continue
+                }
                 var endOfCell: Inline?
                 var beginOfCell: Inline?
                 var iterator = delimiter.previousSibling

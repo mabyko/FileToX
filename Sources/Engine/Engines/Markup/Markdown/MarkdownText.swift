@@ -366,7 +366,15 @@ extension Markdown {
             return index + 1 < text.count ? Markdown.rune(unit, text[index + 1]) : "\0"
         }
 
-        func match(_ string: String, offset: Int = 0) -> Bool { match(Markdown.chars(string), end: end, offset: offset) }
+        func match(_ string: String, offset: Int = 0) -> Bool {
+            var index = start + offset
+            if end - index + 1 < string.utf16.count { return false }
+            for unit in string.utf16 {
+                if unit != text[index].value { return false }
+                index += 1
+            }
+            return true
+        }
 
         func match(_ chars: [Char], end: Int, offset: Int) -> Bool {
             var index = start + offset

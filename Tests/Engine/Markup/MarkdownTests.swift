@@ -95,6 +95,52 @@ final class MarkdownTests: XCTestCase {
         for (path, uri) in cases { XCTAssertEqual(MarkupConvert.fileUri(path), uri) }
     }
 
+    func testHeadingReferenceIndexPreservesOrderAndUnicodeEquality() throws {
+        let markdown = "# café\n\n# cafe\u{301}\n\n# CAFE\n\n[café] [CAFE]\n"
+        let html = try Markdown.toHtml(markdown, .advancedWithYaml)
+        XCTAssertTrue(html.contains("<a href=\"#cafe-1\">café</a> <a href=\"#cafe-1\">CAFE</a>"), html)
+        XCTAssertEqual(Array(try Markdown.toPlainText(markdown, .advancedWithYaml).utf8), Array("café\ncafe\u{301}\nCAFE\ncafé CAFE\n".utf8))
+    }
+
+    func testLinkDefinitionMembershipTracksRemovalAndRepeatedInsertion() {
+        let group = Markdown.LinkReferenceDefinitionGroup()
+        let link = Markdown.LinkReferenceDefinition(nil, nil, nil)
+        group.set("first", link)
+        group.set("second", link)
+        XCTAssertEqual(group.count, 1)
+        XCTAssertNil(group.tryGet("second"))
+        XCTAssertTrue(group.remove(link))
+        group.set("third", link)
+        XCTAssertEqual(group.count, 1)
+        XCTAssertTrue(group.tryGet("third") === link)
+    }
+
+    func testInlineOpeningCharactersCoverEveryUTF16CodeUnit() {
+        let parser = Markdown.InlineParser()
+        parser.openingCharacters = [Markdown.Char(0), Markdown.Char(0xD800), Markdown.Char(0xFFFF), "~"]
+        let parsers = Markdown.InlineParserList([parser])
+        let text = (0...65535).map { Markdown.Char(UInt16($0)) }
+        for i in text.indices {
+            XCTAssertEqual(parsers.indexOfOpeningCharacter(text, i, i), parser.openingCharacters!.contains(text[i]) ? i : -1)
+        }
+        XCTAssertEqual(parsers.indexOfOpeningCharacter(text, 1, 0), -1)
+    }
+
+    func testLiteralScanSkipsFailedAutolinkPrefixesAndPreservesOtherParsers() {
+        let text = Markdown.chars("heading markdown footnote table wwwx httpx mailtoz https://example.com")
+        let links = Markdown.AutoLinkParser()
+        let parsers = Markdown.InlineParserList([links])
+        let expected = text.count - "https://example.com".utf16.count
+        XCTAssertEqual(parsers.indexOfOpeningCharacter(text, 0, text.count - 1), expected)
+
+        let other = Markdown.InlineParser()
+        other.openingCharacters = ["h"]
+        let shared = Markdown.InlineParserList([links, other])
+        XCTAssertEqual(shared.indexOfOpeningCharacter(text, 0, text.count - 1), 0)
+        let global = Markdown.InlineParserList([links, Markdown.InlineParser()])
+        XCTAssertEqual(global.indexOfOpeningCharacter(text, 0, text.count - 1), 0)
+    }
+
     func testMarkdownToHwpxKeepsStructure() async throws {
         let folder = try MarkupTestSupport.newFolder()
         let hwpx = try await MarkupTestSupport.convert(try writeSample(folder), "hwpx")

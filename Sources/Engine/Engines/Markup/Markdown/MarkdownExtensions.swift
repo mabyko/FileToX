@@ -378,6 +378,7 @@ extension Markdown {
         /// Heading texts and their implicit link definitions, in insertion order (a later heading replaces the entry).
         final class HeadingDefinitions {
             var entries: [(String, HeadingLinkReferenceDefinition)] = []
+            var indices: [String: Int] = [:]
         }
 
         func setupPipeline(_ builder: PipelineBuilder) {
@@ -410,9 +411,10 @@ extension Markdown {
                 document.data[Self.headingsKey] = definitions
                 document.processInlinesBegin.append { processor, _ in Self.documentOnProcessInlinesBegin(processor) }
             }
-            if let index = definitions.entries.firstIndex(where: { $0.0 == text }) {
+            if let index = definitions.indices[text] {
                 definitions.entries[index].1 = definition
             } else {
+                definitions.indices[text] = definitions.entries.count
                 definitions.entries.append((text, definition))
             }
             heading.processInlinesEnd.append { processor, _ in Self.headingProcessInlinesEnd(processor) }
@@ -1461,19 +1463,18 @@ extension Markdown {
         override func match(_ processor: InlineProcessor, _ slice: inout Slice) -> Bool {
             let previous = slice.peekCharExtra(-1)
             if !previous.isWhitespaceOrZero && !validPreviousCharacters.contains(previous) { return false }
-            let mayBeValid: Bool
-            if slice.length < 4 {
-                mayBeValid = false
-            } else {
-                switch slice.currentChar {
-                case "h": mayBeValid = slice.match("https://") || slice.match("http://")
-                case "w": mayBeValid = slice.match("www.")
-                case "f": mayBeValid = slice.match("ftp://")
-                case "m": mayBeValid = slice.match("mailto:")
-                default: mayBeValid = slice.match("tel:")
-                }
+            return Self.hasSchemePrefix(slice) && matchCore(processor, &slice)
+        }
+
+        static func hasSchemePrefix(_ slice: Slice) -> Bool {
+            guard slice.length >= 4 else { return false }
+            switch slice.currentChar {
+            case "h": return slice.match("https://") || slice.match("http://")
+            case "w": return slice.match("www.")
+            case "f": return slice.match("ftp://")
+            case "m": return slice.match("mailto:")
+            default: return slice.match("tel:")
             }
-            return mayBeValid && matchCore(processor, &slice)
         }
 
         private func matchCore(_ processor: InlineProcessor, _ slice: inout Slice) -> Bool {

@@ -94,7 +94,7 @@ extension Markdown {
 
     /// Parses Markdown into a syntax tree (`Markdown.Parse`). Throws only for absurdly nested input, like Markdig.
     static func parse(_ markdown: String, _ pipeline: Pipeline) throws -> MarkdownDocument {
-        let text = Markdown.chars(markdown).map { $0 == .zero ? Char.replacement : $0 }
+        let text = markdown.utf16.map { $0 == 0 ? Char.replacement : Char($0) }
         let document = MarkdownDocument()
         document.isOpen = true
         let blockProcessor = BlockProcessor(document, pipeline.blockParsers, maximumNestingDepth: pipeline.maximumNestingDepth)

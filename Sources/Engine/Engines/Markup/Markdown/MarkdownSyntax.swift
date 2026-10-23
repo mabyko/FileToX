@@ -398,7 +398,7 @@ extension Markdown {
         }
 
         func set(_ label: String, _ link: LinkReferenceDefinition) {
-            if !contains(link) {
+            if link.parent !== self {
                 add(link)
                 guard index(of: label) == nil else { return }
                 if Self.isAscii(label) { asciiLabels[label.lowercased()] = links.count } else { otherLabels.append(links.count) }
