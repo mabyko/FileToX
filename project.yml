@@ -14,7 +14,10 @@ targets:
     type: application
     platform: macOS
     sources:
-      - Sources
+      - path: Sources
+        excludes:
+          - Engine
+          - EngineMain
       - path: Resources
         buildPhase: resources
     configFiles:
@@ -48,16 +51,90 @@ targets:
         LSUIElement: true
         NSHighResolutionCapable: true
         NSHumanReadableCopyright: "FileToX · Inspired by Filee"
+    dependencies:
+      - target: FileToXEngine
+        embed: true
+        codeSign: false
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
+  # The conversion engine (Sources/Engine), shared by the helper and its tests. Swift 5 mode: line-by-line port of C#.
+  FileToXEngineKit:
+    type: library.static
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - path: Sources/Engine
+        excludes:
+          - Resources
+    settings:
+      base:
+        PRODUCT_NAME: FileToXEngineKit
+        SWIFT_VERSION: "5.0"
+        ARCHS: $(NATIVE_ARCH_ACTUAL)
+        SKIP_INSTALL: YES
+  # The helper app the main app starts (Contents/Helpers/FileToXEngine.app), with the bundled rhwp and 7-Zip.
+  FileToXEngine:
+    type: application
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - Sources/EngineMain
+      - path: Sources/Engine/Resources
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: FileToXEngineKit
+      - sdk: libxml2.tbd
+      - sdk: libz.tbd
+    settings:
+      base:
+        PRODUCT_NAME: FileToXEngine
+        PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).enginehost
+        SWIFT_VERSION: "5.0"
+        ARCHS: $(NATIVE_ARCH_ACTUAL)
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Config/EngineHost.Info.plist
+        ENABLE_DEBUG_DYLIB: NO
+        SKIP_INSTALL: YES
     postBuildScripts:
-      - name: Build and embed conversion engine host
+      - name: Stage bundled engines (rhwp, 7-Zip)
         basedOnDependencyAnalysis: false
         script: |
-          case "$ARCHS" in
-            x86_64) engine_rid=osx-x64 ;;
-            arm64) engine_rid=osx-arm64 ;;
-            *) echo "Build one architecture at a time (ARCHS=arm64 or ARCHS=x86_64)." >&2; exit 1 ;;
-          esac
-          "$SRCROOT/Tools/build-engine-host.sh" --rid "$engine_rid" --configuration "$CONFIGURATION" --destination "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/FileToXEngine.app"
+          "$SRCROOT/Tools/stage-bundled-engines.sh"
+  FileToXEngineTests:
+    type: bundle.unit-test
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - Tests/Engine
+      - path: Sources/Engine/Resources
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: FileToXEngineKit
+      - target: FileToXEngine
+        embed: false
+        link: false
+      - sdk: libxml2.tbd
+      - sdk: libz.tbd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).enginetests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "5.0"
+        ARCHS: $(NATIVE_ARCH_ACTUAL)
   FileToXTests:
     type: bundle.unit-test
     platform: macOS
@@ -80,10 +157,13 @@ schemes:
     build:
       targets:
         FileToX: all
+        FileToXEngine: all
         FileToXTests: [test]
+        FileToXEngineTests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - FileToXTests
+        - FileToXEngineTests

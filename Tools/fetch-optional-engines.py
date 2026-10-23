@@ -86,8 +86,7 @@ def verified_optional_archive(name, component):
 
 
 def fetch(name, rid):
-    subprocess.run([sys.executable, str(ROOT / "Tools/verify-filee-vendor.py")], check=True)
-    manifest = json.loads((ROOT / "Vendor/Filee/src/Filee.Engines/Infrastructure/engines.json").read_text())
+    manifest = json.loads((ROOT / "Sources/Engine/Resources/engines.json").read_text())
     component = manifest["platforms"][rid]["components"][name]
     archive = verified_optional_archive(name, component)
     target = ROOT / "build/optional-engines" / rid / name
