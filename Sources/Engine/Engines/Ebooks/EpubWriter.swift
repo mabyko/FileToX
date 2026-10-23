@@ -5,7 +5,7 @@ enum EpubWriter {
     static func write(_ book: Book, _ outputPath: String, _ sourcePath: String, _ workFolder: String) throws {
         let title = book.displayTitle(sourcePath), language = book.displayLanguage()
         let package = EpubPackage(title, language, book.metadata), imageFolder = try EbookFiles.newFolder(workFolder, "epub-images")
-        let chapters = try XhtmlWriter.write(book.document, XhtmlOptions(splitChapters: true, chapterFile: { String(format: "ch%03d.xhtml", $0 + 1) }, imageSource: { package.addImage($0, imageFolder) }, epub: true))
+        let chapters = XhtmlWriter.write(book.document, XhtmlOptions(splitChapters: true, chapterFile: { String(format: "ch%03d.xhtml", $0 + 1) }, imageSource: { package.addImage($0, imageFolder) }, epub: true))
         var cover: String?
         if let file = book.metadata.coverImage, FileManager.default.fileExists(file) { cover = package.addImage(file, imageFolder, true) }
         if let cover, !HDocumentWalker.images(book.document).contains(where: { $0.path.lowercased() == book.metadata.coverImage?.lowercased() }) {

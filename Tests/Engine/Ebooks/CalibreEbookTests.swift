@@ -53,7 +53,7 @@ final class CalibreEbookTests: EbookTestCase {
         for format in ["azw3", "mobi"] {
             let kindle = try await convert(epub, "epub", format, Preset(), CalibreConverter())
             XCTAssertGreaterThan(try Data(contentsOf: URL(fileURLWithPath: kindle)).count, 1000)
-            let book = try MobiReader.readBook(kindle, folder), text = try PlainTextWriter.write(book.document)
+            let book = try MobiReader.readBook(kindle, folder), text = PlainTextWriter.write(book.document)
             XCTAssertEqual(book.metadata.title, "별빛 이야기"); XCTAssertTrue(book.metadata.authors.contains("김작가"))
             for expected in ["첫 번째 장", "밤하늘에 별이 반짝였다.", "두 번째 장", "주석 내용입니다.", "목록 둘"] { XCTAssertTrue(text.contains(expected), "\(format): \(expected)") }
             XCTAssertFalse(HDocumentWalker.images(book.document).isEmpty)
@@ -64,7 +64,7 @@ final class CalibreEbookTests: EbookTestCase {
     func testCalibreReadsAndWritesRareFormats() async throws {
         try useCalibre()
         let epub = try EbookBuilders.epub(folder), lit = try await convert(epub, "epub", "lit", Preset(), CalibreConverter())
-        let back = try await convert(lit, "lit", "epub", Preset(), CalibreConverter()), book = try EpubReader.readBook(back, folder), text = try PlainTextWriter.write(book.document)
+        let back = try await convert(lit, "lit", "epub", Preset(), CalibreConverter()), book = try EpubReader.readBook(back, folder), text = PlainTextWriter.write(book.document)
         XCTAssertTrue(text.contains("밤하늘에")); XCTAssertTrue(text.contains("주석 내용입니다."))
     }
 }

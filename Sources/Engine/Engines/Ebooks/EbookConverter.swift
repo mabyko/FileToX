@@ -59,7 +59,7 @@ public final class EbookConverter: Converter {
         case "txt": try (Data([0xEF, 0xBB, 0xBF]) + Data(PlainTextWriter.write(book.document).utf8)).write(to: URL(fileURLWithPath: output))
         case "html":
             let images = try EbookFiles.newFolder(work, "html-images"), failure = ImageFailure()
-            let pages = try XhtmlWriter.write(book.document, XhtmlOptions(imageSource: { path in
+            let pages = XhtmlWriter.write(book.document, XhtmlOptions(imageSource: { path in
                 do { return try dataUri(path, images) } catch { failure.error = error; return nil }
             }))
             if let error = failure.error { throw error }

@@ -128,7 +128,7 @@ final class EbookTests: EbookTestCase {
             let data = EbookBuilders.mobi(Data(source.utf8), [try EbookBuilders.picture(64, 32), try EbookBuilders.picture(100, 150)], EbookBuilders.MobiOptions(compression: compression, cover: 1, title: "Stormy Night", author: "E. Bulwer-Lytton"))
             let mobi = try save("book\(compression).mobi", data), epub = try await convert(mobi, "mobi", "epub"), package = try validEpub(epub)
             XCTAssertEqual(package.title, "Stormy Night"); XCTAssertEqual(package.authors, ["E. Bulwer-Lytton"]); XCTAssertEqual(package.images, 2); XCTAssertTrue(package.hasCover)
-            let book = try EpubReader.readBook(epub, folder), text = try PlainTextWriter.write(book.document)
+            let book = try EpubReader.readBook(epub, folder), text = PlainTextWriter.write(book.document)
             for expected in ["Chapter One", "dark and stormy night", "Ünïcödé text and 한글 too", "Chapter Two", "The note is here."] { XCTAssertTrue(text.contains(expected), "\(compression): \(expected)") }
             let all = inlines(book.document), link = try XCTUnwrap(all.compactMap { $0 as? HLink }.first)
             XCTAssertTrue(all.compactMap { $0 as? HBookmark }.contains { "#" + $0.name == link.target })
@@ -155,7 +155,7 @@ final class EbookTests: EbookTestCase {
         XCTAssertEqual(xml.root.descendants(ns + "book-title").first?.value, "별빛 이야기")
         XCTAssertEqual(xml.root.element(ns + "body")?.elements(ns + "section").count, 3)
         XCTAssertEqual(xml.root.descendants(ns + "binary").count, 2)
-        let book = try Fb2Reader.readBook(fb2, folder), text = try PlainTextWriter.write(book.document)
+        let book = try Fb2Reader.readBook(fb2, folder), text = PlainTextWriter.write(book.document)
         for expected in ["첫 번째 장", "밤하늘에 별이 반짝였다.", "주석 내용입니다.", "목록 하나"] { XCTAssertTrue(text.contains(expected), expected) }
         XCTAssertTrue(inlines(book.document).contains { ($0 as? HText).map { $0.text == "별" && $0.format.bold == true } == true })
     }
@@ -166,7 +166,7 @@ final class EbookTests: EbookTestCase {
         XCTAssertTrue(text.contains("주석 내용입니다."))
         let txtz = try await convert(source, "epub", "txtz"), book = try ZippedText.readTxtzBook(txtz, folder)
         XCTAssertEqual(book.metadata.title, "별빛 이야기"); XCTAssertEqual(HDocumentWalker.images(book.document).count, 1)
-        XCTAssertTrue(try PlainTextWriter.write(book.document).contains("밤하늘에"))
+        XCTAssertTrue(PlainTextWriter.write(book.document).contains("밤하늘에"))
     }
     func testEpubToHwpxPreservesChapterPageBreaks() async throws {
         let output = try await convert(EbookBuilders.epub(folder), "epub", "hwpx"), zip = try ZipReader(path: output)

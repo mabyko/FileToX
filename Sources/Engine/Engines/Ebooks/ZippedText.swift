@@ -18,13 +18,13 @@ enum ZippedText {
     }
     static func writeHtmlz(_ book: Book, _ outputPath: String, _ sourcePath: String, _ workFolder: String) throws {
         let title = book.displayTitle(sourcePath), language = book.displayLanguage(), images = ImageSet(try EbookFiles.newFolder(workFolder, "htmlz-images"))
-        let pages = try XhtmlWriter.write(book.document, XhtmlOptions(imageSource: images.add))
+        let pages = XhtmlWriter.write(book.document, XhtmlOptions(imageSource: images.add))
         guard pages.count == 1, let page = pages.first else { throw ConversionError("Sequence contains more than one element") }
         try save(outputPath, [("index.html", XhtmlWriter.page(title, page.body, language, "style.css", false)), ("style.css", XhtmlWriter.css), ("metadata.opf", try OpfPackage.metadataOnly(book.metadata, title, language))], images)
     }
     static func writeTxtz(_ book: Book, _ outputPath: String, _ sourcePath: String, _ workFolder: String) throws {
         let title = book.displayTitle(sourcePath), images = ImageSet(try EbookFiles.newFolder(workFolder, "txtz-images"))
-        let text = try MarkdownWriter.write(book.document, images.add)
+        let text = MarkdownWriter.write(book.document, images.add)
         try save(outputPath, [("index.txt", text), ("metadata.opf", try OpfPackage.metadataOnly(book.metadata, title, book.displayLanguage()))], images)
     }
     private static func extract(_ path: String, _ workFolder: String, _ prefix: String) throws -> String {

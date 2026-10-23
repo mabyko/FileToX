@@ -11,6 +11,7 @@ public enum EngineRegistry {
         // magick, pdfsharp, pdfium, rhwp, unhwp, markdown, spreadsheet, ooxml, hwpx-writer, archive, vector, icns,
         // font, docx-writer, pdf-text, email, ffmpeg, cad, ebook, pandoc, ghostscript, calibre, libreoffice.
         _ = environment
+        converters += [RhwpConverter(), UnhwpConverter(), HwpxConverter(), DocxWriterConverter()]
         converters.append(EbookConverter())
         converters.append(CalibreConverter())
         return converters
