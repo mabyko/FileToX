@@ -81,6 +81,9 @@ targets:
         link: true
       - package: libjxl
         link: true
+      - package: libjxl
+        product: brotli
+        link: true
     settings:
       base:
         PRODUCT_NAME: FileToXEngineKit
@@ -103,6 +106,8 @@ targets:
       - target: FileToXEngineKit
       - package: libwebp
       - package: libjxl
+      - package: libjxl
+        product: brotli
       - sdk: libxml2.tbd
       - sdk: libz.tbd
     settings:
@@ -142,6 +147,8 @@ targets:
         link: false
       - package: libwebp
       - package: libjxl
+      - package: libjxl
+        product: brotli
       - sdk: libxml2.tbd
       - sdk: libz.tbd
     settings:

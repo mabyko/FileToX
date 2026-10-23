@@ -35,7 +35,7 @@ with Host(manifest["host"], copies=manifest.get("copies"), scratch=manifest_path
     private func baseline(_ cases: [[String: Any]]) async throws -> [String: [String: Any]] {
         let host = "/Applications/FileToX.app/Contents/Helpers/FileToXEngine.app/Contents/MacOS/FileToXEngine"
         guard FileManager.default.fileExists(host) else { throw XCTSkip("installed C# baseline not found") }
-        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../..").standardized.path
+        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../..").standardized.path
         let tools = ProcessInfo.processInfo.environment["FILETOX_ENGINE_COMPARE_TOOLS"] ?? FilePath.combine(repo, "Tools/engine-compare")
         guard FileManager.default.fileExists(FilePath.combine(tools, "hostwire.py")) else { throw XCTSkip("comparison harness not merged; set FILETOX_ENGINE_COMPARE_TOOLS to its Tools/engine-compare folder") }
         let manifest = path("baseline-manifest.json"), results = path("baseline-results.json")

@@ -1,4 +1,4 @@
-// Temporary cross-group APIs. The integrator removes this file after merging their implementations.
+// Temporary cross-group APIs. Delete each stub when its implementation lands.
 import Foundation
 
 enum PandocAstReader {
@@ -14,15 +14,6 @@ enum PdfDocumentReader {
     static func readText(_ path: String) throws -> HDocument { throw ConversionError("not ported yet") }
     static func plainText(_ document: HDocument) throws -> String { throw ConversionError("not ported yet") }
 }
-enum XlsxReader { static func read(_ path: String) throws -> Workbook { throw ConversionError("not ported yet") } }
-enum CsvFormat {
-    static func read(_ path: String) throws -> Workbook { throw ConversionError("not ported yet") }
-    static func readTsv(_ path: String) throws -> Workbook { throw ConversionError("not ported yet") }
-}
-enum SpreadsheetConverter {
-    static func read(_ path: String, _ format: String) throws -> Workbook { throw ConversionError("not ported yet") }
-}
-
 struct HtmlReadOptions {
     var baseFolder: String
     var mediaFolder: String
