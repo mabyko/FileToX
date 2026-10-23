@@ -34,6 +34,9 @@ final class OutputPathResolverTests: XCTestCase {
         XCTAssertNotNil(OutputPathResolver.renameError("IMG_(")); XCTAssertNil(OutputPathResolver.renameError(""))
         XCTAssertEqual(OutputPathResolver.rename("IMG_0412","IMG_(","x"),"IMG_0412")
         XCTAssertEqual(OutputPathResolver.rename("IMG_0412",[.init(find:"img_",replace:"Photo "),.init(kind:.spacesToUnderscores)]),"Photo_0412")
+        XCTAssertEqual(OutputPathResolver.rename("a", "(a)(b)?", "last$+end"), "lastend")
+        XCTAssertEqual(OutputPathResolver.rename("ab", "(?<letter>a)(b)", "${letter}-$1-$2-$+"), "a-b-a-a")
+        XCTAssertEqual(OutputPathResolver.rename("a", "(?<letter>a)(b)?", "$1-$2-$+"), "-a-a")
         let bad = String(repeating:"a",count:50) + "!", start = Date()
         XCTAssertEqual(OutputPathResolver.rename(bad,"(a+)+$","x"),bad); XCTAssertLessThan(Date().timeIntervalSince(start),2)
     }

@@ -91,9 +91,33 @@ enum EngineRegex {
         }
         return timedOut ? nil : matches
     }
+    // .NET numbers unnamed captures first and named captures last; ICU numbers them in opening-parenthesis order.
+    private static func captureIndices(_ regex: NSRegularExpression) -> [Int] {
+        let chars = Array(regex.pattern)
+        var unnamed: [Int] = [], named: [Int] = [], index = 0, capture = 0, inClass = false
+        while index < chars.count {
+            let ch = chars[index]
+            if ch == "\\" { index += 2; continue }
+            if inClass { if ch == "]" { inClass = false }; index += 1; continue }
+            if ch == "[" { inClass = true; index += 1; continue }
+            if ch == "(" {
+                if index + 2 < chars.count && chars[index + 1] == "?" && chars[index + 2] == "#" {
+                    index += 3
+                    while index < chars.count && chars[index] != ")" { index += 1 }
+                } else if index + 1 >= chars.count || chars[index + 1] != "?" { capture += 1; unnamed.append(capture) }
+                else if index + 3 < chars.count && chars[index + 2] == "<" && chars[index + 3] != "=" && chars[index + 3] != "!" { capture += 1; named.append(capture) }
+            }
+            index += 1
+        }
+        return capture == regex.numberOfCaptureGroups ? [0] + unnamed + named : Array(0...regex.numberOfCaptureGroups)
+    }
     static func replacement(_ template: String, _ match: NSTextCheckingResult, _ input: String, _ regex: NSRegularExpression) -> String {
-        let text = input as NSString, chars = Array(template)
-        func group(_ n: Int) -> String { n < match.numberOfRanges && match.range(at: n).location != NSNotFound ? text.substring(with: match.range(at: n)) : "" }
+        let text = input as NSString, chars = Array(template), captures = captureIndices(regex)
+        func group(_ n: Int) -> String {
+            guard n < captures.count, captures[n] < match.numberOfRanges else { return "" }
+            let range = match.range(at: captures[n])
+            return range.location != NSNotFound ? text.substring(with: range) : ""
+        }
         var result = "", i = 0
         while i < chars.count {
             guard chars[i] == "$", i + 1 < chars.count else { result.append(chars[i]); i += 1; continue }
