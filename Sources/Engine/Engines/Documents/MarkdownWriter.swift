@@ -193,7 +193,8 @@ final class MarkdownWriter {
     private static let escapedBytes: Set<UInt8> = Set("\\`*_[]<>~^|=".utf8)
     private static func escape(_ text: String) -> String {
         // Per Character, like the original map/joined: a mark attached to one of these characters leaves it alone.
-        guard text.utf8.contains(where: { escapedBytes.contains($0) }) else { return text }
+        // Non-ASCII can canonically equal an escaped ASCII character (U+1FEF equals a backtick).
+        guard text.utf8.contains(where: { $0 >= 0x80 || escapedBytes.contains($0) }) else { return text }
         var result = ""
         result.reserveCapacity(text.utf8.count + 8)
         for character in text {

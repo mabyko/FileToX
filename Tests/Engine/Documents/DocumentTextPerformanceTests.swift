@@ -22,7 +22,8 @@ final class DocumentTextPerformanceTests: XCTestCase {
     }
 
     func testMarkdownEscapesCharactersIncludingCombiningMarks() {
-        for value in ["plain 한글 😀 e\u{301}", "\\`*_[]<>~^|=", "<\u{338}&\u{301}*\u{301}_\u{301}", "A🦊[B]e\u{301}"] {
+        for value in ["plain 한글 😀 e\u{301}", "\\`*_[]<>~^|=", "<\u{338}&\u{301}*\u{301}_\u{301}", "A🦊[B]e\u{301}",
+                      "\u{1FEF}", "text \u{1FEF} text", "\u{1FEF}*"] {
             let expected = value.map { "\\`*_[]<>~^|=".contains($0) ? "\\\($0)" : String($0) }.joined() + "\n"
             XCTAssertEqual(MarkdownWriter.write(document(DocumentFixtures.p(value))) { _ in nil }, expected, value)
         }
