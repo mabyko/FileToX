@@ -434,7 +434,8 @@ extension Markdown {
             set { closedFlag = newValue }
         }
 
-        var isContainerInline: Bool { self is ContainerInline }
+        /// Overridden by ContainerInline (cheaper than a cast in the per-character walk to the deepest container).
+        var isContainerInline: Bool { false }
 
         /// Inserts `next` right after this inline (Markdig's linking, including its parent bookkeeping).
         func insertAfter(_ next: Inline) {
@@ -547,6 +548,7 @@ extension Markdown {
 
     class ContainerInline: Inline {
         weak var parentBlock: LeafBlock?
+        override var isContainerInline: Bool { true }
         private(set) var firstChild: Inline?
         private(set) var lastChild: Inline?
 

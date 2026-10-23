@@ -109,7 +109,8 @@ extension Markdown {
             var text = leafBlock.lines.toSlice()
             leafBlock.lines = LineGroup()
             var previousStart = -1
-            while !text.isEmpty {
+            // Markdig throws as soon as a limit is exceeded; going on would only redo the deepening walk per character.
+            while !text.isEmpty && !document.depthLimitExceeded {
                 precondition(previousStart != text.start, "The parser is in an invalid infinite loop while parsing inlines")
                 previousStart = text.start
                 let c = text.currentChar
@@ -147,6 +148,7 @@ extension Markdown {
                 }
             }
             inline = nil
+            if document.depthLimitExceeded { return }
             postProcessInlines(0, root, nil, true)
             if let last = root.lastChild {
                 root.span.end = last.span.end
@@ -183,15 +185,12 @@ extension Markdown {
         private func findLastContainer() -> ContainerInline {
             var container = block!.inline!
             var depth = 0
-            while true {
-                if let last = container.lastChild as? ContainerInline, !last.isClosed {
-                    container = last
-                    depth += 1
-                } else {
-                    if depth > Markdown.largeDepthLimit { document.depthLimitExceeded = true }
-                    return container
-                }
+            while let last = container.lastChild, last.isContainerInline, !last.closedFlag {
+                container = unsafeDowncast(last, to: ContainerInline.self)
+                depth += 1
             }
+            if depth > Markdown.largeDepthLimit { document.depthLimitExceeded = true }
+            return container
         }
     }
 
