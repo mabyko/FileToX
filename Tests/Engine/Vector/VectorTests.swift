@@ -359,3 +359,32 @@ extension VectorTests {
         XCTAssertEqual(clip.elements().first?.attributeValue("transform"), "translate(1 0)")
     }
 }
+
+extension VectorTests {
+    func testPdfConvertsToEpsPerPageAndToPostScript() async throws {
+        let gs = GhostscriptConverter()
+        guard gs.status().isAvailable else { throw XCTSkip("Ghostscript is not installed.") }
+        let pdf = try await GraphicsTestKit.convert(PdfSharpConverter(), GraphicsTestKit.makeMultiPageTiff(dir, 3), to: "pdf")[0]
+        var range = Preset()
+        range.pdf.pageRange = "2-3"
+        let eps = try await GraphicsTestKit.convert(gs, pdf, to: "eps", preset: range)
+        let ps = try await GraphicsTestKit.convert(gs, pdf, to: "ps")
+        XCTAssertEqual(eps.map(FilePath.fileName).sorted(), ["pages_p2.eps", "pages_p3.eps"])
+        for file in eps { XCTAssertTrue(try String(contentsOfFile: file, encoding: .isoLatin1).hasPrefix("%!PS-Adobe-3.0 EPSF-3.0")) }
+        let postScript = try String(contentsOfFile: ps[0], encoding: .isoLatin1)
+        XCTAssertTrue(postScript.hasPrefix("%!PS-Adobe-3.0"))
+        XCTAssertEqual(postScript.components(separatedBy: "%%Page:").count - 1, 3)
+    }
+
+    func testSvgConvertsToEpsThroughPdf() async throws {
+        let gs = GhostscriptConverter()
+        guard gs.status().isAvailable else { throw XCTSkip("Ghostscript is not installed.") }
+        let pdf = try await GraphicsTestKit.convert(vector, try write("logo.svg", GraphicsBuilders.svg), to: "pdf")[0]
+        let eps = try String(contentsOfFile: try await GraphicsTestKit.convert(gs, pdf, to: "eps")[0], encoding: .isoLatin1)
+        XCTAssertTrue(eps.hasPrefix("%!PS-Adobe-3.0 EPSF-3.0"))
+        // eps2write crops to the drawn content, which lies inside the 300 × 150 pt page.
+        let box = try XCTUnwrap(eps.range(of: #"%%BoundingBox: (\d+) (\d+) (\d+) (\d+)"#, options: .regularExpression)).lowerBound
+        let numbers = eps[box...].split(separator: "\n")[0].split(separator: " ").dropFirst().compactMap { Int($0) }
+        XCTAssertTrue((0...30).contains(numbers[0]) && (0...40).contains(numbers[1]) && (250...300).contains(numbers[2]) && (120...150).contains(numbers[3]), "\(numbers)")
+    }
+}

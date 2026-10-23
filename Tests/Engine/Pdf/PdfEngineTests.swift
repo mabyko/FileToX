@@ -135,3 +135,23 @@ final class PdfEngineTests: XCTestCase {
         }
     }
 }
+
+extension PdfEngineTests {
+    func testRenderedPagesShowAnnotations() async throws {
+        let pdf = try await GraphicsTestKit.convert(pages, GraphicsTestKit.makeImage(dir, "a.png"), to: "pdf")[0]
+        let document = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: pdf)))
+        let page = try XCTUnwrap(document.page(at: 0))
+        // A filled square annotation in the lower right corner (page space, y up).
+        let square = PDFAnnotation(bounds: CGRect(x: 160, y: 10, width: 60, height: 40), forType: .square, withProperties: nil)
+        square.color = .blue
+        square.interiorColor = .blue
+        page.addAnnotation(square)
+        let annotated = FilePath.combine(dir, "annotated.pdf")
+        XCTAssertTrue(document.write(to: URL(fileURLWithPath: annotated)))
+
+        let png = try await GraphicsTestKit.convert(render, annotated, to: "png", preset: preset { $0.pdf.renderDpi = 72 })
+        let image = try GraphicsTestKit.decode(png[0]).frames[0]
+        let inside = GraphicsTestKit.pixel(image, 190, 120) // y from the top: 150 - 30
+        XCTAssertTrue(inside.b > 200 && inside.r < 60, "the annotation is drawn: \(inside)")
+    }
+}
