@@ -1,0 +1,6 @@
+module CPDFium {
+    header "fpdfview.h"
+    header "fpdf_formfill.h"
+    header "fpdf_text.h"
+    export *
+}
