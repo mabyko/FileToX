@@ -56,6 +56,7 @@ C# 변환 helper(`EngineHost` + Filee `Core`·`Engines`)를 Swift helper로 옮�
 - **대소문자 비교:** `OrdinalIgnoreCase`는 `caseInsensitiveCompare` 또는 `lowercased()` 비교로 옮긴다.
 - **정렬:** LINQ `OrderBy`는 안정 정렬이다. Swift `sorted(by:)`도 안정 정렬이지만 비교 조건을 Filee와 같게 둔다.
 - **정규식:** `NSRegularExpression`으로 같은 패턴을 쓴다. `RegexOptions.IgnoreCase` → `.caseInsensitive`.
+- **반올림·변환:** .NET `Math.Round`는 기본이 짝수 반올림이다(`.rounded(.toNearestOrEven)`). `(int)x`는 0 쪽으로 버린다(`Int(x)`). `int.TryParse`·`double.TryParse`는 앞뒤 공백과 부호를 허용하므로 Swift에서는 공백을 먼저 지운다. `Convert.ToInt32(s, 16)` → `Int(s, radix: 16)`.
 - **임시 파일:** `step.workDirectory` 아래에만 만든다. 입력 파일은 절대 바꾸지 않는다.
 
 ## 이미지 공용 API (이미지 엔진 담당)
@@ -74,6 +75,17 @@ enum ImageEncoder {
     static func write(_ frames: [ImageFrame], targetFormat: String, output: OutputAllocator, options: ImageOptions, sourcePath: String?) throws -> [String]
 }
 ```
+
+## 그룹 사이의 API
+
+다른 그룹이 쓰는 C# 메서드는 다음 규칙으로 Swift 이름을 정한다. 그러면 각 그룹이 따로 작업해도 이름이 맞는다.
+
+- 타입 이름은 그대로, 메서드는 lowerCamel(`DocxReader.Read` → `DocxReader.read`), 인자 순서·기본값·오버로드는 그대로 두고 인자 레이블은 생략(`_`)한다.
+- `Task<T>` → `async throws -> T`, `CancellationToken` 인자는 없앤다(작업 취소로 대신함). 파일을 읽거나 쓰거나 파싱하는 메서드는 `throws`다.
+- `out`/`ref` 인자는 반환 튜플로 바꾼다.
+- 예: `DocxReader.read(_ path: String, _ mediaFolder: String) throws -> HDocument`, `XlsxReader.read(_ path: String) throws -> Workbook`, `SpreadsheetConverter.read(_ path: String, _ format: String) throws -> Workbook`, `DocumentReaders.readAsync(_ path: String, _ format: String, _ workDirectory: String) async throws -> HDocument`, `PandocAstReader.read(_ ast: Any /* JSONSerialization 결과 */, _ resolveImage: (String) -> String?) throws -> HDocument`.
+
+아직 다른 그룹 브랜치에 없는 API를 써야 하면 자기 폴더의 `_PendingDependencies.swift`에 같은 이름의 임시 구현(`throw ConversionError("not ported yet")`)을 둔다. 통합할 때 이 파일을 지운다.
 
 ## 테스트와 검증
 
