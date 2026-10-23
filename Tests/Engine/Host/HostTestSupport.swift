@@ -11,9 +11,12 @@ final class HostChild {
     var invalid: Int { condition.withLock { invalidCount } }
     var messages: [[String: Any]] { condition.withLock { lines } }
     init(_ root: String, data: String? = nil, language: String? = "en", fake: Bool = true) throws {
+        // SwiftPM puts the executable next to the test bundle, Xcode the helper app.
         let products = Bundle(for: HostProtocolTests.self).bundleURL.deletingLastPathComponent()
-        let executable = products.appendingPathComponent("FileToXEngine")
-        guard FileManager.default.isExecutableFile(atPath:executable.path) else { throw ConversionError("Build FileToXEngine beside the test bundle: \(executable.path)") }
+        let candidates = [products.appendingPathComponent("FileToXEngine"), products.appendingPathComponent("FileToXEngine.app/Contents/MacOS/FileToXEngine")]
+        guard let executable = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }) else {
+            throw ConversionError("Build FileToXEngine beside the test bundle: \(products.path)")
+        }
         process.executableURL = executable
         process.arguments = ["--data",data ?? root + "/core","--engines",root + "/engines","--tmp",root + "/tmp"] + (fake ? ["--fake-engines"] : []) + (language.map { ["--lang",$0] } ?? [])
         process.standardInput = input; process.standardOutput = output; process.standardError = errors
