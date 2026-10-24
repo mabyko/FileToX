@@ -6,12 +6,15 @@ import Foundation
 /// references/resources, symbols, nested viewports, gradients, filters and transformed geometry.
 enum NativeSvgRasterizer {
     static func supports(_ data: Data) -> Bool {
+        let svgNamespace = "http://www.w3.org/2000/svg"
         guard data.count <= 8 * 1024 * 1024, let document = try? XDocument.load(data: data),
-              document.root.name.localName == "svg" else { return false }
+              document.root.name.localName == "svg", document.root.attributeValue("xmlns") == svgNamespace else { return false }
         let paint: Set<String> = ["fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "fill-rule", "id"]
         let colors: Set<String> = ["none", "black", "white", "red", "green", "blue"]
         for element in document.root.descendantsAndSelf() {
-            guard element.name.namespaceName == "http://www.w3.org/2000/svg" else { return false }
+            guard element.name.namespaceName == svgNamespace else { return false }
+            // Skia ignores prefixed element names; keep a consistent default namespace through serialization.
+            if let namespace = element.attributeValue("xmlns"), namespace != svgNamespace { return false }
             let allowed: Set<String>
             switch element.name.localName {
             case "svg" where element === document.root: allowed = paint.union(["width", "height", "viewBox", "version"])

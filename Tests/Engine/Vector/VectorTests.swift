@@ -513,6 +513,24 @@ extension VectorTests {
         }
     }
 
+    func testPrefixedSvgWithDifferentDefaultNamespaceKeepsCoreSvg() throws {
+        for source in [
+            "<svg xmlns='http://www.w3.org/2000/svg' xmlns:s='http://www.w3.org/2000/svg' width='20' height='20'><s:rect xmlns='urn:other' width='20' height='20' fill='red'/></svg>",
+            "<s:svg xmlns:s='http://www.w3.org/2000/svg' width='20' height='20'><s:rect width='20' height='20' fill='red'/></s:svg>",
+        ] {
+            XCTAssertFalse(NativeSvgRasterizer.supports(Data(source.utf8)))
+            let path = try write("prefixed.svg", source)
+            let drawing = try SvgRenderer.load(path)
+            XCTAssertNil(drawing.nativeData)
+            let image = try SvgRenderer.rasterize(drawing, scale: 1).image
+            let pixel = GraphicsTestKit.pixel(image, 10, 10)
+            XCTAssertEqual(pixel.r, 255)
+            XCTAssertEqual(pixel.g, 0)
+            XCTAssertEqual(pixel.b, 0)
+            XCTAssertEqual(pixel.a, 255)
+        }
+    }
+
     func testNativeSvgBridgeWritesRgbaAndRejectsInvalidInput() throws {
         let source = Data("<svg xmlns='http://www.w3.org/2000/svg' width='2' height='2'><rect width='2' height='2' fill='red'/></svg>".utf8)
         let context = try XCTUnwrap(CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 8,
