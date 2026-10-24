@@ -1357,6 +1357,12 @@ black/white regressions; strict differences remain recorded. Metadata forwarding
 ICC preservation and one-pixel JP2 quality control remain limited. OpenJPEG cancellation is checked during sample
 copy and stream callbacks; cancellation latency inside wavelet/entropy computation is not established.
 
+Independent Swift review found a profiled-CMYK regression in the new fixed-formula RGB conversion. Parent commit
+`d207c7a` restricts that formula to untagged images, reusing the existing profile predicate so tagged CMYK reaches
+Core Graphics' ICC-managed sRGB conversion. A profiled CMYK JPEG round-trip and saved PNG both match an independent
+CGContext exactly. **14 focused image/decoder tests passed**, with zero skips/failures; the second review found
+no further actionable issue. The worker's 135-case strict counts above precede this correction.
+
 Markdown optimization `eee334e` required two independent review fixes. Commit `4a7e491` restores both original
 weak parent references and removes parent teardown loops, preserving legacy mutation semantics and avoiding
 dangling-reference aborts. Three regressions cover insertion/removal, clear and block replacement. The final
@@ -1365,3 +1371,30 @@ zero failures**, **119,792 strict byte comparisons**, and **5,830 production TXT
 Evidence is under `build/resume/quality-final-20261024/markdown-*`. The worker's **0.63s TXT** timing predates these
 safety repairs and must not be quoted as final performance. Uniform production timings remain pending; neither
 the Markdown **0.60s** nor PDF **0.84s** target is accepted as achieved.
+
+### SVG implementation and reviewed fallback correction
+
+Signed worker commits `5789026` and `1d8b376` add SVG2 `href` normalization and a universal static Skia bridge.
+They are imported as `5e16c4c` and `ea7af73`; the package merge retains both COpenJPEG and CNativeSvg.
+The entire source DOM must satisfy a conservative primitive/attribute capability set: untransformed root/groups,
+rectangles and paths with supported literal paints. Text, CSS, resources/references, gradients, filters, transforms,
+nested viewports and unknown features retain CoreSVG. Vector PDF always retains CoreSVG. This preserves the
+existing vertical-text behavior; the broader experimental text normalizer was rejected because it regressed other
+CSS/combining-text cases.
+
+The native bridge borrows the CGContext's premultiplied RGBA buffer synchronously. Its implementation symbols are
+localized to avoid coupling to existing JPEG/WebP/Brotli libraries. Pinned arm64/x86_64 archives and matching
+headers come from public upstream releases; no installed C# binary is shipped. Source, archive and notice hashes,
+both-architecture C linkage and relocation evidence are recorded in the worker's
+`worktrees/t3-14e072f8/build/svg-integration/REPORT.md`.
+
+Worker integrated-host comparisons pass the original JP2/JPG/JXL gates at **72.30/67.73/61.85 dB** with unchanged
+PSNR/SSIM thresholds. Across **55 SVGs**, 42 unsupported drawings retain exact baseline pixels and the original
+thin-path fixture plus 12 primitive cases improve, with no negative quality deltas. Focused tests report **25 passes,
+three optional Ghostscript skips, zero failures**. These are scoped results, not a full 849-case acceptance.
+Independent review reproduced silently missing prefixed SVG children when serialization retained their prefix.
+Parent commit `38da38d` conservatively requires an explicit SVG default namespace and rejects descendant default
+namespace resets, retaining CoreSVG for both reviewed triggers. Tests check routing and opaque red rendered pixels;
+the second review found no further actionable issue. Final parent runtime and full-replay acceptance remain pending.
+An active native draw cannot be interrupted;
+cancellation discards its result before output commit. Actual Intel execution remains unavailable.
