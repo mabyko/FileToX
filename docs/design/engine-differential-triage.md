@@ -1286,3 +1286,47 @@ No 849-case full replay, Intel execution, new app UI run or distribution signing
 this follow-up. The installed reference app and original user data remain untouched. Pinned Calibre/LibreOffice
 validation copies are retained under ignored `build/optional-engines/osx-arm64/` for reproduction; they are not
 registered in user settings or embedded in the Release app. No global installation, push or deployment was made.
+
+## External CAD and certificate-build verification (2026-10-24)
+
+The verified TCR/JPEG follow-up is checkpointed in signed commits `c98dee0`, `4aa80a7` and `194b692`.
+Further image, SVG and performance implementation proceeds in separate worktrees. The checks below use the
+checkpoint implementation; final-source integration must repeat the affected checks and the full replay.
+
+### External DWG interoperability
+
+The official **ODA File Converter 27.9.0.0 arm64** was downloaded into the ignored verification folder, not
+installed in `/Applications` or bundled with FileToX. Its DMG SHA-256 is
+`c39ded1268205929b15c82b5211397d01ec1a26ca397567a6b4f9d93432ae599`; deep/strict signature verification passed.
+The [official download page](https://www.opendesign.com/guestfiles/oda_file_converter) and the executable's usage
+text establish the CLI inputs. Context7's ODA entry has no useful File Converter CLI coverage.
+
+Three fresh native DWGs from the sample, mixed-entity and Korean fixtures, plus two existing ACadSharp controls,
+were read and converted to ACAD2018 DXF with **audit disabled and recovery NONE**. All five succeeded. Reading
+each DWG and ODA DXF through the frozen native helper produced identical raster pixels (PSNR 99/SSIM 1, same
+geometry) and identical SVG text. All input bytes stayed unchanged. This closes the external-reader check for
+these fixtures, not every DWG object or actual AutoCAD behavior. The ODA child had separate HOME/config/cache,
+network access denied, and writes to the original user's Library/config/cache denied.
+
+Evidence: `build/resume/quality-final-20261024/oda/{REPORT.md,download.json,bundle-audit.json,convert-no-audit.json,`
+`readback-results.json,summary.json}`. The local ODA copy remains available to reproduce the checks.
+
+### Xcode certificate signing
+
+At checkpoint `194b692`, an **actual Xcode Release build** with the already configured team's existing development
+certificate succeeded inside the SDK-denying sandbox. This extends the earlier copy-signing-only proof. No bundle
+ID, configured team, keychain settings or registration was changed, and no provisioning update was requested.
+
+The main app, helper and PDFium all carry that certificate's Team ID. The helper has **no library-validation
+exception**, deep/strict signature verification passes, and a relocated copy passed **22 checks** (20 conversions,
+two selection checks) with repository/SDK/NuGet access denied and a clean PATH. The helper is arm64; PDFium contains
+arm64 and x86_64. This is development-certificate validation, not Developer ID distribution or notarization.
+
+Evidence: `build/resume/quality-final-20261024/{xcode-certificate-baseline-command.json,`
+`certificate-baseline-proof.json,certificate-baseline-relocated-smoke.log}`.
+
+No Developer ID certificate or local macOS VM tool was available. An explicit x86_64 execution probe returns
+`Bad CPU type in executable`; Rosetta was not installed by this task. Physical Intel execution, a separate SDK-free
+OS and notarization remain unavailable. Final cross-build verification is separate from actual Intel execution.
+The SDK probe confirms `.dotnet`/`.nuget` reads are denied and `dotnet` is absent from clean PATH; the guarded
+`/usr/local/share/dotnet` path is absent. Home SDK/NuGet content was not removed or modified.
