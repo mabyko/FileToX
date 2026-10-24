@@ -33,6 +33,23 @@ final class ImageQualityFollowupTests: XCTestCase {
         XCTAssertEqual(ImagePixels.bitmap(image).pixels, [0, 0, 0, 255, 0, 128, 128, 128, 0, 0, 0, 0])
     }
 
+    func testCmykaFlatteningUsesRgbSpaceAndBackground() throws {
+        let image = ImagePixels.make([0, 0, 0, 255, 255, 255, 0, 0, 0, 128, 0, 0, 0, 0, 0], 3, 1,
+                                     components: 5, space: CGColorSpaceCreateDeviceCMYK(), alpha: true, premultiplied: false)
+        for (background, expected) in [((UInt8(255), UInt8(255), UInt8(255)), [UInt8(0), 0, 0, 127, 255, 255, 255, 255, 255]),
+                                       ((UInt8(20), UInt8(40), UInt8(60)), [UInt8(0), 0, 0, 10, 148, 158, 20, 40, 60])] {
+            let flat = ImagePixels.flattened(image, background: background)
+            XCTAssertEqual(flat.colorSpace?.model, .rgb)
+            XCTAssertFalse(ImagePixels.hasAlpha(flat))
+            XCTAssertEqual(ImagePixels.straight(flat).samples, expected)
+        }
+        for target in ["jpg", "ppm"] {
+            let frame = try ImageEncoder.applyOptions(ImageFrame(image: image), ImageOptions(), targetFormat: target)
+            XCTAssertEqual(frame.image.colorSpace?.model, .rgb)
+            XCTAssertFalse(ImagePixels.hasAlpha(frame.image))
+        }
+    }
+
     func testCmykIconWriterForSquarePaddedAndLargeSources() throws {
         let folder = GraphicsTestKit.folder()
         defer { try? FileManager.default.removeItem(atPath: folder) }

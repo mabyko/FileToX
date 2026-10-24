@@ -270,7 +270,7 @@ enum ImagePixels {
     /// FlattenPixelInfo on straight samples, `Sa·p + q·(1 − Sa)` normalised, with clang's fused multiply-adds.
     static func flattened(_ image: CGImage, background: (red: UInt8, green: UInt8, blue: UInt8)) -> CGImage {
         guard hasAlpha(image) else { return image }
-        let (samples, channels, space) = straight(image)
+        let (samples, channels, space) = straight(image.colorSpace?.model == .cmyk ? rgb(image) : image)
         let fill = [Double(background.red), Double(background.green), Double(background.blue)]
         let gray = channels == 2, keepGray = gray && fill[0] == fill[1] && fill[1] == fill[2]
         let colors = keepGray ? 1 : 3
