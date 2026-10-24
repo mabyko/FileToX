@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import subprocess
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -17,7 +18,7 @@ from corpus import png, zip_write
 from fingerprint import fingerprint, native
 from compare import compare_case, compare_output
 from run import generate_cases
-from semantic import xml_text, document_text, generated_calibre_cover, rst_dimensions
+from semantic import xml_text, document_text, generated_calibre_cover, rst_dimensions, tcr_payload, document_image_references
 
 FAKE = '''#!{python} -I
 import json, os, pathlib, sys
@@ -57,6 +58,124 @@ class HarnessTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def tcr(self, payload, entries=None):
+        entries = entries or {}
+        return b"!!8-Bit!!" + b"".join(bytes([len(entries.get(i, bytes([i])))]) + entries.get(i, bytes([i])) for i in range(256)) + payload
+
+    def test_tcr_decodes_literal_dictionary_and_limits_expansion(self):
+        self.assertEqual(tcr_payload(self.tcr(b"\0\1", {0: b"hello", 1: "한글".encode()})), b"hello" + "한글".encode())
+        self.assertEqual(tcr_payload(self.tcr(b"\0", {0: b"\1", 1: b"recursive-would-be-wrong"})), b"\1")
+        for data in (b"bad header", b"!!8-Bit!!", b"!!8-Bit!!\x05ab", self.tcr(b"")[:100]):
+            with self.subTest(data=data[:20]), self.assertRaises(ValueError): tcr_payload(data)
+        with self.assertRaises(ValueError): tcr_payload(self.tcr(b"\0\0", {0: b"abc"}), limit=5)
+        with self.assertRaisesRegex(ValueError, "encoded input"):
+            tcr_payload(b"!!8-Bit!!" + bytes(256) + bytes(65536), limit=0)
+
+    def test_tcr_comparison_checks_decoded_bytes_in_older_binary_captures(self):
+        a, b = self.root / "a.tcr", self.root / "b.tcr"
+        a.write_bytes(self.tcr(b"AB")); b.write_bytes(self.tcr(b"\0", {0: b"AB"}))
+        thresholds = {"psnr": 30, "ssim": .95, "text": .95}
+        old_a, old_b = {"kind": "binary", "sha256": "a"}, {"kind": "binary", "sha256": "b"}
+        self.assertEqual(compare_output(old_a, old_b, a, b, thresholds)[0], "PASS")
+        self.assertEqual(fingerprint(b)["metadata"]["decodedSize"], 2)
+        b.write_bytes(self.tcr(b"ABFil"))
+        self.assertEqual(compare_output(old_a, old_b, a, b, thresholds)[0], "FAIL")
+        b.write_bytes(b"invalid")
+        self.assertEqual(compare_output(old_b, old_b, b, b, thresholds)[0], "FAIL")
+        self.assertEqual(compare_output(old_b, old_a, b, a, thresholds)[0], "WARN")
+
+    def test_document_reference_audit_is_local_bounded_and_explicit_about_coverage(self):
+        doc = self.root / "index.html"
+        (self.root / "a b.png").write_bytes(b"not-decoded-by-reference-audit")
+        html = '<img src="a%20b.png?v=1#part"><img src="missing.png"><img src="data:image/png;base64,AA=="><img src="https://example.invalid/a.png"><img src="../outside.png"><img src="http://[invalid">'
+        rows = document_image_references(html, ".html", doc, self.root)["references"]
+        self.assertEqual([r["state"] for r in rows], ["present", "missing", "embedded", "external-uninspected", "outside-run", "invalid-reference"])
+        self.assertEqual(document_image_references('<base href="https://example.invalid/"><img src="a.png">', ".html", doc, self.root)["references"][0]["state"], "base-url-uninspected")
+        self.assertEqual(document_image_references('![](<a%20b.png>)', ".md", doc, self.root)["references"][0]["state"], "present")
+        self.assertEqual(document_image_references('```\n![](missing.png)\n```', ".md", doc, self.root)["coverage"], "unsupported-markdown")
+
+    def test_missing_baseline_reference_diagnostic_does_not_waive_fail(self):
+        left, right = self.root / "left", self.root / "right"
+        left.mkdir(); right.mkdir()
+        (left / "index.html").write_text('<img src="missing.jpg">')
+        (right / "index.html").write_text('<img src="data:image/png;base64,AA==">')
+        def record(folder):
+            return {"id": "reference", "state": "completed", "engineHint": "test", "targetFormat": "html", "files": [],
+                    "outputs": [{"name": "index.html", "artifact": "index.html", "fingerprint": fingerprint(folder / "index.html")}]}
+        result = compare_case(record(left), record(right), left.resolve(), right.resolve(), {"psnr": 30, "ssim": .95, "text": .95})
+        self.assertEqual(result["status"], "FAIL")
+        refs = result["outputs"][0]["imageReferences"]
+        self.assertEqual(refs["baseline"]["references"][0]["state"], "missing")
+        self.assertEqual(refs["candidate"]["references"][0]["state"], "embedded")
+
+    def test_malformed_html_reference_diagnostic_does_not_abort_identical_capture(self):
+        folders = [self.root / "left", self.root / "right"]
+        records = []
+        for folder in folders:
+            folder.mkdir()
+            path = folder / "index.html"
+            path.write_text('<![invalid]><img src="missing.png">')
+            records.append({"id": "malformed", "state": "completed", "engineHint": "test", "targetFormat": "html", "files": [],
+                            "outputs": [{"name": path.name, "artifact": path.name, "fingerprint": fingerprint(path)}]})
+        result = compare_case(*records, *(p.resolve() for p in folders), {"psnr": 30, "ssim": .95, "text": .95})
+        self.assertEqual(result["status"], "PASS")
+        for exception in (AssertionError, NotImplementedError, ValueError):
+            with self.subTest(exception=exception), patch("semantic.HTMLParser.feed", side_effect=exception("parser unavailable")):
+                result = compare_case(*records, *(p.resolve() for p in folders), {"psnr": 30, "ssim": .95, "text": .95})
+            self.assertEqual(result["status"], "PASS")
+            self.assertEqual(result["outputs"][0]["imageReferences"]["baseline"]["coverage"], "unavailable")
+
+    def pdf(self, path, content, rotation=0, producer="test", width=20):
+        stream = content.encode()
+        objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                   f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} 20] /Rotate {rotation} /Resources << >> /Contents 4 0 R >>".encode(),
+                   f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream", f"<< /Producer ({producer}) >>".encode()]
+        data = bytearray(b"%PDF-1.4\n"); offsets = [0]
+        for i, obj in enumerate(objects, 1):
+            offsets.append(len(data)); data.extend(f"{i} 0 obj\n".encode() + obj + b"\nendobj\n")
+        xref = len(data); data.extend(f"xref\n0 {len(offsets)}\n0000000000 65535 f \n".encode())
+        for offset in offsets[1:]: data.extend(f"{offset:010} 00000 n \n".encode())
+        data.extend(f"trailer\n<< /Size {len(offsets)} /Root 1 0 R /Info 5 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+        path.write_bytes(data)
+
+    def test_pdf_raster_detects_textless_layout_loss_and_preserves_rotation(self):
+        a, b = self.root / "a.pdf", self.root / "b.pdf"
+        self.pdf(a, "1 0 0 rg 0 0 10 20 re f")
+        self.pdf(b, "0 0 1 rg 0 0 10 20 re f")
+        thresholds = {"psnr": 30, "ssim": .95, "text": .95}
+        self.assertEqual(compare_output(fingerprint(a), fingerprint(b), a, b, thresholds)[0], "WARN")
+        thresholds["pdfRender"] = True
+        self.assertEqual(compare_output(fingerprint(a), fingerprint(b), a, b, thresholds)[0], "FAIL")
+        self.pdf(b, "1 0 0 rg 10 0 10 20 re f", rotation=180, producer="other")
+        score = native("pdf-compare", a, b)
+        self.assertEqual(score["dpi"], 144)
+        self.assertEqual(score["frames"][0]["psnr"], 99)
+        self.assertEqual(compare_output(fingerprint(a), fingerprint(b), a, b, thresholds)[0], "WARN")
+        self.pdf(b, "", width=999999999)
+        with self.assertRaisesRegex(RuntimeError, "pixel limit"): native("pdf-compare", b, b)
+
+    def test_pdf_raster_timeout_is_an_unavailable_warning(self):
+        pdf = {"kind": "pdf", "sha256": "a", "metadata": {"pageCount": 1, "pages": [{"width": 20, "height": 20, "text": ""}]}}
+        other = copy.deepcopy(pdf); other["sha256"] = "b"
+        with patch("compare.native", side_effect=subprocess.TimeoutExpired(["inspect"], 60)):
+            status, reasons, _ = compare_output(pdf, other, self.root / "a.pdf", self.root / "b.pdf",
+                                                {"psnr": 30, "ssim": .95, "text": .95, "pdfRender": True})
+        self.assertEqual(status, "WARN")
+        self.assertIn("PDF raster comparison unavailable", reasons[0])
+
+    def test_report_limits_describe_selected_pdf_coverage(self):
+        folders = [self.root / "left", self.root / "right"]
+        for folder in folders:
+            folder.mkdir(); (folder / "run.json").write_text('{"results": []}'); (folder / "cases.json").write_text('[]')
+        for enabled in (False, True):
+            output = self.root / str(enabled)
+            args = [sys.executable, "-I", str(Path(__file__).with_name("compare.py")), *map(str, folders), "--out", str(output)]
+            if enabled: args.append("--pdf-render")
+            subprocess.run(args, check=True, capture_output=True)
+            limits = json.loads((output / "report.json").read_text())["limits"]
+            self.assertEqual("144 DPI" in limits, enabled)
+            self.assertEqual("geometry only" in limits, not enabled)
 
     def test_fast_finish_rpc_errors_and_clean_shutdown(self):
         log = self.root / "stderr.log"

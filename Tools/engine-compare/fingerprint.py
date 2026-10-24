@@ -11,6 +11,7 @@ import sys
 import unicodedata
 import zipfile
 import zlib
+from semantic import read_tcr_payload
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "build/engine-compare/bin/inspect"
@@ -182,7 +183,7 @@ def fingerprint(path, sevenzip=None):
     ext = path.suffix.lower().lstrip(".")
     kind = ("pdf" if head.startswith(b"%PDF") else "image" if ext in IMAGES else
             "media" if ext in MEDIA else "font" if ext in FONTS else
-            "archive" if ext in ARCHIVES else "zip" if zipfile.is_zipfile(path) else
+            "archive" if ext in ARCHIVES else "binary" if ext == "tcr" else "zip" if zipfile.is_zipfile(path) else
             "text" if ext in TEXT or ext == "svgz" else "binary")
     result["kind"] = kind
     try:
@@ -196,6 +197,10 @@ def fingerprint(path, sevenzip=None):
             result["text"] = normalized(decode(data))
         elif kind == "zip":
             result["metadata"] = zip_entries(path)
+        elif kind == "binary" and ext == "tcr":
+            payload = read_tcr_payload(path)
+            result["metadata"] = {"semanticType": "tcr", "decodedSize": len(payload),
+                                  "decodedSha256": hashlib.sha256(payload).hexdigest()}
         elif kind == "archive":
             if zipfile.is_zipfile(path):
                 result["metadata"] = zip_entries(path)

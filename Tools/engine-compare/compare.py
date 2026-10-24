@@ -6,14 +6,15 @@ from difflib import SequenceMatcher
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import zipfile
 from functools import lru_cache
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fingerprint import native, normalized, sha256, command
+from fingerprint import native, normalized, sha256, command, decode
 from hostwire import write_json
-from semantic import xml_text, document_text, tar_entries, generated_calibre_cover, rst_dimensions
+from semantic import xml_text, document_text, tar_entries, generated_calibre_cover, rst_dimensions, read_tcr_payload, document_image_references
 
 
 def ratio(a, b):
@@ -77,9 +78,23 @@ def media_packets(path):
 def compare_output(a, b, left, right, thresholds):
     reasons, metrics = [], {}
     if a["kind"] != b["kind"]: return "FAIL", ["Output type changed"], metrics
+    kind = a["kind"]
+    if kind == "binary" and left and right and left.suffix.lower() == right.suffix.lower() == ".tcr":
+        decoded, errors = {}, {}
+        for name, path in (("baseline", left), ("candidate", right)):
+            try: decoded[name] = read_tcr_payload(path)
+            except (OSError, ValueError) as error: errors[name] = str(error)
+        metrics["tcr"] = {"policy": "exact-decoded-bytes", "errors": errors,
+                          "decodedSizes": {k: len(v) for k, v in decoded.items()}}
+        if "candidate" in errors: return "FAIL", ["Candidate TCR is invalid: " + errors["candidate"]], metrics
+        if "baseline" in errors: return "WARN", ["Baseline TCR inspection unavailable: " + errors["baseline"]], metrics
+        equal = decoded["baseline"] == decoded["candidate"]
+        if not equal:
+            x, y = decoded["baseline"], decoded["candidate"]
+            metrics["tcr"]["firstDifferenceOffset"] = next((i for i, (a, b) in enumerate(zip(x, y)) if a != b), min(len(x), len(y)))
+        return ("PASS" if equal else "FAIL"), ([] if equal else ["TCR decoded payload bytes changed"]), metrics
     if a.get("sha256") and a["sha256"] == b.get("sha256"):
         return "PASS", [], metrics
-    kind = a["kind"]
     if kind == "directory":
         equal = entries_equal(a["entries"], b["entries"])
         return ("PASS" if equal else "FAIL"), ([] if equal else ["Extracted entry names/content changed"]), metrics
@@ -115,7 +130,16 @@ def compare_output(a, b, left, right, thresholds):
         metrics["pageTextRatios"] = scores
         if any(s < thresholds["text"] for s in scores):
             return "FAIL", ["PDF text similarity below threshold"], metrics
-        if not any(p["text"] for p in ma["pages"]):
+        if thresholds.get("pdfRender"):
+            try: metrics["raster"] = native("pdf-compare", left, right)
+            except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+                return "WARN", ["PDF raster comparison unavailable: " + str(error)], metrics
+            if not metrics["raster"].get("sameGeometry"):
+                return "FAIL", ["PDF raster geometry changed"], metrics
+            if picture_below_threshold(metrics["raster"], thresholds):
+                return "FAIL", ["PDF raster similarity below threshold"], metrics
+            reasons.append("PDF page content raster checked at 144 DPI; other bytes differ")
+        elif not any(p["text"] for p in ma["pages"]):
             reasons.append("PDF has no extractable text; comparison checks page geometry only")
     elif kind == "text":
         try:
@@ -228,7 +252,12 @@ def compare_case(a, b, left_root, right_root, thresholds):
                 record("FAIL", "Captured artifact hash mismatch: " + name)
         level, reasons, metrics = compare_output(x["fingerprint"], y["fingerprint"], left, right, thresholds)
         if level != "PASS": record(level, name + ": " + "; ".join(reasons))
-        output_results.append({"name": name, "status": level, "reasons": reasons, "metrics": metrics})
+        output_result = {"name": name, "status": level, "reasons": reasons, "metrics": metrics}
+        if left.suffix.lower() in (".html", ".htm", ".md"):
+            output_result["imageReferences"] = {
+                "baseline": document_image_references(decode(left.read_bytes()), left.suffix.lower(), left, left_root),
+                "candidate": document_image_references(decode(right.read_bytes()), right.suffix.lower(), right, right_root)}
+        output_results.append(output_result)
     if [(e["name"], e["sha256"]) for e in a.get("sidecars", [])] != [(e["name"], e["sha256"]) for e in b.get("sidecars", [])]:
         record("WARN", "Sidecar names/content differ; inspect captured artifacts")
     return {"id": a["id"], "status": status, "engineHint": a["engineHint"], "targetFormat": a["targetFormat"],
@@ -243,6 +272,7 @@ def main():
     parser.add_argument("--psnr", type=float, default=30)
     parser.add_argument("--ssim", type=float, default=0.95)
     parser.add_argument("--text-ratio", type=float, default=0.95)
+    parser.add_argument("--pdf-render", action="store_true", help="Also compare PDF media-box page content rendered at 144 DPI")
     args = parser.parse_args()
     roots = [args.baseline.resolve(strict=True), args.candidate.resolve(strict=True)]
     runs = [json.loads((r / "run.json").read_text()) for r in roots]
@@ -250,6 +280,7 @@ def main():
     if any(len(m) != len(run["results"]) for m, run in zip(mapped, runs)):
         raise ValueError("Duplicate case IDs in run")
     thresholds = {"psnr": args.psnr, "ssim": args.ssim, "text": args.text_ratio}
+    if args.pdf_render: thresholds["pdfRender"] = True
     results = []
     plans = [json.loads((r / "cases.json").read_text()) for r in roots]
     plan_maps = [{c["id"]: c for c in p} for p in plans]
@@ -271,9 +302,12 @@ def main():
         grouped = defaultdict(Counter)
         for result in results: grouped[result[field]][result["status"]] += 1
         summaries[field] = {k: dict(v) for k, v in sorted(grouped.items())}
+    pdf_limit = ("PDF media-box page content is raster-compared at 144 DPI; annotations are not rendered. " if args.pdf_render else
+                 "Empty-text PDFs compare geometry only. ")
     report = {"schema": 1, "baseline": str(roots[0]), "candidate": str(roots[1]), "thresholds": thresholds,
+              "inspectionPolicy": {"tcr": "exact-decoded-bytes", "imageReferences": "diagnostic-only", "pdfRasterDpi": 144 if args.pdf_render else None},
               "summary": dict(Counter(r["status"] for r in results)), "groups": summaries, "cases": results,
-              "limits": "Engine groups are inferred. Media compares structure/duration, fonts compare table tags/glyph count. Empty-text PDFs compare geometry. Unsupported decoders produce WARN when bytes differ."}
+              "limits": "Engine groups are inferred. Media compares structure/duration, fonts compare table tags/glyph count. " + pdf_limit + "Unsupported decoders produce WARN when bytes differ."}
     write_json(args.out / "report.json", report)
     lines = ["# Engine differential report", "", " · ".join(f"{k}: {v}" for k, v in sorted(report["summary"].items())),
              "", f"Thresholds: PSNR ≥ {args.psnr} dB; global luminance SSIM-like ≥ {args.ssim}; text ratio ≥ {args.text_ratio}; PDF sizes ±1pt; media duration ±2%.", "", report["limits"], ""]

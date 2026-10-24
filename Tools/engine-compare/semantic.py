@@ -8,6 +8,8 @@ import hashlib
 import re
 import tarfile
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
+from urllib.parse import unquote, urlsplit
 
 UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 DC = "http://purl.org/dc/elements/1.1/"
@@ -15,6 +17,86 @@ OPF = "http://www.idpf.org/2007/opf"
 NCX = "http://www.daisy.org/z3986/2005/ncx/"
 FB2 = "http://www.gribuser.ru/xml/fictionbook/2.0"
 ODF_META = "urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+TCR_INSPECTION_LIMIT = 64 * 1024 * 1024
+
+
+def tcr_payload(data, limit=TCR_INSPECTION_LIMIT):
+    """Read the literal TCR dictionary independently of the engine/Calibre compressor."""
+    if len(data) > limit + 9 + 256 * 256:
+        raise ValueError("TCR encoded input exceeds inspection limit")
+    if not data.startswith(b"!!8-Bit!!"):
+        raise ValueError("Invalid TCR signature")
+    at, entries = 9, []
+    for _ in range(256):
+        if at >= len(data): raise ValueError("Truncated TCR dictionary length")
+        size = data[at]
+        at += 1
+        if size > len(data) - at: raise ValueError("Truncated TCR dictionary entry")
+        entries.append(data[at:at + size])
+        at += size
+    payload = bytearray()
+    for code in memoryview(data)[at:]:
+        entry = entries[code]
+        if len(entry) > limit - len(payload): raise ValueError("TCR decoded payload exceeds inspection limit")
+        payload.extend(entry)
+    return bytes(payload)
+
+
+def read_tcr_payload(path):
+    with path.open("rb") as stream:
+        return tcr_payload(stream.read(TCR_INSPECTION_LIMIT + 9 + 256 * 256 + 1))
+
+
+def document_image_references(text, extension, document, root):
+    """Audit writer-emitted references without changing differential PASS/WARN/FAIL.
+
+    HTML img/src and an image-only Markdown document are covered; this is not a general Markdown parser.
+    Remote/fragment references are reported without fetching, and paths cannot escape the captured run.
+    """
+    references, base = [], []
+    if extension in (".html", ".htm"):
+        class Images(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == "img" and attrs.get("src"): references.append(attrs["src"])
+                if tag == "base" and attrs.get("href"): base.append(attrs["href"])
+        try: Images().feed(text)
+        except (AssertionError, NotImplementedError, ValueError) as error:
+            return {"coverage": "unavailable", "inspectionError": str(error), "references": []}
+        coverage = "html-img-src"
+    elif extension == ".md":
+        image = re.fullmatch(r"\s*!\[[^\]\n]*\]\((?:<([^>\n]+)>|([^\s)]+))\)\s*", text)
+        if not image: return {"coverage": "unsupported-markdown", "references": []}
+        references = [image[1] or image[2]]
+        coverage = "image-only-markdown"
+    else:
+        return {"coverage": "unsupported", "references": []}
+    result = []
+    for value in references:
+        entry = {"reference": value}
+        try: url = urlsplit(value)
+        except ValueError:
+            entry["state"] = "invalid-reference"
+            result.append(entry)
+            continue
+        if url.scheme == "data":
+            entry["reference"] = value.split(",", 1)[0][:128] + ",<embedded>"
+            entry["state"] = "embedded"
+        elif url.scheme or url.netloc: entry["state"] = "external-uninspected"
+        elif not url.path: entry["state"] = "fragment"
+        elif base: entry["state"] = "base-url-uninspected"
+        else:
+            try: target = (document.parent / unquote(url.path)).resolve()
+            except (OSError, RuntimeError, ValueError):
+                entry["state"] = "unreadable-reference"
+                result.append(entry)
+                continue
+            if not target.is_relative_to(root.resolve()): entry["state"] = "outside-run"
+            else:
+                entry["path"] = target.relative_to(root.resolve()).as_posix()
+                entry["state"] = "present" if target.is_file() else "missing"
+        result.append(entry)
+    return {"coverage": coverage, "references": result}
 
 
 def xml_text(text, name="", pictures=None):

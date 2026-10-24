@@ -59,6 +59,11 @@ python3 -I Tools/engine-compare/run.py --host "$CANDIDATE" --optional-root "$OPT
 python3 -I Tools/engine-compare/compare.py "$BASE/run-optional" build/engine-compare/candidate --out build/engine-compare/comparison
 ```
 
+Add `--pdf-render` for supplementary visual page-content checks at 144 DPI. The same PSNR/SSIM and 1pt page-size
+thresholds apply. Core Graphics renders the complete media box on white, with page rotation, up to 256 pages and
+16 million pixels/8192 pixels per page side. Rendering limits/timeouts produce explicit unavailable WARNs; pages
+are not silently sampled. PDF annotations are not rendered, and global SSIM is not full layout verification.
+
 For default-engine comparison, omit `--optional-root` and use `matrix-default.json`
 and `run-default/cases.json`. Optionally capture a candidate matrix with `matrix.py`
 and diff its JSON against the corresponding baseline matrix.
@@ -130,7 +135,20 @@ remain WARN. Pixel format and frame rate are checked alongside stream geometry.
 Unsupported binary books/documents remain WARN; this is not proof of content
 equivalence. A smaller output needs inspection or readback, even when WARN.
 
-Limits: global SSIM is not windowed SSIM. Empty-text PDFs compare geometry only;
+TCR is now inspected independently by decoding its literal 256-entry dictionary, with bounded encoded/decoded
+sizes. Decoded payloads must match exactly; different dictionary encodings with identical bytes PASS. A changed
+payload FAILs, including trailing characters or newlines; an invalid candidate FAILs and an unreadable/invalid
+baseline yields an unavailable WARN. This works from retained artifacts even when old fingerprints call them
+generic binary files. Reports include `inspectionPolicy`: these stronger TCR checks can change historical
+PASS/WARN/FAIL totals, so keep prior reports and compare policy versions before interpreting count changes.
+
+Each HTML/image-only-Markdown output also gets a diagnostic `imageReferences` audit for baseline and candidate.
+It reports local present/missing/outside-run references, embedded data, and unsupported external/base URLs without
+fetching resources. General Markdown syntax is explicitly unsupported. Malformed HTML yields an unavailable
+diagnostic. Reference diagnostics never waive or replace the normal comparison result: a missing baseline asset
+remains a strict FAIL where the original comparison fails. Data-URI payloads are not duplicated in this audit.
+
+Limits: global SSIM is not windowed SSIM. Without `--pdf-render`, empty-text PDFs compare geometry only;
 media checks structure rather than perceptual audio/video quality, and font
 metadata does not compare glyph outlines. Unsupported decoders explicitly WARN
 when bytes differ. Error detail strings are retained, but compared errors use
@@ -146,5 +164,7 @@ text, archive hashes, image geometry/scores, strict states, and capped-plan cove
 It also checks PAX/gzip volatility against real member loss, scoped XML metadata,
 embedded-image colour/geometry loss, inline picture extraction, TGA palette order,
 generated-cover guards, and strict media packet/timing comparisons.
+Further checks cover TCR coding equivalence/corruption/truncation/expansion limits, confined image references,
+version-independent malformed-HTML diagnostics, PDF raster color loss/rotation/limits, and render timeouts.
 Only tools are committed; corpus, native binaries, output artifacts and reports
 remain under ignored `build/`.

@@ -83,6 +83,23 @@ func imageInfo(_ path: String) throws -> [String: Any] {
     return ["frameCount": count, "frames": frames]
 }
 
+func pixelScores(_ p: [UInt8], _ q: [UInt8]) -> [String: Any] {
+    var square = 0.0, sx = 0.0, sy = 0.0, sxx = 0.0, syy = 0.0, sxy = 0.0
+    for i in 0..<p.count {
+        let d = Double(p[i]) - Double(q[i]); square += d * d
+    }
+    for i in stride(from: 0, to: p.count, by: 4) {
+        let x = 0.2126 * Double(p[i]) + 0.7152 * Double(p[i+1]) + 0.0722 * Double(p[i+2])
+        let y = 0.2126 * Double(q[i]) + 0.7152 * Double(q[i+1]) + 0.0722 * Double(q[i+2])
+        sx += x; sy += y; sxx += x*x; syy += y*y; sxy += x*y
+    }
+    let n = Double(p.count/4), mx = sx/n, my = sy/n
+    let vx = max(0, sxx/n-mx*mx), vy = max(0, syy/n-my*my), cov = sxy/n-mx*my
+    let ssim = ((2*mx*my+6.5025)*(2*cov+58.5225))/((mx*mx+my*my+6.5025)*(vx+vy+58.5225))
+    let mse = square / Double(p.count)
+    return ["psnr": mse == 0 ? 99.0 : 10*log10(65025/mse), "ssim": ssim]
+}
+
 func compareImages(_ left: String, _ right: String) throws -> [String: Any] {
     let a = try source(left), b = try source(right)
     let count = CGImageSourceGetCount(a)
@@ -91,20 +108,7 @@ func compareImages(_ left: String, _ right: String) throws -> [String: Any] {
     for index in 0..<count {
         let (w, h, p) = try pixels(a, index), (bw, bh, q) = try pixels(b, index)
         guard w == bw, h == bh else { return ["sameGeometry": false] }
-        var square = 0.0, sx = 0.0, sy = 0.0, sxx = 0.0, syy = 0.0, sxy = 0.0
-        for i in 0..<p.count {
-            let d = Double(p[i]) - Double(q[i]); square += d * d
-        }
-        for i in stride(from: 0, to: p.count, by: 4) {
-            let x = 0.2126 * Double(p[i]) + 0.7152 * Double(p[i+1]) + 0.0722 * Double(p[i+2])
-            let y = 0.2126 * Double(q[i]) + 0.7152 * Double(q[i+1]) + 0.0722 * Double(q[i+2])
-            sx += x; sy += y; sxx += x*x; syy += y*y; sxy += x*y
-        }
-        let n = Double(w*h), mx = sx/n, my = sy/n
-        let vx = max(0, sxx/n-mx*mx), vy = max(0, syy/n-my*my), cov = sxy/n-mx*my
-        let ssim = ((2*mx*my+6.5025)*(2*cov+58.5225))/((mx*mx+my*my+6.5025)*(vx+vy+58.5225))
-        let mse = square / Double(p.count)
-        scores.append(["psnr": mse == 0 ? 99.0 : 10*log10(65025/mse), "ssim": ssim])
+        scores.append(pixelScores(p, q))
     }
     return ["sameGeometry": true, "frames": scores]
 }
@@ -122,6 +126,55 @@ func pdfInfo(_ path: String) throws -> [String: Any] {
     return ["pageCount": doc.pageCount, "pages": pages]
 }
 
+func pdfSize(_ page: CGPDFPage) throws -> CGSize {
+    let box = page.getBoxRect(.mediaBox)
+    guard box.width.isFinite, box.height.isFinite, box.width > 0, box.height > 0 else {
+        throw InspectError.invalid("Invalid PDF media box")
+    }
+    let rotation = ((page.rotationAngle % 360) + 360) % 360
+    return rotation == 90 || rotation == 270 ? CGSize(width: box.height, height: box.width) : box.size
+}
+
+func pdfPixels(_ page: CGPDFPage, width: Int, height: Int) throws -> [UInt8] {
+    let size = try pdfSize(page)
+    var bytes = [UInt8](repeating: 0, count: width * height * 4)
+    let ok = bytes.withUnsafeMutableBytes { buffer -> Bool in
+        guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else { return false }
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let rect = CGRect(origin: .zero, size: CGSize(width: size.width * 2, height: size.height * 2))
+        context.concatenate(page.getDrawingTransform(.mediaBox, rect: rect, rotate: 0, preserveAspectRatio: true))
+        context.drawPDFPage(page)
+        return true
+    }
+    guard ok else { throw InspectError.invalid("Cannot create PDF pixel context") }
+    return bytes
+}
+
+func comparePdfs(_ left: String, _ right: String) throws -> [String: Any] {
+    guard let a = CGPDFDocument(URL(fileURLWithPath: left) as CFURL),
+          let b = CGPDFDocument(URL(fileURLWithPath: right) as CFURL) else {
+        throw InspectError.invalid("Core Graphics cannot read this PDF")
+    }
+    guard a.numberOfPages == b.numberOfPages else { return ["sameGeometry": false] }
+    guard (1...256).contains(a.numberOfPages) else { throw InspectError.invalid("PDF raster inspection exceeds 256-page limit") }
+    var scores = [[String: Any]]()
+    for index in 1...a.numberOfPages {
+        guard let x = a.page(at: index), let y = b.page(at: index) else { throw InspectError.invalid("Missing PDF page") }
+        let sx = try pdfSize(x), sy = try pdfSize(y)
+        guard abs(sx.width - sy.width) <= 1, abs(sx.height - sy.height) <= 1 else { return ["sameGeometry": false] }
+        let width = ceil(max(sx.width, sy.width) * 2), height = ceil(max(sx.height, sy.height) * 2)
+        guard width <= 8192, height <= 8192, width * height <= 16_000_000 else {
+            throw InspectError.invalid("PDF raster inspection exceeds page pixel limit")
+        }
+        scores.append(pixelScores(try pdfPixels(x, width: Int(width), height: Int(height)),
+                                  try pdfPixels(y, width: Int(width), height: Int(height))))
+    }
+    return ["sameGeometry": true, "frames": scores, "dpi": 144, "background": "white", "renderer": "CoreGraphics-mediaBox"]
+}
+
 do {
     let args = CommandLine.arguments
     guard args.count >= 3 else { throw InspectError.invalid("inspect image|pdf PATH; inspect compare LEFT RIGHT") }
@@ -133,6 +186,9 @@ do {
     case "compare":
         guard args.count == 4 else { throw InspectError.invalid("compare needs two paths") }
         result = try compareImages(args[2], args[3])
+    case "pdf-compare":
+        guard args.count == 4 else { throw InspectError.invalid("pdf-compare needs two paths") }
+        result = try comparePdfs(args[2], args[3])
     default: throw InspectError.invalid("Unknown inspection mode")
     }
     let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
