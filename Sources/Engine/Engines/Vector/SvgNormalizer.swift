@@ -101,10 +101,16 @@ enum SvgNormalizer {
             }
             if !leftover.isEmpty { element.setAttributeValue("style", leftover.joined(separator: ";")) }
             // Presentation attributes CoreSVG reads differently.
-            if let weight = element.attributeValue("font-weight") { element.setAttributeValue("font-weight", String(numericWeight(weight, parent: 400))) }
             if element.attributeValue("font") != nil {
                 for (name, value) in expand("font", element.attributeValue("font")!) { element.setAttributeValue(XName(name), value) }
                 element.setAttributeValue("font", nil)
+            }
+            if let weight = element.attributeValue("font-weight") {
+                // Resolve relative weights after the cascade, against the parent's computed weight.
+                var parent = element.parent
+                while let ancestor = parent, ancestor.attributeValue("font-weight") == nil { parent = ancestor.parent }
+                let inherited = parent?.attributeValue("font-weight").flatMap(Int.init) ?? 400
+                element.setAttributeValue("font-weight", String(numericWeight(weight, parent: inherited)))
             }
         }
     }
@@ -231,13 +237,11 @@ enum SvgNormalizer {
         return result
     }
 
-    /// Declarations as SVG properties: `font` expanded, keyword weights numeric.
+    /// Declarations as SVG properties, with the `font` shorthand expanded.
     private static func expand(_ property: String, _ value: String) -> [(String, String)] {
         switch property {
         case "font":
             return expandFont(value)
-        case "font-weight":
-            return [(property, String(numericWeight(value, parent: 400)))]
         default:
             return [(property, value)]
         }
@@ -245,6 +249,7 @@ enum SvgNormalizer {
 
     /// The CSS `font` shorthand: [style] [variant] [weight] [stretch] size[/line-height] family.
     private static func expandFont(_ value: String) -> [(String, String)] {
+        // shortcut: relative shorthand weights use 400, expand only after broader font-shorthand verification.
         var style = "normal", variant = "normal", weight = "400", stretch = "normal"
         var rest = value.trimmingCharacters(in: .whitespaces)
         while let space = rest.firstIndex(where: \.isWhitespace) {
@@ -267,10 +272,10 @@ enum SvgNormalizer {
 
     private static func numericWeight(_ value: String, parent: Int) -> Int {
         switch value.trimmingCharacters(in: .whitespaces).lowercased() {
-        case "normal": 400
+        case "normal", "initial": 400
         case "bold": 700
-        case "bolder": parent < 400 ? 400 : parent < 600 ? 700 : 900
-        case "lighter": parent < 600 ? 100 : parent < 800 ? 400 : 700
+        case "bolder": parent < 350 ? 400 : parent < 550 ? 700 : max(parent, 900)
+        case "lighter": parent < 100 ? parent : parent < 550 ? 100 : parent < 750 ? 400 : 700
         case let number: Int(number).map { min(max($0, 1), 1000) } ?? parent
         }
     }

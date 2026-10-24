@@ -612,3 +612,80 @@ extension VectorTests {
         }
     }
 }
+
+extension VectorTests {
+    func testRelativeFontWeightsUseComputedAncestorsAfterTheCascade() throws {
+        // CSS Fonts 4 §2.2.1, including interval boundaries and weights outside 100...900.
+        let weights = [(1, 400, 1), (99, 400, 99), (100, 400, 100), (349, 400, 100),
+                       (350, 700, 100), (549, 700, 100), (550, 900, 400), (749, 900, 400),
+                       (750, 900, 700), (899, 900, 700), (900, 900, 700), (1000, 1000, 700)]
+        for (parent, bolder, lighter) in weights {
+            for (relative, expected) in [("bolder", bolder), ("lighter", lighter), ("inherit", parent), ("initial", 400), ("unset", parent)] {
+                for declaration in ["font-weight='\(relative)'", "style='font-weight:\(relative)'",
+                                    "class='relative'"] {
+                    let source = Data("""
+                        <svg xmlns='http://www.w3.org/2000/svg' width='200' height='60'>
+                          <style>.parent {font-weight:\(parent)} .relative {font-weight:\(relative)}</style>
+                          <g class='parent'><g><g id='probe' \(declaration)/></g></g>
+                        </svg>
+                        """.utf8)
+                    let root = try XDocument.load(data: SvgNormalizer.normalize(source, baseDirectory: dir)).root
+                    let probe = try XCTUnwrap(root.descendants().first { $0.attributeValue("id") == "probe" })
+                    XCTAssertEqual(probe.attributeValue("font-weight"), String(expected), "\(parent), \(declaration)")
+                }
+            }
+        }
+    }
+
+    func testRelativeWeightsRespectTheCascadeAcrossRelativeAncestors() throws {
+        let source = Data("""
+            <svg xmlns='http://www.w3.org/2000/svg' width='200' height='60' font-weight='200'>
+              <style>g {font-weight:bolder} #probe {font-weight:lighter !important}</style>
+              <g><g><g id='probe' style='font-weight:bolder'/></g></g>
+            </svg>
+            """.utf8)
+        let root = try XDocument.load(data: SvgNormalizer.normalize(source, baseDirectory: dir)).root
+        XCTAssertEqual(root.descendants().map { $0.attributeValue("font-weight") }, ["400", "700", "400"])
+    }
+
+    func testRelativeWeightsKeepMixedTextAndVerticalFallbackSemantics() throws {
+        let bodies = [
+            "<text x='100' y='40' text-anchor='middle' font-weight='bolder'>A&#x301;<tspan font-weight='lighter'>bc</tspan>Def</text>",
+            "<style>g {writing-mode:tb} text {font-weight:bolder}</style><text x='100' y='5'>A&#x301;<tspan font-weight='lighter'>bc</tspan></text>",
+        ]
+        for body in bodies {
+            func normalize(_ content: String) -> Data {
+                SvgNormalizer.normalize(Data("<svg xmlns='http://www.w3.org/2000/svg' width='200' height='100'><g font-weight='200'>\(content)</g></svg>".utf8), baseDirectory: dir)
+            }
+            let absolute = body.replacingOccurrences(of: "bolder", with: "400").replacingOccurrences(of: "lighter", with: "100")
+            let relative = normalize(body)
+            XCTAssertEqual(relative, normalize(absolute))
+            let root = try XDocument.load(data: relative).root
+            if body.contains("writing-mode") {
+                XCTAssertEqual(root.descendants().filter { $0.name.localName == "text" }.count, 1)
+                XCTAssertTrue(root.descendants().contains { $0.name.localName == "tspan" })
+            } else {
+                XCTAssertFalse(root.descendants().contains { $0.name.localName == "text" })
+                XCTAssertTrue(root.descendants().contains { $0.name.localName == "path" })
+            }
+        }
+    }
+
+    func testRelativeWeightTextKeepsVectorPdfOutput() throws {
+        let source = try write("relative-weight.svg", """
+            <svg xmlns='http://www.w3.org/2000/svg' width='200' height='80'>
+              <g font-weight='200'><text x='10' y='50' font-size='40' font-family='Helvetica' font-weight='bolder'>Abc</text></g>
+            </svg>
+            """)
+        let drawing = try SvgRenderer.load(source)
+        XCTAssertNil(drawing.nativeData)
+        let pdf = FilePath.combine(dir, "relative-weight.pdf")
+        try SvgRenderer.writePdf(drawing, pdf, title: "relative weight", pdfA: false)
+        let page = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: pdf))?.page(at: 0)?.pageRef)
+        var content = "", images: [(Int, Int)] = [], fonts = 0
+        PdfContent.collect(page, &content, &images, &fonts)
+        XCTAssertTrue(images.isEmpty)
+        XCTAssertEqual(fonts, 0)
+        XCTAssertNotNil(content.range(of: #"\s(c|l|re)\s"#, options: .regularExpression))
+    }
+}
