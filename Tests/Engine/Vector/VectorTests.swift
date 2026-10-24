@@ -403,3 +403,86 @@ extension VectorTests {
         XCTAssertTrue((0...30).contains(numbers[0]) && (0...40).contains(numbers[1]) && (250...300).contains(numbers[2]) && (120...150).contains(numbers[3]), "\(numbers)")
     }
 }
+
+extension VectorTests {
+    func testSvg2HrefWinsBeforeReferenceSanitization() throws {
+        let xlink = XNamespace("http://www.w3.org/1999/xlink")
+        for href in ["#new", "", "https://example.invalid/image.png", "data:image/png;base64,AA=="] {
+            let source = Data("""
+                <svg xmlns="http://www.w3.org/2000/svg" xmlns:legacy="http://www.w3.org/1999/xlink" width="20" height="20">
+                  <image href="\(href)" legacy:href="#old" width="20" height="20"/>
+                </svg>
+                """.utf8)
+            let normalized = SvgNormalizer.normalize(source, baseDirectory: dir)
+            let root = try XDocument.load(data: normalized).root
+            let image = try XCTUnwrap(root.elements().first)
+            XCTAssertNil(image.attributeValue("href"))
+            let expected = href.isEmpty || href.hasPrefix("https:") ? nil : href
+            XCTAssertEqual(image.attributeValue(xlink + "href"), expected)
+            XCTAssertFalse(String(decoding: normalized, as: UTF8.self).contains("#old"))
+            if expected != nil {
+                XCTAssertTrue(String(decoding: normalized, as: UTF8.self).contains("xlink:href="))
+            }
+            let repeated = try XDocument.load(data: SvgNormalizer.normalize(normalized, baseDirectory: dir)).root
+            XCTAssertEqual(repeated.elements().first?.attributeValue(xlink + "href"), expected)
+            XCTAssertNil(repeated.elements().first?.attributeValue("href"))
+        }
+    }
+
+    func testSvg2FragmentReferencesAndXlinkAliasesRenderLikeLegacyReferences() async throws {
+        let bodies = [
+            "<defs><path id='s' d='M0 0L30 0L15 25Z'/></defs><use REF='#s' x='10' y='5' fill='red'/>",
+            "<defs><linearGradient id='p'><stop offset='0' stop-color='red'/><stop offset='1' stop-color='blue'/></linearGradient><linearGradient id='q' REF='#p'/></defs><rect width='60' height='40' fill='url(#q)'/>",
+            "<defs><pattern id='p' width='10' height='10' patternUnits='userSpaceOnUse'><circle cx='5' cy='5' r='3' fill='red'/></pattern><pattern id='q' REF='#p'/></defs><rect width='60' height='40' fill='url(#q)'/>",
+            "<defs><path id='p' d='M0 30L60 30'/></defs><text font-family='Helvetica' font-size='12'><textPath REF='#p'>Curve</textPath></text>",
+        ]
+        for (index, body) in bodies.enumerated() {
+            var reference: [UInt8]?
+            for spelling in ["xlink:href", "href", "legacy:href"] {
+                let source = try write("ref-\(index)-\(spelling.replacingOccurrences(of: ":", with: "-")).svg", """
+                    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:legacy="http://www.w3.org/1999/xlink" width="60" height="40">
+                    \(body.replacingOccurrences(of: "REF", with: spelling))
+                    </svg>
+                    """)
+                let output = try await GraphicsTestKit.convert(vector, source, to: "png")[0]
+                let bitmap = ImagePixels.bitmap(try GraphicsTestKit.decode(output).frames[0])
+                XCTAssertTrue(stride(from: 3, to: bitmap.pixels.count, by: 4).contains { bitmap.pixels[$0] > 0 })
+                if let reference { XCTAssertEqual(bitmap.pixels, reference, "fixture \(index), \(spelling)") }
+                else { reference = bitmap.pixels }
+            }
+        }
+    }
+
+    func testSvg2LocalImagesAreEmbeddedAndBlockedHrefDoesNotRestoreLegacyImage() async throws {
+        _ = try GraphicsTestKit.makeImage(dir, "local image.png", width: 20, height: 20)
+        let xlink = XNamespace("http://www.w3.org/1999/xlink")
+        for href in ["local%20image.png", "data:image/png;base64,AA==", "https://example.invalid/image.png"] {
+            let source = Data("""
+                <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20" height="20">
+                  <image href="\(href)" xlink:href="local%20image.png" width="20" height="20"/>
+                </svg>
+                """.utf8)
+            let root = try XDocument.load(data: SvgNormalizer.normalize(source, baseDirectory: dir)).root
+            let image = try XCTUnwrap(root.elements().first)
+            if href.hasPrefix("https:") { XCTAssertNil(image.attributeValue(xlink + "href")) }
+            else { XCTAssertTrue(image.attributeValue(xlink + "href")?.hasPrefix("data:image/png;base64,") == true) }
+        }
+    }
+}
+
+extension VectorTests {
+    func testXlinkCanonicalizationPreservesForeignNamespaces() throws {
+        let source = Data("""
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="urn:other" xmlns:ref="http://www.w3.org/1999/xlink" xmlns:f="urn:foreign" width="20" height="20">
+              <g xlink:custom="keep"/>
+              <use ref:href="#shape"/>
+              <f:item href="#foreign"/>
+            </svg>
+            """.utf8)
+        let root = try XDocument.load(data: SvgNormalizer.normalize(source, baseDirectory: dir)).root
+        XCTAssertEqual(root.elements()[0].attributeValue(XNamespace("urn:other") + "custom"), "keep")
+        XCTAssertEqual(root.elements()[1].attributeValue(XNamespace("http://www.w3.org/1999/xlink") + "href"), "#shape")
+        XCTAssertEqual(root.elements()[2].attributeValue("href"), "#foreign")
+        XCTAssertNil(root.elements()[2].attributeValue(XNamespace("http://www.w3.org/1999/xlink") + "href"))
+    }
+}

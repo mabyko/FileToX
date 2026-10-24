@@ -26,6 +26,7 @@ enum SvgNormalizer {
         guard let document = try? XDocument.load(data: data, preserveWhitespace: true), document.root.name.localName == "svg" else { return data }
         let root = document.root
         applyStyles(root)
+        canonicalizeReferences(root)
         resolveReferences(root, baseDirectory: baseDirectory)
         outlineText(root, inherited: TextStyle())
         return (try? document.data(indent: false)) ?? data
@@ -275,6 +276,26 @@ enum SvgNormalizer {
     }
 
     // ───────────────────────── Files ─────────────────────────
+
+    /// SVG2 href wins even when empty or blocked; SkSVGDOM also requires the literal xlink prefix.
+    private static func canonicalizeReferences(_ root: XElement) {
+        let elements = root.descendantsAndSelf()
+        guard elements.contains(where: { element in
+            element.name.namespaceName == svg.namespaceName &&
+                (element.attributeValue("href") != nil || element.attributeValue(xlink + "href") != nil)
+        }) else { return }
+        for element in elements {
+            for attribute in element.attributes where attribute.isNamespaceDeclaration &&
+                (attribute.value == xlink.namespaceName || attribute.name.localName == "xlink") {
+                element.setAttributeValue(attribute.name, nil)
+            }
+            if element.name.namespaceName == svg.namespaceName, let href = element.attributeValue("href") {
+                element.setAttributeValue(xlink + "href", href)
+                element.setAttributeValue("href", nil)
+            }
+        }
+        root.setAttributeValue(XNamespace.xmlns + "xlink", xlink.namespaceName)
+    }
 
     /// Embeds images next to the drawing (Svg.Skia read local files) and drops references to anything else.
     private static func resolveReferences(_ root: XElement, baseDirectory: String?) {
