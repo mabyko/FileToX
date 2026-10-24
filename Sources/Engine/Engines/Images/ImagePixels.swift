@@ -46,7 +46,8 @@ enum ImagePixels {
         let (w, h) = (image.width, image.height)
         let rect = CGRect(x: 0, y: 0, width: w, height: h)
         let model = image.colorSpace?.model
-        if model == .cmyk, let samples = cmykSamples(image) {
+        // Profiled CMYK must reach Core Graphics below for ICC-managed conversion to sRGB.
+        if model == .cmyk, !hasColorProfile(image), let samples = cmykSamples(image) {
             let channels = 4
             var pixels = [UInt8](repeating: 255, count: w * h * 4)
             for i in 0..<w * h {

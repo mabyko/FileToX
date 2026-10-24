@@ -54,6 +54,30 @@ final class ImageParityTests: XCTestCase {
         XCTAssertEqual(ImagePixels.straight(ImagePixels.grayscale(white)).samples, [255])
     }
 
+    func testProfiledCmykUsesColorManagedRgbConversion() throws {
+        let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.genericCMYK))
+        let inks: [UInt8] = [255, 0, 0, 0, 0, 255, 0, 0, 30, 80, 120, 90]
+        let source = ImagePixels.make(inks, 3, 1, components: 4, space: space, alpha: false)
+        let decoded = try read(JpegEncoder.encode(ImageFrame(image: source)))
+        XCTAssertTrue(ImagePixels.hasColorProfile(decoded.image))
+        var expected = [UInt8](repeating: 0, count: 12)
+        expected.withUnsafeMutableBytes { bytes in
+            let context = CGContext(data: bytes.baseAddress, width: 3, height: 1, bitsPerComponent: 8,
+                                    bytesPerRow: 12, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.interpolationQuality = .none
+            context.draw(decoded.image, in: CGRect(x: 0, y: 0, width: 3, height: 1))
+        }
+        XCTAssertEqual(ImagePixels.bitmap(decoded.image).pixels, expected)
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let path = FilePath.combine(folder, "profiled-cmyk.png")
+        try ImageEncoder.save([decoded], to: path, format: "png")
+        let png = try XCTUnwrap(GraphicsTestKit.decode(path).frames.first)
+        XCTAssertEqual(ImagePixels.bitmap(png).pixels, expected)
+        XCTAssertEqual(png.colorSpace?.model, .rgb)
+    }
+
     func testJpegCommentsAndIptcSurviveAndStripRemovesThem() throws {
         var frame = try read(Data(base64Encoded: Self.jpeg["metadata"]!)!)
         let markers = try XCTUnwrap(frame.properties[ImageFrame.jpegMarkersKey] as? Data)
