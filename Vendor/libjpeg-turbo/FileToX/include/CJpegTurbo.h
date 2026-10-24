@@ -42,6 +42,11 @@ typedef struct {
 /// nonzero and libjpeg's message in `message` (at least 200 bytes).
 int ftx_jpeg_encode(const FTXJpegImage *image, unsigned char **data, unsigned long *length, char *message);
 
+/// Decodes 8-bit RGB/grayscale JPEG with ImageMagick's defaults. Returns 0 with malloc'ed samples, 1 for
+/// unsupported/invalid input (use ImageIO), or 2 for cancellation. On failure *pixels is NULL.
+int ftx_jpeg_decode(const unsigned char *data, unsigned long length, unsigned char **pixels,
+                    int *width, int *height, int *components, int (*cancelled)(void));
+
 /// "3.2.0".
 const char *ftx_jpeg_version(void);
 

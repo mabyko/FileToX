@@ -2,7 +2,9 @@
 
 FileToX writes JPEG with libjpeg-turbo so the files are the same as the C# helper's, which wrote JPEG through
 Magick.NET 14.17.2 (ImageMagick 7.1.2-32 Q8, libjpeg-turbo 3.2.0). LibRaw uses the same library to decode lossy
-DNG and Kodak JPEG RAW files.
+DNG and Kodak JPEG RAW files. Ordinary 8-bit RGB/grayscale JPEG input also uses this library's decoder;
+ImageIO supplies its metadata, orientation, resolution and ICC space. CMYK/YCCK, higher precision and unsupported
+color-space models retain ImageIO decoding until their color handling has parity evidence.
 
 | | |
 | --- | --- |
@@ -24,7 +26,10 @@ DNG and Kodak JPEG RAW files.
   documentation).
 - `FileToX/`: FileToX's files, not part of libjpeg-turbo (MIT, like the rest of FileToX). `config/` holds the three
   headers CMake would generate from the templates for this build. `encode.c` repeats ImageMagick's
-  `coders/jpeg.c` `WriteJPEGImage_` with Filee's settings; `include/` is the Clang module `CJpegTurbo` Swift imports.
+  `coders/jpeg.c` `WriteJPEGImage_` with Filee's settings and exposes decoding with `ReadJPEGImage`'s libjpeg
+  defaults. Decoder cancellation covers progressive entropy input via the progress monitor and output scanlines;
+  errors/cancellation destroy the decoder and release its output buffer. `include/` is the Clang module
+  `CJpegTurbo` Swift imports.
 - `Package.swift`: the local Swift package that builds the `CJpegTurbo` library from these files.
 
 ## Build

@@ -1,9 +1,10 @@
 // Port of Filee.Engines/Magick/ImageReader.cs: reads source images, handling the formats that need more than "open
 // the file": camera RAW, layered PSD/PSB/XCF (one flattened picture instead of one file per layer) and Netpbm. Used by
-// every engine that takes a raster image as input. ImageIO decodes what ImageMagick decoded; camera RAW goes through
-// LibRaw like in ImageMagick; XCF and Netpbm have Swift readers. (Filee's EMF/WMF branch is Windows-only and not ported.)
+// every engine that takes a raster image as input. JPEG uses libjpeg-turbo with ImageIO metadata and fallback;
+// camera RAW uses LibRaw; other formats use ImageIO or Swift readers. (Filee's EMF/WMF branch is Windows-only.)
 
 import CLibRaw
+import CJpegTurbo
 import CoreGraphics
 import CoreImage
 import Foundation
@@ -52,7 +53,8 @@ enum ImageReader {
         }
         let fileProperties = CGImageSourceCopyProperties(source, nil) as? [CFString: Any] ?? [:]
         // ImageMagick's "jpeg:sampling-factor", which its JPEG writer reuses.
-        let sampling = format == "jpg" ? (try? Data(contentsOf: URL(fileURLWithPath: path))).flatMap(JpegEncoder.samplingFactors) : nil
+        let jpeg = format == "jpg" ? try Data(contentsOf: URL(fileURLWithPath: path)) : nil
+        let sampling = jpeg.flatMap(JpegEncoder.samplingFactors)
         let animation = (fileProperties[kCGImagePropertyGIFDictionary] ?? fileProperties[kCGImagePropertyWebPDictionary]) as? [CFString: Any]
         let loops = (animation?[kCGImagePropertyGIFLoopCount] ?? animation?[kCGImagePropertyWebPLoopCount]) as? NSNumber
 
@@ -68,10 +70,11 @@ enum ImageReader {
         var frames: [ImageFrame] = []
         for index in indexes {
             try Task.checkCancellation()
-            let options = [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
-            guard let image = CGImageSourceCreateImageAtIndex(source, index, options) else {
+            let options = [kCGImageSourceShouldCacheImmediately: jpeg == nil] as CFDictionary
+            guard var image = CGImageSourceCreateImageAtIndex(source, index, options) else {
                 throw ConversionError("Could not decode \(FilePath.fileName(path)).")
             }
+            if let jpeg { image = try decodeJpeg(jpeg, fallback: image) }
             let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
             var frame = ImageFrame(image: image, delay: delay(properties), dpi: storedDpi(properties, format: format))
             if let resolution = storedResolution(properties, format: format) { frame.properties[ImageFrame.resolutionKey] = resolution }
@@ -84,6 +87,29 @@ enum ImageReader {
             frames.append(frame)
         }
         return frames
+    }
+
+    /// Replace only pixels; ImageIO still supplies the ICC space, EXIF orientation, resolution and metadata.
+    static func decodeJpeg(_ data: Data, fallback: CGImage) throws -> CGImage {
+        try Task.checkCancellation()
+        var pixels: UnsafeMutablePointer<UInt8>?
+        var width: Int32 = 0, height: Int32 = 0, components: Int32 = 0
+        let status = data.withUnsafeBytes { bytes in
+            ftx_jpeg_decode(bytes.bindMemory(to: UInt8.self).baseAddress, UInt(data.count), &pixels,
+                            &width, &height, &components, { Task.isCancelled ? 1 : 0 })
+        }
+        if status == 2 { throw CancellationError() }
+        guard status == 0, let pixels else { return fallback }
+        let samples = Data(bytesNoCopy: pixels, count: Int(width) * Int(height) * Int(components), deallocator: .free)
+        try Task.checkCancellation()
+        let model: CGColorSpaceModel = components == 1 ? .monochrome : .rgb
+        guard let space = fallback.colorSpace, space.model == model,
+              let provider = CGDataProvider(data: samples as CFData),
+              let image = CGImage(width: Int(width), height: Int(height), bitsPerComponent: 8, bitsPerPixel: 8 * Int(components),
+                                  bytesPerRow: Int(width) * Int(components), space: space,
+                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue), provider: provider,
+                                  decode: nil, shouldInterpolate: false, intent: fallback.renderingIntent) else { return fallback }
+        return image
     }
 
     /// Camera RAW developed by LibRaw exactly as the C# helper's ImageMagick did (Filee: camera white balance, sRGB, AHD,

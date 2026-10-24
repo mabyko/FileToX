@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <limits.h>
 
 #include "jpeglib.h"
 #include "CJpegTurbo.h"
@@ -15,7 +17,22 @@
 typedef struct {
     struct jpeg_error_mgr pub;
     jmp_buf recovery;
+    volatile int cancelled;
 } ErrorManager;
+
+typedef struct {
+    struct jpeg_progress_mgr pub;
+    int (*cancelled)(void);
+} DecodeProgress;
+
+static void decode_progress(j_common_ptr info) {
+    DecodeProgress *progress = (DecodeProgress *)info->progress;
+    if (progress->cancelled && progress->cancelled()) {
+        ErrorManager *error = (ErrorManager *)info->err;
+        error->cancelled = 1;
+        longjmp(error->recovery, 1);
+    }
+}
 
 static void error_exit(j_common_ptr info) {
     longjmp(((ErrorManager *)info->err)->recovery, 1);
@@ -57,6 +74,62 @@ static void write_profiles(j_compress_ptr info, const FTXJpegImage *image) {
         write_marker(info, JPEG_APP0 + 1, xmp, length, 65533);
         free(xmp);
     }
+}
+
+int ftx_jpeg_decode(const unsigned char *data, unsigned long length, unsigned char **pixels,
+                    int *width, int *height, int *components, int (*cancelled)(void)) {
+    struct jpeg_decompress_struct info;
+    ErrorManager error;
+    DecodeProgress progress = {0};
+    error.cancelled = 0;
+    memset(&info, 0, sizeof info);
+    *pixels = NULL;
+    *width = *height = *components = 0;
+    info.err = jpeg_std_error(&error.pub);
+    error.pub.error_exit = error_exit;
+    error.pub.emit_message = emit_message;
+    if (setjmp(error.recovery)) {
+        jpeg_destroy_decompress(&info);
+        free(*pixels);
+        *pixels = NULL;
+        return error.cancelled ? 2 : 1;
+    }
+    jpeg_create_decompress(&info);
+    // Progressive entropy decoding happens inside start_decompress, before any output scanline exists.
+    progress.pub.progress_monitor = decode_progress;
+    progress.cancelled = cancelled;
+    info.progress = &progress.pub;
+    jpeg_mem_src(&info, data, length);
+    jpeg_read_header(&info, TRUE);
+    // shortcut: CMYK/YCCK and higher precision retain ImageIO's color handling; migrate only with parity evidence.
+    if (info.data_precision != 8 || (info.out_color_space != JCS_RGB && info.out_color_space != JCS_GRAYSCALE)) {
+        jpeg_destroy_decompress(&info);
+        return 1;
+    }
+    // ReadJPEGImage leaves DCT, fancy upsampling and block smoothing at libjpeg's defaults.
+    jpeg_start_decompress(&info);
+    size_t stride = (size_t)info.output_width * info.output_components;
+    if (!stride || !info.output_height || info.output_width > INT_MAX || info.output_height > INT_MAX ||
+        info.output_height > SIZE_MAX / stride || (*pixels = malloc(stride * info.output_height)) == NULL) {
+        jpeg_destroy_decompress(&info);
+        return 1;
+    }
+    while (info.output_scanline < info.output_height) {
+        if (cancelled && cancelled()) {
+            jpeg_destroy_decompress(&info);
+            free(*pixels);
+            *pixels = NULL;
+            return 2;
+        }
+        JSAMPROW row = *pixels + (size_t)info.output_scanline * stride;
+        jpeg_read_scanlines(&info, &row, 1);
+    }
+    jpeg_finish_decompress(&info);
+    *width = (int)info.output_width;
+    *height = (int)info.output_height;
+    *components = info.output_components;
+    jpeg_destroy_decompress(&info);
+    return 0;
 }
 
 int ftx_jpeg_encode(const FTXJpegImage *image, unsigned char **data, unsigned long *length, char *message) {
