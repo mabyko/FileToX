@@ -30,13 +30,14 @@ enum ImagePixels {
 
     /// Native JPEG CMYK has ordinary interleaved ink samples. Avoid a color-managed round trip.
     private static func cmykSamples(_ image: CGImage) -> [UInt8]? {
-        guard image.colorSpace?.model == .cmyk, image.bitsPerComponent == 8, image.bitsPerPixel == 32,
-              image.decode == nil, !hasAlpha(image), let data = image.dataProvider?.data as Data?,
+        let channels = hasAlpha(image) ? 5 : 4
+        guard image.colorSpace?.model == .cmyk, image.bitsPerComponent == 8, image.bitsPerPixel == channels * 8,
+              image.decode == nil, image.alphaInfo == .none || image.alphaInfo == .last, let data = image.dataProvider?.data as Data?,
               data.count >= image.bytesPerRow * image.height else { return nil }
-        var samples = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        var samples = [UInt8](repeating: 0, count: image.width * image.height * channels)
         for y in 0..<image.height {
-            samples.replaceSubrange(y * image.width * 4..<(y + 1) * image.width * 4,
-                                    with: data[y * image.bytesPerRow..<y * image.bytesPerRow + image.width * 4])
+            samples.replaceSubrange(y * image.width * channels..<(y + 1) * image.width * channels,
+                                    with: data[y * image.bytesPerRow..<y * image.bytesPerRow + image.width * channels])
         }
         return samples
     }
@@ -46,6 +47,7 @@ enum ImagePixels {
         let (w, h) = (image.width, image.height)
         let rect = CGRect(x: 0, y: 0, width: w, height: h)
         let model = image.colorSpace?.model
+        if model == .cmyk, hasAlpha(image), cmykSamples(image) != nil { return bitmap(rgb(image)) }
         // Profiled CMYK must reach Core Graphics below for ICC-managed conversion to sRGB.
         if model == .cmyk, !hasColorProfile(image), let samples = cmykSamples(image) {
             let channels = 4
@@ -93,6 +95,19 @@ enum ImagePixels {
             context.draw(image, in: rect)
         }
         return bitmap
+    }
+
+    /// Convert inks after resampling, retaining straight alpha and the source's ICC-managed colour conversion.
+    static func rgb(_ image: CGImage) -> CGImage {
+        guard image.colorSpace?.model == .cmyk, hasAlpha(image), let samples = cmykSamples(image) else {
+            return self.image(bitmap(image))
+        }
+        let count = image.width * image.height
+        var inks = [UInt8](repeating: 0, count: count * 4)
+        for i in 0..<count { for c in 0..<4 { inks[i * 4 + c] = samples[i * 5 + c] } }
+        var converted = bitmap(make(inks, image.width, image.height, components: 4, space: image.colorSpace!, alpha: false))
+        for i in 0..<count { converted.pixels[i * 4 + 3] = samples[i * 5 + 4] }
+        return make(converted.pixels, image.width, image.height, components: 4, space: converted.space, alpha: true, premultiplied: false)
     }
 
     /// The bitmap as an image: RGB(A), or gray(+alpha) when the source was grayscale.
@@ -198,7 +213,7 @@ enum ImagePixels {
     /// models except CMYK converted to sRGB), then straight alpha when it has alpha.
     static func straight(_ image: CGImage) -> (samples: [UInt8], channels: Int, space: CGColorSpace) {
         let model = image.colorSpace?.model
-        if let samples = cmykSamples(image) { return (samples, 4, image.colorSpace!) }
+        if let samples = cmykSamples(image) { return (samples, hasAlpha(image) ? 5 : 4, image.colorSpace!) }
         let space = model == .rgb || model == .monochrome || model == .cmyk ? image.colorSpace! : CGColorSpace(name: CGColorSpace.sRGB)!
         let channels = (model == .cmyk ? 4 : model == .monochrome ? 1 : 3) + (hasAlpha(image) ? 1 : 0)
         var format = vImage_CGImageFormat(bitsPerComponent: 8, bitsPerPixel: UInt32(8 * channels), colorSpace: Unmanaged.passUnretained(space),
@@ -277,7 +292,11 @@ enum ImagePixels {
 
     /// Centres the picture on a transparent `side` × `side` square (ImageMagick's Extent with Gravity.Center).
     static func padded(_ image: CGImage, side: Int) -> CGImage {
-        if image.colorSpace?.model == .cmyk { return padded(self.image(bitmap(image)), side: side) }
+        paddedInSourceSpace(image.colorSpace?.model == .cmyk ? rgb(image) : image, side: side)
+    }
+
+    /// ICO resizes the padded inks before converting to RGB; ICNS uses `padded` above.
+    static func paddedInSourceSpace(_ image: CGImage, side: Int) -> CGImage {
         // Straight samples, so semi-transparent pixels keep their exact values for the resizes that follow.
         let (samples, channels, space) = straight(image)
         let alpha = hasAlpha(image), outChannels = alpha ? channels : channels + 1

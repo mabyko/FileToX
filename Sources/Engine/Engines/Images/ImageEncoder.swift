@@ -234,7 +234,7 @@ enum ImageEncoder {
     /// `image.Write(path, format)` and `collection.Write(path, format)`.
     static func save(_ frames: [ImageFrame], to path: String, format: String) throws {
         var frames = frames
-        if !["jpg", "tiff"].contains(format) {
+        if !["jpg", "tiff", "ico"].contains(format) {
             for i in frames.indices where frames[i].image.colorSpace?.model == .cmyk {
                 // RGB-only writers must not attach a CMYK ICC profile to converted RGB samples.
                 frames[i].image = ImagePixels.image(ImagePixels.bitmap(frames[i].image))
@@ -389,7 +389,7 @@ enum ImageEncoder {
     private static func prepareIcon(_ frame: inout ImageFrame, _ options: ImageOptions) {
         var side = max(frame.image.width, frame.image.height)
         if frame.image.width != frame.image.height {
-            frame.image = ImagePixels.padded(frame.image, side: side)
+            frame.image = ImagePixels.paddedInSourceSpace(frame.image, side: side)
             frame.properties[ImageFrame.icoPaletteKey] = false
         }
         if side > 256 {
@@ -413,7 +413,8 @@ enum ImageEncoder {
         let icons = sizes.map { size in
             let filter = MagickResize.defaultFilter(from: (square.image.width, square.image.height), to: (size, size),
                                                    alpha: ImagePixels.hasAlpha(square.image), palette: palette)
-            return ImageFrame(image: ImagePixels.resized(square.image, width: size, height: size, filter: filter))
+            let image = ImagePixels.resized(square.image, width: size, height: size, filter: filter)
+            return ImageFrame(image: image.colorSpace?.model == .cmyk ? ImagePixels.rgb(image) : image)
         }
         try writeImageIO(icons, to: path, format: "ico")
     }
