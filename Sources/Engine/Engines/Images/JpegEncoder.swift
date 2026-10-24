@@ -17,19 +17,21 @@ enum JpegEncoder {
     }
 
     static func encode(_ frame: ImageFrame) throws -> Data {
-        let (straight, channels) = CodecPixels.straight(frame.image)
+        let native = frame.image.colorSpace?.model == .cmyk ? ImagePixels.straight(frame.image) : nil
+        let cmyk = native?.space.model == .cmyk
+        let (straight, channels) = native.map { ($0.samples, $0.channels) } ?? CodecPixels.straight(frame.image)
         let count = frame.image.width * frame.image.height
         // IdentifyImageCoderGray: exactly gray pictures are written with one component (the alpha channel, already
         // removed for JPEG targets, is never written).
-        var gray = true
+        var gray = !cmyk
         for i in 0..<count where straight[i * channels] != straight[i * channels + 1] || straight[i * channels + 1] != straight[i * channels + 2] {
             gray = false
             break
         }
-        let components = gray ? 1 : 3
+        let components = cmyk ? 4 : gray ? 1 : 3
         var samples = [UInt8](repeating: 0, count: count * components)
         for i in 0..<count {
-            for c in 0..<components { samples[i * components + c] = straight[i * channels + c] }
+            for c in 0..<components { samples[i * components + c] = cmyk ? 255 - straight[i * channels + c] : straight[i * channels + c] }
         }
 
         var image = FTXJpegImage()
@@ -50,6 +52,10 @@ enum JpegEncoder {
             image.v_sampling = (v[0], v[1], v[2], v[3])
         }
         var tagged = frame
+        if let native, !cmyk {
+            tagged.image = ImagePixels.make(native.samples, frame.image.width, frame.image.height, components: native.channels,
+                                            space: native.space, alpha: false)
+        }
         if let orientation = (frame.properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue, orientation != 1 {
             // ImageMagick keeps the orientation in the EXIF profile it writes.
             let existing = frame.properties[ImageFrame.metadataKey].flatMap { CFGetTypeID($0 as CFTypeRef) == CGImageMetadataGetTypeID() ? ($0 as! CGImageMetadata) : nil }
@@ -81,7 +87,17 @@ enum JpegEncoder {
         guard status == 0, let data else {
             throw ConversionError("JPEG encoding failed: " + String(cString: message))
         }
-        return Data(bytes: data, count: Int(length))
+        let encoded = Data(bytes: data, count: Int(length))
+        guard let markers = frame.properties[ImageFrame.jpegMarkersKey] as? Data else { return encoded }
+        // COM and Photoshop APP13 are opaque; keep their complete payloads instead of converting IPTC to XMP.
+        // JFIF requires APP0 immediately after SOI; Adobe's APP14 also stays in the encoder header.
+        var offset = 2
+        while offset + 4 <= encoded.count, encoded[offset] == 0xFF, [0xE0, 0xEE].contains(encoded[offset + 1]) {
+            let size = Int(encoded[offset + 2]) << 8 | Int(encoded[offset + 3])
+            guard size >= 2, size <= encoded.count - offset - 2 else { break }
+            offset += size + 2
+        }
+        return encoded.prefix(offset) + markers + encoded.dropFirst(offset)
     }
 
     /// A JPEG the way Skia's encoder wrote it for the C# helper (comic pages, PDF scans): 4:2:0, optimized Huffman
@@ -110,24 +126,50 @@ enum JpegEncoder {
         return blob.withUnsafeBytes { body($0.bindMemory(to: UInt8.self).baseAddress, blob.count) }
     }
 
-    /// Sampling factors in the first SOF marker of a JPEG file, [h, v] per component (nil when it isn't a JPEG).
-    static func samplingFactors(_ file: Data) -> [Int]? {
+    /// COM and Photoshop APP13, including multipart resources and markers between progressive scans.
+    static func preservedMarkers(_ file: Data) -> Data {
+        var result = Data()
+        for (marker, payload) in segments(file) where marker == 0xFE ||
+            (marker == 0xED && payload.starts(with: Data("Photoshop 3.0\0".utf8))) {
+            let length = payload.count + 2
+            result.append(contentsOf: [0xFF, marker, UInt8(length >> 8), UInt8(length & 255)])
+            result.append(payload)
+        }
+        return result
+    }
+
+    /// JPEG marker payloads, with entropy stuffing/restarts skipped. Truncated segments are never sliced.
+    static func segments(_ file: Data) -> [(UInt8, Data)] {
         let bytes = [UInt8](file)
-        guard bytes.count > 4, bytes[0] == 0xFF, bytes[1] == 0xD8 else { return nil }
+        guard bytes.count >= 2, bytes[0] == 0xFF, bytes[1] == 0xD8 else { return [] }
+        var result: [(UInt8, Data)] = []
         var i = 2
-        while i + 4 <= bytes.count, bytes[i] == 0xFF {
-            let marker = bytes[i + 1]
-            if marker == 0xFF { i += 1; continue } // fill byte
-            let length = Int(bytes[i + 2]) << 8 | Int(bytes[i + 3])
-            // SOF0…SOF15 except DHT (C4), JPG (C8) and DAC (CC).
-            if (0xC0...0xCF).contains(marker) && ![0xC4, 0xC8, 0xCC].contains(marker) {
-                guard i + 10 <= bytes.count else { return nil }
-                let components = Int(bytes[i + 9])
-                guard i + 10 + 3 * components <= bytes.count else { return nil }
-                return (0..<components).flatMap { c in [Int(bytes[i + 11 + 3 * c] >> 4), Int(bytes[i + 11 + 3 * c] & 15)] }
-            }
-            if marker == 0xDA || length < 2 { return nil }
-            i += 2 + length
+        while i < bytes.count {
+            guard bytes[i] == 0xFF else { i += 1; continue }
+            i += 1
+            while i < bytes.count && bytes[i] == 0xFF { i += 1 }
+            guard i < bytes.count else { break }
+            let marker = bytes[i]
+            i += 1
+            if marker == 0xD9 { break }
+            if marker == 0 || marker == 1 || (0xD0...0xD8).contains(marker) { continue }
+            guard i + 2 <= bytes.count else { break }
+            let length = Int(bytes[i]) << 8 | Int(bytes[i + 1])
+            guard length >= 2, length <= bytes.count - i else { break }
+            result.append((marker, Data(bytes[i + 2..<i + length])))
+            i += length
+        }
+        return result
+    }
+
+    /// Sampling factors in the first SOF marker: [h, v] per component.
+    static func samplingFactors(_ file: Data) -> [Int]? {
+        for (marker, data) in segments(file) where (0xC0...0xCF).contains(marker) && ![0xC4, 0xC8, 0xCC].contains(marker) {
+            let bytes = [UInt8](data)
+            guard bytes.count >= 6 else { return nil }
+            let components = Int(bytes[5])
+            guard bytes.count >= 6 + 3 * components else { return nil }
+            return (0..<components).flatMap { [Int(bytes[7 + 3 * $0] >> 4), Int(bytes[7 + 3 * $0] & 15)] }
         }
         return nil
     }

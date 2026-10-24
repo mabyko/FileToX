@@ -55,6 +55,7 @@ enum ImageReader {
         // ImageMagick's "jpeg:sampling-factor", which its JPEG writer reuses.
         let jpeg = format == "jpg" ? try Data(contentsOf: URL(fileURLWithPath: path)) : nil
         let sampling = jpeg.flatMap(JpegEncoder.samplingFactors)
+        let markers = jpeg.map(JpegEncoder.preservedMarkers)
         let animation = (fileProperties[kCGImagePropertyGIFDictionary] ?? fileProperties[kCGImagePropertyWebPDictionary]) as? [CFString: Any]
         let loops = (animation?[kCGImagePropertyGIFLoopCount] ?? animation?[kCGImagePropertyWebPLoopCount]) as? NSNumber
 
@@ -78,7 +79,12 @@ enum ImageReader {
             let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
             var frame = ImageFrame(image: image, delay: delay(properties), dpi: storedDpi(properties, format: format))
             if let resolution = storedResolution(properties, format: format) { frame.properties[ImageFrame.resolutionKey] = resolution }
+            if format == "gif" { frame.properties[ImageFrame.icoPaletteKey] = true }
+            if image.colorSpace?.model == .monochrome && !["jpg", "png", "bmp"].contains(format) {
+                frame.properties[ImageFrame.icoPaletteKey] = false
+            }
             if let sampling { frame.properties[ImageFrame.jpegSamplingKey] = sampling }
+            if let markers, !markers.isEmpty { frame.properties[ImageFrame.jpegMarkersKey] = markers }
             if let orientation = properties[kCGImagePropertyOrientation] as? NSNumber, orientation.intValue != 1 {
                 frame.properties[kCGImagePropertyOrientation] = orientation.intValue
             }
@@ -102,7 +108,7 @@ enum ImageReader {
         guard status == 0, let pixels else { return fallback }
         let samples = Data(bytesNoCopy: pixels, count: Int(width) * Int(height) * Int(components), deallocator: .free)
         try Task.checkCancellation()
-        let model: CGColorSpaceModel = components == 1 ? .monochrome : .rgb
+        let model: CGColorSpaceModel = components == 4 ? .cmyk : components == 1 ? .monochrome : .rgb
         guard let space = fallback.colorSpace, space.model == model,
               let provider = CGDataProvider(data: samples as CFData),
               let image = CGImage(width: Int(width), height: Int(height), bitsPerComponent: 8, bitsPerPixel: 8 * Int(components),

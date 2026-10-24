@@ -101,8 +101,8 @@ int ftx_jpeg_decode(const unsigned char *data, unsigned long length, unsigned ch
     info.progress = &progress.pub;
     jpeg_mem_src(&info, data, length);
     jpeg_read_header(&info, TRUE);
-    // shortcut: CMYK/YCCK and higher precision retain ImageIO's color handling; migrate only with parity evidence.
-    if (info.data_precision != 8 || (info.out_color_space != JCS_RGB && info.out_color_space != JCS_GRAYSCALE)) {
+    // Higher precision retains ImageIO; libjpeg exposes both CMYK and YCCK as four CMYK samples.
+    if (info.data_precision != 8 || (info.out_color_space != JCS_RGB && info.out_color_space != JCS_GRAYSCALE && info.out_color_space != JCS_CMYK)) {
         jpeg_destroy_decompress(&info);
         return 1;
     }
@@ -123,6 +123,9 @@ int ftx_jpeg_decode(const unsigned char *data, unsigned long length, unsigned ch
         }
         JSAMPROW row = *pixels + (size_t)info.output_scanline * stride;
         jpeg_read_scanlines(&info, &row, 1);
+        // Adobe JPEG stores inverted CMYK (including YCCK); CGImage holds conventional ink amounts.
+        if (info.out_color_space == JCS_CMYK && info.saw_Adobe_marker)
+            for (size_t i = 0; i < stride; i++) row[i] = 255 - row[i];
     }
     jpeg_finish_decompress(&info);
     *width = (int)info.output_width;
@@ -152,10 +155,11 @@ int ftx_jpeg_encode(const FTXJpegImage *image, unsigned char **data, unsigned lo
     jpeg_mem_dest(&info, data, length);
     info.image_width = (JDIMENSION)image->width;
     info.image_height = (JDIMENSION)image->height;
-    info.input_components = image->components == 1 && !image->skia ? 1 : 3;
-    info.in_color_space = info.input_components == 1 ? JCS_GRAYSCALE : JCS_RGB;
+    info.input_components = image->skia ? 3 : image->components;
+    info.in_color_space = info.input_components == 4 ? JCS_CMYK : info.input_components == 1 ? JCS_GRAYSCALE : JCS_RGB;
     info.data_precision = 8;
     jpeg_set_defaults(&info);
+    if (info.in_color_space == JCS_CMYK) jpeg_set_colorspace(&info, JCS_YCCK);
     if (image->skia) {
         // SkJpegEncoderMgr::initializeRGB: defaults (4:2:0, JDCT_ISLOW, JFIF 1x1 with no unit), optimize_coding,
         // jpeg_set_quality(quality, TRUE). Skia feeds RGBA/BGRA; libjpeg-turbo converts those like RGB.

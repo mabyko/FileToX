@@ -8,7 +8,7 @@
 
 /// What ImageMagick knew about the picture when it wrote it.
 typedef struct {
-    /// width × height × components 8-bit samples, rows top to bottom: 1 = gray, 3 = RGB.
+    /// width × height × components 8-bit samples, rows top to bottom: 1 = gray, 3 = RGB, 4 = Adobe-inverted CMYK.
     const unsigned char *pixels;
     int width;
     int height;
@@ -42,7 +42,7 @@ typedef struct {
 /// nonzero and libjpeg's message in `message` (at least 200 bytes).
 int ftx_jpeg_encode(const FTXJpegImage *image, unsigned char **data, unsigned long *length, char *message);
 
-/// Decodes 8-bit RGB/grayscale JPEG with ImageMagick's defaults. Returns 0 with malloc'ed samples, 1 for
+/// Decodes 8-bit RGB/grayscale/CMYK JPEG (conventional CMYK ink samples) with ImageMagick's defaults. Returns 0 with malloc'ed samples, 1 for
 /// unsupported/invalid input (use ImageIO), or 2 for cancellation. On failure *pixels is NULL.
 int ftx_jpeg_decode(const unsigned char *data, unsigned long length, unsigned char **pixels,
                     int *width, int *height, int *components, int (*cancelled)(void));

@@ -1,11 +1,13 @@
 // Port of Filee.Engines/Magick/ImageEncoder.cs: applies preset ImageOptions and writes frames in the requested format.
 // Used by MagickImageConverter and by every engine that writes raster images (PDF pages, SVG, CAD, ICNS, Ghostscript).
 // ImageMagick is replaced by ImageIO for the formats this Mac encodes, libjpeg-turbo set up like ImageMagick for JPEG,
-// libwebp / libjxl for WebP and JPEG XL, Swift codecs for Netpbm and PSD/PSB, and ImageMagick's resize ported to Swift.
+// libwebp / libjxl for WebP and JPEG XL, OpenJPEG for lossy JP2 codestreams, Swift codecs for Netpbm and PSD/PSB,
+// and ImageMagick's resize ported to Swift.
 
 import CoreGraphics
 import Foundation
 import ImageIO
+import zlib
 
 /// One frame (page, animation frame, icon size) of a raster image: pixels plus what ImageMagick kept beside them.
 struct ImageFrame {
@@ -22,14 +24,18 @@ struct ImageFrame {
     static let metadataKey = "FileToXMetadata" as CFString
     /// Loop count of an animation (0 = forever).
     static let loopCountKey = "FileToXLoopCount" as CFString
+    /// ImageMagick storage class used for ICO filter choice; grayscale alone does not imply a palette.
+    static let icoPaletteKey = "FileToXIcoPalette" as CFString
     /// Icon sizes of an ICO target, largest first (ImageMagick's icon:auto-resize).
     static let icoSizesKey = "FileToXIcoSizes" as CFString
     /// Lossless WebP requested (`ImageOptions.webpLossless`).
     static let losslessKey = "FileToXLossless" as CFString
-    /// Preset quality 1…100 for the JPEG, WebP and JPEG XL encoders (ImageMagick's `image.Quality`).
+    /// Preset quality 1…100 for the JPEG, JP2, WebP and JPEG XL encoders (ImageMagick's `image.Quality`).
     static let qualityKey = "FileToXQuality" as CFString
     /// Sampling factors of a JPEG source, [h, v] per component (ImageMagick's "jpeg:sampling-factor" property).
     static let jpegSamplingKey = "FileToXJpegSampling" as CFString
+    /// Opaque JPEG COM and Photoshop APP13 marker segments, removed by keepMetadata=false.
+    static let jpegMarkersKey = "FileToXJpegMarkers" as CFString
     /// Resolution as the file stored it, [x, y, unit] with unit 1 = per inch, 2 = per centimetre (ImageMagick's
     /// `resolution` and `units`, which the JPEG writer copies into JFIF). `dpi` holds the same in inches.
     static let resolutionKey = "FileToXResolution" as CFString
@@ -127,22 +133,28 @@ enum ImageEncoder {
         }
 
         let (width, height) = (frame.image.width, frame.image.height)
+        let model = frame.image.colorSpace?.model
+        var palette = frame.properties[ImageFrame.icoPaletteKey] as? Bool ?? (model == .indexed || model == .monochrome)
         switch options.resize {
         case .percent where options.resizePercent > 0 && options.resizePercent != 100:
             // ParseMetaGeometry of "N%".
             let percent = Double(options.resizePercent)
             frame.image = ImagePixels.resized(frame.image, width: max(1, Int(percent * Double(width) / 100.0 + 0.5)),
-                                              height: max(1, Int(percent * Double(height) / 100.0 + 0.5)))
+                                              height: max(1, Int(percent * Double(height) / 100.0 + 0.5)), palette: palette)
         case .longEdge where options.longEdge > 0 && (width > options.longEdge || height > options.longEdge):
             // Only shrink images larger than the box, never upscale (ImageMagick's ">" geometry).
             let scale = min(Double(options.longEdge) / Double(width), Double(options.longEdge) / Double(height))
             frame.image = ImagePixels.resized(frame.image, width: max(1, Int((Double(width) * scale + 0.5).rounded(.down))),
-                                              height: max(1, Int((Double(height) * scale + 0.5).rounded(.down))))
+                                              height: max(1, Int((Double(height) * scale + 0.5).rounded(.down))), palette: palette)
         default:
             break
         }
 
-        if options.grayscale { frame.image = ImagePixels.grayscale(frame.image) }
+        if (frame.image.width, frame.image.height) != (width, height) { palette = false }
+        if options.grayscale {
+            frame.image = ImagePixels.grayscale(frame.image)
+            palette = false // GrayscaleImage promotes PseudoClass to DirectClass.
+        }
 
         if let dpi = options.dpi, dpi > 0 {
             frame.dpi = (Double(dpi), Double(dpi))
@@ -151,6 +163,7 @@ enum ImageEncoder {
 
         if !options.keepMetadata {
             frame.properties[ImageFrame.metadataKey] = nil
+            frame.properties[ImageFrame.jpegMarkersKey] = nil
             if !options.keepColorProfile { frame.image = ImagePixels.untagged(frame.image) }
         }
 
@@ -169,7 +182,8 @@ enum ImageEncoder {
             // 100 means lossless (JPEG XL distance 0).
             frame.properties[ImageFrame.qualityKey] = quality
         case "jp2":
-            // 100 means lossless (ImageIO's reversible wavelet at quality 1); below that ImageIO keeps about the same rate.
+            // ImageMagick uses quality as a PSNR target in dB; 100 keeps ImageIO's lossless codestream.
+            frame.properties[ImageFrame.qualityKey] = quality
             frame.properties[kCGImageDestinationLossyCompressionQuality] = Double(quality) / 100
         case "webp":
             frame.properties[ImageFrame.qualityKey] = quality
@@ -180,6 +194,7 @@ enum ImageEncoder {
             tiff[kCGImagePropertyTIFFCompression] = compression
             frame.properties[kCGImagePropertyTIFFDictionary] = tiff
         case "ico":
+            frame.properties[ImageFrame.icoPaletteKey] = palette
             prepareIcon(&frame, options)
         default:
             break
@@ -213,6 +228,13 @@ enum ImageEncoder {
     /// Writes the frames into one file of `format` (an id of `writable`, or "pgm"/"pbm"): ImageMagick's
     /// `image.Write(path, format)` and `collection.Write(path, format)`.
     static func save(_ frames: [ImageFrame], to path: String, format: String) throws {
+        var frames = frames
+        if !["jpg", "tiff"].contains(format) {
+            for i in frames.indices where frames[i].image.colorSpace?.model == .cmyk {
+                // RGB-only writers must not attach a CMYK ICC profile to converted RGB samples.
+                frames[i].image = ImagePixels.image(ImagePixels.bitmap(frames[i].image))
+            }
+        }
         guard let first = frames.first else { throw ConversionError("There is no image to write.") }
         switch format {
         case "ppm", "pgm", "pbm":
@@ -280,7 +302,50 @@ enum ImageEncoder {
                         UInt8(first.image.height & 255), UInt8(first.image.height >> 8 & 255)]
             data.replaceBytes(in: NSRange(location: 6, length: 4), withBytes: size)
         }
-        try FileManager.default.writeFile(path, data as Data)
+        var encoded = data as Data
+        // shortcut: retain ImageIO for one-pixel JP2s to avoid OpenJPEG's alpha DC loss; revisit after an upstream fix.
+        if format == "jp2", let frame = frames.first, let quality = frame.properties[ImageFrame.qualityKey] as? Int,
+           quality < 100, frame.image.width > 1 || frame.image.height > 1 {
+            encoded = try Jpeg2000Encoder.replacingCodestream(in: encoded, image: frame.image, quality: quality)
+        }
+        if format == "png", let frame = frames.first { encoded = try preservingJpegMetadata(encoded, frame) }
+        try FileManager.default.writeFile(path, encoded)
+    }
+
+    /// ImageMagick's PNG raw-profile convention keeps Photoshop resources that ImageIO cannot serialize.
+    private static func preservingJpegMetadata(_ png: Data, _ frame: ImageFrame) throws -> Data {
+        guard let markers = frame.properties[ImageFrame.jpegMarkersKey] as? Data else { return png }
+        let segments = JpegEncoder.segments(Data([0xFF, 0xD8]) + markers + Data([0xFF, 0xD9]))
+        var comments = Data(), photoshop = Data()
+        for (marker, payload) in segments {
+            if marker == 0xFE { comments.append(payload) }
+            if marker == 0xED { photoshop.append(payload.dropFirst(14)) }
+        }
+        var chunks = Data()
+        func text(_ name: String, _ value: Data) throws {
+            let payload = Data(name.utf8) + Data([0]) + value
+            guard payload.count <= Int32.max else { throw ConversionError("The PNG metadata is too large.") }
+            let size = UInt32(payload.count)
+            for shift in stride(from: 24, through: 0, by: -8) { chunks.append(UInt8(truncatingIfNeeded: size >> shift)) }
+            let bytes = Data("tEXt".utf8) + payload
+            chunks.append(bytes)
+            let crc = bytes.withUnsafeBytes { zlib.crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) }
+            for shift in stride(from: 24, through: 0, by: -8) { chunks.append(UInt8(truncatingIfNeeded: crc >> shift)) }
+        }
+        if !comments.isEmpty { try text("Comment", Data(comments.prefix { $0 != 0 })) }
+        if !photoshop.isEmpty {
+            var profile = Data(("\n8bim\n" + String(format: "%8lu", photoshop.count)).utf8)
+            let hex = Array("0123456789abcdef".utf8)
+            for (i, byte) in photoshop.enumerated() {
+                if i % 36 == 0 { profile.append(10) }
+                profile.append(hex[Int(byte >> 4)])
+                profile.append(hex[Int(byte & 15)])
+            }
+            profile.append(10)
+            try text("Raw profile type 8bim", profile)
+        }
+        // Put metadata after IHDR so readers that stop metadata scanning at IDAT also see it.
+        return png.prefix(33) + chunks + png.dropFirst(33)
     }
 
     /// The frame's metadata without the source's file structure (compression, sample layout, tiles), which would
@@ -300,7 +365,7 @@ enum ImageEncoder {
     }
 
     private static let privateKeys: Set<CFString> = [ImageFrame.metadataKey, ImageFrame.loopCountKey, ImageFrame.icoSizesKey, ImageFrame.losslessKey,
-                                                     ImageFrame.qualityKey, ImageFrame.jpegSamplingKey, ImageFrame.resolutionKey]
+                                                     ImageFrame.qualityKey, ImageFrame.jpegSamplingKey, ImageFrame.resolutionKey, ImageFrame.jpegMarkersKey, ImageFrame.icoPaletteKey]
 
     /// Sets the EXIF orientation of the frame and of its metadata.
     private static func setOrientation(_ frame: inout ImageFrame, _ orientation: Int) {
@@ -318,9 +383,14 @@ enum ImageEncoder {
     /// Icons must be square: pads the shorter side with transparency; every requested size is written into one .ico.
     private static func prepareIcon(_ frame: inout ImageFrame, _ options: ImageOptions) {
         var side = max(frame.image.width, frame.image.height)
-        if frame.image.width != frame.image.height { frame.image = ImagePixels.padded(frame.image, side: side) }
+        if frame.image.width != frame.image.height {
+            frame.image = ImagePixels.padded(frame.image, side: side)
+            frame.properties[ImageFrame.icoPaletteKey] = false
+        }
         if side > 256 {
-            frame.image = ImagePixels.resized(frame.image, width: 256, height: 256)
+            let palette = frame.properties[ImageFrame.icoPaletteKey] as? Bool
+            frame.image = ImagePixels.resized(frame.image, width: 256, height: 256, palette: palette)
+            frame.properties[ImageFrame.icoPaletteKey] = false
             side = 256
         }
         var sizes: [Int] = []
@@ -333,8 +403,12 @@ enum ImageEncoder {
         var square = frame
         if square.properties[ImageFrame.icoSizesKey] == nil { prepareIcon(&square, ImageOptions()) }
         let sizes = square.properties[ImageFrame.icoSizesKey] as? [Int] ?? [256, 48, 32, 16]
+        let palette = square.properties[ImageFrame.icoPaletteKey] as? Bool ??
+            (square.image.colorSpace?.model == .monochrome || square.image.colorSpace?.model == .indexed)
         let icons = sizes.map { size in
-            ImageFrame(image: ImagePixels.resized(square.image, width: size, height: size))
+            let filter = MagickResize.defaultFilter(from: (square.image.width, square.image.height), to: (size, size),
+                                                   alpha: ImagePixels.hasAlpha(square.image), palette: palette)
+            return ImageFrame(image: ImagePixels.resized(square.image, width: size, height: size, filter: filter))
         }
         try writeImageIO(icons, to: path, format: "ico")
     }

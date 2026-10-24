@@ -15,7 +15,9 @@ enum NetpbmCodec {
         while true {
             parser.skipWhitespace()
             guard parser.position + 1 < parser.bytes.count, parser.bytes[parser.position] == UInt8(ascii: "P") else { break }
-            frames.append(ImageFrame(image: try parser.image()))
+            var frame = ImageFrame(image: try parser.image())
+            frame.properties[ImageFrame.icoPaletteKey] = false // PNM/PAM readers create DirectClass, including gray.
+            frames.append(frame)
             try Task.checkCancellation()
         }
         guard !frames.isEmpty else { throw ConversionError("\(FilePath.fileName(path)) is not a Netpbm (PBM/PGM/PPM) image.") }
