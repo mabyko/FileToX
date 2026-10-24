@@ -102,6 +102,43 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(Array(try Markdown.toPlainText(markdown, .advancedWithYaml).utf8), Array("café\ncafe\u{301}\nCAFE\ncafé CAFE\n".utf8))
     }
 
+    func testBlockParserContextRefreshesAfterFailedParserMutatesChildren() {
+        final class ProbeParser: Markdown.BlockParser {
+            let probe: (Markdown.BlockProcessor) -> Void
+            init(_ probe: @escaping (Markdown.BlockProcessor) -> Void) {
+                self.probe = probe
+                super.init()
+                openingCharacters = ["!"]
+            }
+            override func tryOpen(_ processor: Markdown.BlockProcessor) -> Markdown.BlockState {
+                probe(processor)
+                return .none
+            }
+        }
+        let document = Markdown.MarkdownDocument()
+        let first = Markdown.ParagraphBlock(nil), second = Markdown.ParagraphBlock(nil)
+        document.add(first)
+        var observations = 0
+        let mutate = ProbeParser { processor in
+            XCTAssertTrue(processor.currentContainer === document)
+            XCTAssertTrue(processor.currentBlock === document)
+            XCTAssertTrue(processor.lastBlock === first)
+            document.add(second)
+        }
+        let observe = ProbeParser { processor in
+            XCTAssertTrue(processor.currentContainer === document)
+            XCTAssertTrue(processor.currentBlock === document)
+            XCTAssertTrue(processor.lastBlock === second)
+            observations += 1
+        }
+        let processor = Markdown.BlockProcessor(document, Markdown.BlockParserList([
+            mutate, observe, Markdown.ParagraphBlockParser(),
+        ]), maximumNestingDepth: Markdown.defaultDepthLimit)
+        processor.open(document)
+        processor.processLine(Markdown.Slice("! content"))
+        XCTAssertEqual(observations, 1)
+    }
+
     func testLinkDefinitionMembershipTracksRemovalAndRepeatedInsertion() {
         let group = Markdown.LinkReferenceDefinitionGroup()
         let link = Markdown.LinkReferenceDefinition(nil, nil, nil)

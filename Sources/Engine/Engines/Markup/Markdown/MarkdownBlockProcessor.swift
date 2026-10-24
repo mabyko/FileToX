@@ -293,19 +293,17 @@ extension Markdown {
         }
 
         private func updateLastBlockAndContainer(_ stackIndex: Int = -1) {
-            currentStackIndex = stackIndex < 0 ? openedBlocks.count - 1 : stackIndex
-            var current: Block?
-            var i = openedBlocks.count - 1
-            while i >= 0 {
-                let block = openedBlocks[i]
-                if current == nil { current = block }
+            let blocks = openedBlocks
+            currentStackIndex = stackIndex < 0 ? blocks.count - 1 : stackIndex
+            let current = blocks.last
+            for block in blocks.reversed() {
                 if let container = block as? ContainerBlock {
-                    currentContainer = container
-                    lastBlock = container.lastChild
-                    currentBlock = current
+                    if currentContainer !== container { currentContainer = container }
+                    let last = container.lastChild
+                    if lastBlock !== last { lastBlock = last }
+                    if currentBlock !== current { currentBlock = current }
                     return
                 }
-                i -= 1
             }
             currentBlock = current
             lastBlock = nil
