@@ -1330,3 +1330,38 @@ No Developer ID certificate or local macOS VM tool was available. An explicit x8
 OS and notarization remain unavailable. Final cross-build verification is separate from actual Intel execution.
 The SDK probe confirms `.dotnet`/`.nuget` reads are denied and `dotnet` is absent from clean PATH; the guarded
 `/usr/local/share/dotnet` path is absent. Home SDK/NuGet content was not removed or modified.
+
+## Native image and Markdown follow-up (2026-10-24, integration pending)
+
+Image commits `b248065` and `5a20490` import the signed implementation from the image worktree. OpenJPEG
+**2.5.4** is compiled statically from pinned official source, with source-specific notices in the engine resource
+bundle. It supplies PSNR-controlled lossy JP2 codestreams; ImageIO retains container metadata and the existing
+lossless quality-100 path. One-pixel images retain ImageIO because an isolated upstream OpenJPEG probe corrupted
+gray-alpha samples. Source profile conversion follows the color space actually stored by ImageIO; arbitrary ICC
+byte preservation and universal 16-bit equivalence are not claimed.
+
+The existing libjpeg-turbo decoder now retains conventional CMYK samples and handles Adobe CMYK/YCCK inversion.
+JPEG writing, orientation and resize retain that color space; RGB-only writers convert before attaching profiles.
+JPEG COM and Photoshop APP13 resources survive JPEG/PNG output and are removed by metadata stripping. ICO filter
+selection now tracks palette versus direct storage through grayscale, padding and resize.
+
+Worker verification passed **55 focused tests** and completed **405 conversions** across C#, frozen native and
+candidate hosts. ICO matches **54/54 frames**, and RGB/gray/RGBA JP2 matches **12/12 quality cases**. Strict sample
+and color-space matches improve **59 to 109 of 135 cases**. These are scoped worker results; final-source full
+replay and Xcode/SDK-denied verification remain pending. Report and exact commands:
+`worktrees/t3-b315f9d1/build/image-parity/findings.txt`.
+
+Remaining image differences include CMYK ICO processing order, GIF quantization and some AVIF/JXL/TGA output.
+The reference's unmarked-CMYK inversion and ink-channel grayscale errors are intentionally corrected, with
+black/white regressions; strict differences remain recorded. Metadata forwarding beyond JPEG/PNG, arbitrary JP2
+ICC preservation and one-pixel JP2 quality control remain limited. OpenJPEG cancellation is checked during sample
+copy and stream callbacks; cancellation latency inside wavelet/entropy computation is not established.
+
+Markdown optimization `eee334e` required two independent review fixes. Commit `4a7e491` restores both original
+weak parent references and removes parent teardown loops, preserving legacy mutation semantics and avoiding
+dangling-reference aborts. Three regressions cover insertion/removal, clear and block replacement. The final
+bounded review found no further actionable issue. Repaired code passes **30 focused tests, one optional skip,
+zero failures**, **119,792 strict byte comparisons**, and **5,830 production TXT/HTML byte comparisons**.
+Evidence is under `build/resume/quality-final-20261024/markdown-*`. The worker's **0.63s TXT** timing predates these
+safety repairs and must not be quoted as final performance. Uniform production timings remain pending; neither
+the Markdown **0.60s** nor PDF **0.84s** target is accepted as achieved.
