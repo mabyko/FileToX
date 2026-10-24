@@ -109,8 +109,17 @@ enum ImageReader {
         let samples = Data(bytesNoCopy: pixels, count: Int(width) * Int(height) * Int(components), deallocator: .free)
         try Task.checkCancellation()
         let model: CGColorSpaceModel = components == 4 ? .cmyk : components == 1 ? .monochrome : .rgb
-        guard let space = fallback.colorSpace, space.model == model,
-              let provider = CGDataProvider(data: samples as CFData),
+        guard let fallbackSpace = fallback.colorSpace, fallbackSpace.model == model else { return fallback }
+        var space = fallbackSpace
+        if model == .cmyk {
+            let iccHeader = Data("ICC_PROFILE\0".utf8)
+            let embedded = JpegEncoder.segments(data).contains { marker, payload in
+                marker == 0xE2 && payload.count > 14 && payload.starts(with: iccHeader)
+            }
+            // ImageIO assigns Generic CMYK to untagged JPEGs too; that is not an embedded source profile.
+            if !embedded { space = CGColorSpaceCreateDeviceCMYK() }
+        }
+        guard let provider = CGDataProvider(data: samples as CFData),
               let image = CGImage(width: Int(width), height: Int(height), bitsPerComponent: 8, bitsPerPixel: 8 * Int(components),
                                   bytesPerRow: Int(width) * Int(components), space: space,
                                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue), provider: provider,

@@ -20,14 +20,16 @@ final class ImageParityTests: XCTestCase {
     }
 
     func testAdobeCmykAndYcckKeepNativeSamplesThroughOperations() throws {
-        // Conventional CMYK hashes from ImageMagick 7.1.2-32 Q8, synthetic 41x29 JPEGs.
-        for (name, expected) in [("adobe", "44ab3a9ceb5744358b2af7890291b4428805ea2a2281fbbae138bcf9ceca0fa3"),
-                                 ("ycck", "a1579d370fe6adda14bdd1d1b55351c632921a660bdc563bd67751f1cd1704c0")] {
+        // Conventional CMYK and untagged RGBA hashes from ImageMagick 7.1.2-32 Q8, synthetic 41x29 JPEGs.
+        for (name, expected, rgb) in [("adobe", "44ab3a9ceb5744358b2af7890291b4428805ea2a2281fbbae138bcf9ceca0fa3", "3ebacd427349e2f146285ddf8243b13befb8f97110bb0e088c38670759ce3c63"),
+                                      ("ycck", "a1579d370fe6adda14bdd1d1b55351c632921a660bdc563bd67751f1cd1704c0", "668e92f4d885f37ec5f70d54625754d3485312288d3a066bc26a8ae6ab385df9")] {
             let decoded = try read(Data(base64Encoded: Self.jpeg[name]!)!)
             XCTAssertEqual(decoded.image.colorSpace?.model, .cmyk)
             let samples = ImagePixels.straight(decoded.image)
             XCTAssertEqual(samples.channels, 4)
             XCTAssertEqual(hash(samples.samples), expected)
+            XCTAssertFalse(ImagePixels.hasColorProfile(decoded.image))
+            XCTAssertEqual(hash(ImagePixels.bitmap(decoded.image).pixels), rgb)
             XCTAssertFalse(ImagePixels.hasAlpha(decoded.image))
             let resized = ImagePixels.resized(decoded.image, width: 19, height: 13)
             XCTAssertEqual(resized.colorSpace?.model, .cmyk)
@@ -45,6 +47,7 @@ final class ImageParityTests: XCTestCase {
 
     func testUnmarkedCmykIsNotInvertedAndGrayUsesLightRatherThanInk() throws {
         let decoded = try read(Data(base64Encoded: Self.jpeg["plain"]!)!)
+        XCTAssertFalse(ImagePixels.hasColorProfile(decoded.image))
         let samples = ImagePixels.straight(decoded.image).samples
         // Adobe-free CMYK has ordinary ink amounts; ImageMagick inverts these incorrectly.
         XCTAssertEqual(Array(samples.prefix(4)), [0, 56, 103, 162])
