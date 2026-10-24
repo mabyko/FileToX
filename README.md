@@ -72,14 +72,14 @@ xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
 open 'build/DerivedData/Build/Products/Debug/FileToX Dev.app'
 ```
 
-Xcode consumes the engine and Core products from the root `Package.swift`, then signs and embeds the Swift helper, PDFium and bundled tools. Initial package resolution fetches pinned libwebp/libjxl sources; staging downloads pinned rhwp and 7-Zip archives only when their verified cache is missing. LibRaw and libjpeg-turbo sources and the PDFium dylib are checked in.
+Xcode consumes the engine and Core products from the root `Package.swift`, then signs and embeds the Swift helper, PDFium and bundled tools. Initial package resolution fetches pinned libwebp/libjxl sources; staging downloads pinned rhwp and 7-Zip archives only when their verified cache is missing. LibRaw, libjpeg-turbo and OpenJPEG sources, the PDFium dylib, and a pinned universal static Skia SVG library are checked in. Native SVG rendering covers a conservative primitive subset; other SVG features and vector PDF retain CoreSVG. Vendor records contain provenance and license notices.
 
 ```sh
 swift build -c release --product FileToXEngine
 python3 Tools/fetch-optional-engines.py --help
 ```
 
-The Debug bundle ID is `forked.filetox.local.dev`; Release uses `forked.filetox.local`. Keep personal settings in the Git-excluded `Config/Local.xcconfig`. Debug and Release currently use local ad-hoc signing. Developer ID signing and notarization are unfinished. Intel build options exist, but execution has not been verified.
+The Debug bundle ID is `forked.filetox.local.dev`; Release uses `forked.filetox.local`. Keep personal settings in the Git-excluded `Config/Local.xcconfig`. Debug and Release default to local ad-hoc signing; an actual Xcode Release build with the existing team's development certificate has also been verified. Developer ID signing and notarization are unfinished. x86_64 Release compilation and linkage are verified; Intel execution has not been verified.
 
 ## Verification
 
@@ -101,7 +101,7 @@ python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optiona
 
 During earlier app verification on Apple silicon, 32 Xcode tests, 12 Swift Package tests, 22 built-in engine checks (20 actual conversions and 2 selection checks), and 11 additional samples covering optional engines, video, audio, in-flight cancellation and attached-image collisions passed. Swift communication also verified PNG→JPG, PDF merge→multiple PNGs, unknown files and folders→ZIP→extraction, and history. In the running app, clicking the donut's JPG preset produced an output and a recent-history entry. Actual Finder Option-drag checks covered slow movement, source preservation and Finder focus after dropping. Korean HWP and DOCX→PDF text extraction and PNG rendering were also verified. Language switches between English, Korean and Japanese update the running app and host. The native color picker, saved colors after relaunch, localized built-in names and preservation of custom names were also verified.
 
-The full 849-case conversion replay retains 578 PASS / 263 WARN / 8 FAIL. A subsequent scoped change prevents Calibre TCR compression corruption and uses libjpeg-turbo for RGB/grayscale JPEG input. Those full-run counts predate the follow-up. Latest tests, native-library comparisons and remaining limits are in [the follow-up record](docs/design/engine-differential-triage.md#native-library-follow-up-2026-10-23); earlier user-data, isolation and signing evidence remains in [the integration record](docs/design/engine-differential-triage.md#performance-integration-2026-10-23). Safe TCR writing requires `calibre-debug` beside the resolved `ebook-convert` in a complete Calibre installation; no separate Python installation is needed.
+The final 849-case replay at `dc7ab6a` records **581 PASS / 264 WARN / 4 FAIL** against C#, with 786 completed jobs and the same 63 failed jobs as the baseline. The four strict failures involve missing image references in the captured baseline; they remain unwaived. WARN does not establish visual or layout equivalence. Final-source SDK-denied clean builds/tests, certificate signing, relocated conversions, native image comparisons and remaining limitations are in [the final integration record](docs/design/engine-differential-triage.md#final-native-quality-integration-2026-10-24). Earlier user-data compatibility evidence remains in [the integration record](docs/design/engine-differential-triage.md#performance-integration-2026-10-23). Safe TCR writing requires `calibre-debug` beside the resolved `ebook-convert` in a complete Calibre installation; no separate Python installation is needed.
 
 Not every format pair or codec has been tested. Ghostscript is absent on this machine, and its FFmpeg lacks some encoders. Automatic watch folders and in-app engine downloads are not connected yet. Login registration and notification delivery across a real logout/login remain unverified. External exFAT and SMB volumes, Intel, distribution notarization and TCC relaunch checks remain unverified.
 

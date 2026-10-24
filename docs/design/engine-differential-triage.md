@@ -1331,7 +1331,7 @@ OS and notarization remain unavailable. Final cross-build verification is separa
 The SDK probe confirms `.dotnet`/`.nuget` reads are denied and `dotnet` is absent from clean PATH; the guarded
 `/usr/local/share/dotnet` path is absent. Home SDK/NuGet content was not removed or modified.
 
-## Native image and Markdown follow-up (2026-10-24, integration pending)
+## Native image and Markdown follow-up (2026-10-24)
 
 Image commits `b248065` and `5a20490` import the signed implementation from the image worktree. OpenJPEG
 **2.5.4** is compiled statically from pinned official source, with source-specific notices in the engine resource
@@ -1347,8 +1347,8 @@ selection now tracks palette versus direct storage through grayscale, padding an
 
 Worker verification passed **55 focused tests** and completed **405 conversions** across C#, frozen native and
 candidate hosts. ICO matches **54/54 frames**, and RGB/gray/RGBA JP2 matches **12/12 quality cases**. Strict sample
-and color-space matches improve **59 to 109 of 135 cases**. These are scoped worker results; final-source full
-replay and Xcode/SDK-denied verification remain pending. Report and exact commands:
+and color-space matches improve **59 to 109 of 135 cases**. These scoped worker results precede the profile
+corrections and final parent verification below. Report and exact commands:
 `worktrees/t3-b315f9d1/build/image-parity/findings.txt`.
 
 Remaining image differences include CMYK ICO processing order, GIF quantization and some AVIF/JXL/TGA output.
@@ -1369,8 +1369,8 @@ dangling-reference aborts. Three regressions cover insertion/removal, clear and 
 bounded review found no further actionable issue. Repaired code passes **30 focused tests, one optional skip,
 zero failures**, **119,792 strict byte comparisons**, and **5,830 production TXT/HTML byte comparisons**.
 Evidence is under `build/resume/quality-final-20261024/markdown-*`. The worker's **0.63s TXT** timing predates these
-safety repairs and must not be quoted as final performance. Uniform production timings remain pending; neither
-the Markdown **0.60s** nor PDF **0.84s** target is accepted as achieved.
+safety repairs and must not be quoted as final performance. Final uniform production timings are recorded below;
+neither the Markdown **0.60s** nor PDF **0.84s** target was achieved.
 
 ### SVG implementation and reviewed fallback correction
 
@@ -1395,6 +1395,126 @@ three optional Ghostscript skips, zero failures**. These are scoped results, not
 Independent review reproduced silently missing prefixed SVG children when serialization retained their prefix.
 Parent commit `38da38d` conservatively requires an explicit SVG default namespace and rejects descendant default
 namespace resets, retaining CoreSVG for both reviewed triggers. Tests check routing and opaque red rendered pixels;
-the second review found no further actionable issue. Final parent runtime and full-replay acceptance remain pending.
+the second review found no further actionable issue. Final parent runtime and full-replay results are recorded below.
 An active native draw cannot be interrupted;
 cancellation discards its result before output commit. Actual Intel execution remains unavailable.
+
+## Final native quality integration (2026-10-24)
+
+The final production-code checkpoint is signed commit `dc7ab6a`. It includes the independently reviewed native
+image/SVG changes, weak-parent Markdown repairs and the final JPEG profile correction. The frozen normal Release
+host is `build/resume/quality-final-20261024/post-cmyk-default/final-host/FileToXEngine`, SHA-256
+`7add727d75a6dc4a1e1803c6269798c233eccc432c49599d8f98a93181a532df`.
+
+### Final profile correction and supplemental images
+
+The first parent ICC correction exposed another distinction: ImageIO assigns Generic CMYK to untagged JPEGs.
+Commit `dc7ab6a` checks the actual JPEG ICC APP2 payload before choosing the source space. Untagged native CMYK
+uses DeviceCMYK; genuinely tagged images keep ICC-managed conversion. Adobe/YCCK RGBA regression hashes come from
+preserved C# outputs, and the tagged JPEG/PNG regression compares an independent CGContext. The third scoped
+review found no further actionable issue; **56 affected tests passed, zero skips/failures**.
+
+The fresh final-host matrix completes **135/135 jobs**, plus **four metadata/strip jobs**. Strict stored-sample,
+space/dimension/frame equality is **102/135**, versus frozen Swift **59/135**. Separate visible equality is
+**104/135**. This restores 13 strict and 15 visible matches lost when implicit Generic CMYK was treated as an
+embedded profile. ICO retains **54/54 exact frames** and JP2 **12/12 exact quality cases**.
+
+Seven tagged-CMYK cases differ from the original worker/C# formula. Final PPM/PNG/BMP/TGA pixels match an independent
+oracle using native Q8 CMYK samples plus the actual 55,280-byte source ICC in CGContext **byte for byte**. The
+ImageIO JPEG decoding oracle remains different (RGB PSNR 32.156718 dB); that decoding difference is recorded.
+The strict differences are retained, not waived. Four untagged CMYK JPEG outputs have no invented ICC, while the
+genuine tagged JPEG retains its source ICC bytes. JPEG/PNG COM, IPTC and Photoshop resources and their stripping
+checks pass. Earlier worker **109/135** and pre-correction **89/135** figures are historical, not final results.
+
+Evidence: `post-cmyk-default/image-final/{REPORT.txt,summary.json,comparison.json,icc-oracle.json,`
+`metadata-audit.json,jpeg-icc-checks.json,freeze-verification.json}`. All 2,975 immutable evidence/source files remain
+unchanged. The corrected integrity manifest excludes its own growing logs; the original manifest assertion and
+all completed conversions are retained, with no conversion rerun used to hide a result.
+
+### Fresh full replay
+
+All **849/849 original cases** were replayed with the pinned optional tools under SDK/NuGet denial:
+
+- **786 completed / 63 failed jobs**, matching C#, r3 native and the pre-profile-fix capture; no harness or inspection
+  errors, source changes, or staging leftovers. The 63 failures retain the existing codec/input/no-text/no-audio errors.
+- Against C#: **581 PASS / 264 WARN / 4 FAIL**. The four FAILs remain `auto-061-psd-to-html`,
+  `auto-077-webp-to-html`, `auto-086-dxf-to-md` and `auto-101-gif-to-md`; captured baseline image references are missing.
+- Against r3 native: **738 PASS / 107 WARN / 4 FAIL**. Three SVG raster FAILs against old native are the intended
+  improvement toward C#; generated Calibre cover variation accounts for the other FAIL and additional WARN.
+- Against pre-profile-fix host `517294cb`: **764 PASS / 85 WARN / 0 FAIL**. No image bytes or image metadata changed
+  in this original corpus, and all seven TCR target outputs are byte-identical. Supplemental CMYK cases above cover
+  the profile correction that the original corpus does not exercise.
+
+All thresholds remain unchanged. WARN includes unsupported binary semantics, textless-PDF geometry-only checks,
+font/media structural checks and generated covers; it does not establish general visual/layout parity. The four
+C# strict failures and all WARN limitations remain open. Original corpus, harness, tools, 13 frozen host/resource
+files and 741 production source files pass before/after integrity checks.
+
+Evidence: `post-cmyk-default/{final-replay-REPORT.md,final-replay-summary.json,final-replay-per-case-changes.json}`,
+the three comparison folders and `replay-final/`. Earlier captures and binaries remain preserved.
+
+### Final-source build, data and packaging verification
+
+- Full Swift run: **565 engine + 12 Core tests**, **14 skips**, **zero failures**. The passing host tests include
+  settings persistence and language changes. Earlier legacy user-data compatibility evidence remains applicable;
+  original user data and the installed C# reference app were not replaced.
+- A fresh, separate DerivedData directory at final code `dc7ab6a` passed SDK-denied **clean build-for-testing**,
+  then **564 engine tests, 57 skips, zero failures**. Only the `/bin/ps`-dependent process-tree test was explicitly
+  excluded from this sandbox run; it passes in the normal full Swift run. App tests run in the clean environment
+  outside that sandbox: **74 tests, zero failures**. Skipped tests are not passes.
+- An actual SDK-denied **Xcode Release build with the existing development certificate** passed after the correction.
+  No team, bundle ID, registration or provisioning settings changed. Main app/helper/PDFium share the existing
+  team; the helper has no library-validation exception. Deep/strict verification passes.
+- The Release bundle contains **zero .NET files and no .NET or Homebrew load dependencies**. OpenJPEG and Skia
+  notices are present and byte-exact. Helper SHA-256:
+  `d7ad41debf39da7ac52c35b63572d514af96ecbe41cf76fd1cbb634f972365f3`.
+- A separately copied certificate-signed app passes **22 checks** (20 conversions and two selection checks) with
+  repository and home .NET/NuGet access denied and system-only PATH, with no staging leftovers. The parent captures
+  stdout through a pipe before saving it: redirecting a sandboxed child directly to a denied repository log can
+  produce an empty log. Only the fresh captured 22-PASS log is counted.
+- All **seven final Release TCR cases** decode through Calibre to the clean expected bytes and valid UTF-8.
+- Final-code **x86_64 Release cross-compilation/linkage** passes under the same SDK-denying clean environment;
+  native objects and helper architecture/links are verified. Intel execution remains unavailable (`Bad CPU type`).
+
+Evidence is under `post-cmyk-default/`: `swift-final-results.json`, `final-clean/{plan.json,results.json,*.log}`,
+`xcode-final-results.json`, `release-final-audit.json`, `release-final-relocated-proof.json`,
+`release-final-relocated-smoke.log`, `release-tcr-readbacks.json` and `x86-crossbuild/RESULT.md`.
+The SDK folders are inaccessible to verification processes; they were not deleted. No separate SDK-free OS/VM,
+physical Intel runtime, Developer ID signing or notarization was available. No push, publication or app reinstall
+was performed.
+
+### Sequential production performance
+
+After all builds/replays ended, the original uniform production baseline `82b4e625` and final `7add727d` ran five
+rounds per case, alternating host order. Best times, before → final:
+
+- PDF → TXT: **1.384810 → 1.389179 s**; **0.84 s target unmet**. PDF implementation is unchanged in this phase.
+- EPUB → FB2: **0.427374 → 0.434319 s**; within the 0.54 s target.
+- DOCX → MD: **0.090216 → 0.091151 s**; within the 0.12 s target.
+- DOCX → TXT: **0.085262 → 0.085448 s**; within the 0.09 s target.
+- Markdown → HTML: **0.956213 → 0.876474 s**.
+- Markdown → TXT: **0.892803 → 0.813709 s**; **0.60 s target unmet**.
+
+All **60 outputs** match, excluding only the previously proven generated FB2 document UUID. Input and executable
+hashes stay unchanged; raw times and medians are in `post-cmyk-default/performance/{raw.json,summary.json}`.
+The exact command/environment and sequential A/B script are retained beside that folder. These measurements use
+the repaired weak-parent implementation; the unsafe worker's 0.63 s TXT figure is not the final result.
+
+### Dependencies and remaining limits
+
+The app/helper, queue, staging, settings, presets and history are Swift. Native components include PDFium raster
+rendering, LibRaw RAW development, libjpeg-turbo JPEG, OpenJPEG lossy JP2, libwebp/libjxl/Brotli, libxml2/zlib and
+the conservative Skia C++ SVG path. PDFKit retains PDF text semantics; a PDFium text draft changed Korean spacing.
+The Swift Markdown parser retains Markdig behavior; the much faster cmark-gfm replacement failed 80,662 of 119,792
+comparisons. Document/CAD models and writers retain the verified Swift semantics. Existing rhwp/7-Zip are bundled;
+FFmpeg, Ghostscript, Pandoc, LibreOffice and complete Calibre remain optional external tools. ODA was used only for
+the earlier five-file interoperability check, not bundled as a runtime dependency.
+
+Open work includes the two performance targets; the strict/WARN differences above; complex/vertical SVG text
+still handled by CoreSVG; remaining CMYK ICO, GIF/AVIF/JXL/TGA and JP2 profile/precision/one-pixel quality limits;
+raw metadata forwarding beyond JPEG/PNG; and broader JPEG ICC provenance. In the supplemental audit, an untagged
+gray JPEG still synthesizes a 4,508-byte profile and one tagged RGB JPEG loses its 3,144-byte profile, unchanged
+from the earlier worker/pre-fix behavior. No universal metadata-preservation claim is made. Mid-wavelet OpenJPEG
+cancellation latency, interruption inside one Skia draw and PDF text cross-job throughput remain unmeasured;
+cancelled results are checked before output commit. Actual Intel/older-OS execution and distribution signing/
+notarization remain unverified.

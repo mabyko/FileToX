@@ -62,3 +62,23 @@ DOCX/HWPX payloads produced from PDFs matched, and the EPUB/document checks requ
 
 Integration commands and limits are recorded in
 [the migration verification log](../../docs/design/engine-differential-triage.md#performance-integration-2026-10-23).
+
+## Final native integration (2026-10-24)
+
+Final code `dc7ab6a` was measured after builds and conversion replays ended, against the preserved uniform
+production baseline `194b692`. Five rounds per case alternate baseline/final host order. Best times:
+
+- PDF → TXT: 1.384810 → **1.389179 s**; ≤0.84 s remains unmet.
+- EPUB → FB2: 0.427374 → **0.434319 s**.
+- DOCX → MD/TXT: 0.090216/0.085262 → **0.091151/0.085448 s**.
+- Markdown → HTML/TXT: 0.956213/0.892803 → **0.876474/0.813709 s**; TXT ≤0.60 s remains unmet.
+
+All 60 outputs match, with only the proven generated FB2 document UUID normalized. Both parent links remain
+weak after independent lifetime review; the worker's pre-repair 0.63 s Markdown TXT result is superseded.
+Raw timings, medians, executable/input hashes and output parity:
+`build/resume/quality-final-20261024/post-cmyk-default/performance/{raw.json,summary.json}`. Exact environment and
+command: `post-cmyk-default/performance-command.json`; sequential harness: `post-cmyk-default/bench-final.py`.
+The baseline/final host SHA-256 prefixes are `82b4e625`/`7add727d`.
+
+Final source/build/quality limits are recorded in
+[the final integration record](../../docs/design/engine-differential-triage.md#final-native-quality-integration-2026-10-24).
