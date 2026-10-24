@@ -91,7 +91,7 @@ python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optiona
 
 以前のアプリ検証ではApple siliconで、Xcodeテスト32件、Swift Packageテスト12件、内蔵エンジンの検証22件（実変換20件・選択判定2件）、追加エンジン・動画・音声・処理中のキャンセル・添付画像の衝突を含むサンプル11件が成功しました。Swiftとの通信でも、PNG→JPG、PDF結合→複数PNG、不明な形式のファイル・フォルダ→ZIP→展開、履歴を確認しました。実行中のアプリでは、円形メニューのJPGクリック→結果生成→最近の履歴を確認しました。実際のFinder Optionドラッグでは、遅い動き、元ファイルの保持、ドロップ後のFinderのフォーカス維持を確認しました。韓国語のHWP・DOCXから生成したPDFのテキスト抽出とPNG描画も確認しています。英語・韓国語・日本語の切り替えは、実行中のアプリとhelperにすぐ反映されます。標準カラーピッカーで選んだ色の再起動後の保持、組み込みプリセット名の翻訳、ユーザーが付けた名前の保持も確認しました。
 
-現在のネイティブ実装ではSwiftPM 536件（17件スキップ）、Xcode 598件（56件スキップ）のテストが失敗なしで終了しました。最後のUnicode修正もSDKへのアクセスを遮断した環境でXcodeにより再ビルドし、文書テスト5件が成功しました。849件の変換比較は578 PASS / 263 WARN / 8 FAILで、Calibre TCRの既存の内容破損も別途再現しました。検証範囲・ユーザーデータ互換性・隔離・署名と残る制限は[最終検証記録](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)を参照してください。
+全849件の変換比較は578 PASS / 263 WARN / 8 FAILでした。その後、Calibre TCR圧縮による内容破損を回避し、RGB/グレースケールJPEGの読み込みにlibjpeg-turboを適用しました。全体比較の件数はこの変更前の結果です。最新のテスト・C/C++候補比較・残る制限は[後続検証記録](docs/design/engine-differential-triage.md#native-library-follow-up-2026-10-23)、ユーザーデータ・隔離・署名の検証は[統合記録](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)を参照してください。安全なTCR出力には、シンボリックリンクを解決した`ebook-convert`と同じ場所に`calibre-debug`がある完全なCalibre環境が必要です。別途Pythonをインストールする必要はありません。
 
 すべての形式の組み合わせ・コーデックを検証したわけではありません。このマシンにはGhostscriptがなく、FFmpegにも一部のエンコーダーがありません。監視フォルダの自動変換、アプリ内でのエンジンダウンロード、ログイン項目はまだ接続していません。外部exFAT・SMBボリューム、Intel、配布用公証、TCCの再起動時の動作も未検証です。
 

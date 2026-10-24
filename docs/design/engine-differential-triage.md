@@ -10,10 +10,11 @@ comparator noise, confirmed engine defects, previously accepted differences, and
 backend differences that still need an acceptance decision. A raw FAIL is not
 automatically a Swift defect; matching failures can also receive PASS.
 
-The final optimisation replay (`a064ab8`) is **578 PASS / 263 WARN / 8 FAIL**.
-Additional readback exposed an unfixed Calibre TCR content-corruption defect,
-reproduced directly without either host. The counts are not proof of full content
-equivalence; see [final verification and limits](#performance-integration-2026-10-23).
+The final full optimisation replay (`a064ab8`) is **578 PASS / 263 WARN / 8 FAIL**.
+Additional readback exposed a Calibre TCR content-corruption defect, reproduced directly without either host.
+A subsequent scoped change bypasses that compressor and adds native RGB/grayscale JPEG decoding; see
+[the native-library follow-up](#native-library-follow-up-2026-10-23). The full replay counts predate those changes
+and are not proof of full content equivalence; see [verification and limits](#performance-integration-2026-10-23).
 
 ## Evidence and results
 
@@ -1168,3 +1169,120 @@ Build tools remain Swift/Xcode and Python 3 (standard-library scripts); XcodeGen
 the project. Runtime dependencies remain macOS frameworks; native libjpeg-turbo, LibRaw, PDFium, libwebp, libjxl,
 Brotli, libxml2 and zlib; bundled rhwp and 7-Zip; optional FFmpeg, Ghostscript, Pandoc, LibreOffice and Calibre.
 No installation, deployment, notarization or push was performed.
+
+## Native library follow-up (2026-10-23)
+
+This scoped follow-up fixes TCR output corruption and improves JPEG input parity. It does not replace the
+849-case full-run ledger above or claim that its eight strict FAILs have disappeared. No native dependency or
+external-engine version was added or changed in production.
+
+### TCR: retain extraction, replace compression
+
+Calibre still parses the book and runs its original TCR output formatter with the original defaults. A short
+script executed by the same installation's `calibre-debug` captures the bytes passed to its compressor. The
+replacement exists only in that child process; Calibre's installed files and user settings are untouched.
+`TcrWriter` then writes a deterministic TCR dictionary/byte stream, assigning only unused codes and keeping
+dictionary entries at most 255 bytes. It never redefines a code already used by the stream. Compression checks
+task cancellation, and output remains staged until compression succeeds. Empty and binary input are supported.
+
+The companion is found beside the resolved `ebook-convert`, not beside an unrelated PATH symlink. An incomplete
+installation without that companion produces an explicit error before publishing output. The script uses
+Calibre's embedded Python; it adds no system-Python runtime requirement. Other Calibre output formats retain
+their existing command. The upstream compressor remains unfixed; this is a FileToX workaround.
+
+Evidence under `build/resume/tcr-safe-r1/`:
+
+- An independently compiled Swift codec's **35 inputs** (empty, all byte values, Unicode, repeated bytes,
+  deterministic random data and saved HTML/SNB/LIT witnesses) round-trip exactly through Calibre's own decoder:
+  `codec-results.json`, `verify-codec.py`, `codec-validation.log`.
+- **Seven real host conversions**, including DOCM, LIT, PDB, SNB, HTML, DOC and Korean TXT input, all completed
+  without harness/inspection errors. Decoded UTF-8 matches the clean expected bytes in all seven. HTML loses
+  the erroneous trailing `Fil`; the other six match their clean preceding outputs. `replay/`, `host-readbacks.json`
+  and `verify-host.py` preserve the raw evidence. This preserves inherited PDB question-mark losses; it does not
+  claim to repair source/import losses unrelated to compression.
+- **11 focused tests, zero skips/failures**, including real Calibre writing/reading, binary codec round trips,
+  missing/wrong companion behavior and cancellation: `swift-tests-post-review.log`.
+- A diagnostic 3,936,033-byte compression produced 571,722 bytes in 2.35 s under concurrent work. This is not
+  an integrated conversion benchmark or a claim of equal compressed bytes/size to the faulty compressor.
+
+The TCR replay host is retained at `build/resume/native-followup-host/` with source hashes. Its JPEG decoder
+precedes the subsequent progress-monitor correction described below; TCR implementation bytes are unchanged.
+
+### JPEG: reuse the existing C decoder
+
+The existing libjpeg-turbo 3.2.0 C shim now decodes ordinary 8-bit RGB/grayscale JPEG using ImageMagick's libjpeg
+defaults. ImageIO retains responsibility for metadata, ICC space, EXIF orientation and resolution. Unsupported
+precision/color spaces and CMYK/YCCK preserve the previous ImageIO path. Decode errors and cancellation destroy
+the decoder, free samples and clear the output pointer. Swift owns successful samples through a freeing Data.
+
+Worker evidence: `build/resume/jpeg-native-20261023/findings.md` and `host-replay.json`:
+
+- **46 focused image tests passed** without skips, including the initial four new decoder regressions.
+- **105 real host conversions** across C#, frozen Swift and candidate Swift. Candidate matches C# pixel for
+  pixel in **24/24 non-CMYK raster cases** and **6/6 non-CMYK JPEG re-encodings**. Three JPEG files are also
+  byte-identical; remaining metadata/profile bytes differ. All five CMYK outputs remain byte-identical to the
+  frozen Swift output, with the existing material C# color difference explicitly unresolved.
+- Independent review found a progressive-input cancellation gap: `jpeg_start_decompress` consumes entropy
+  scans before output scanlines. A libjpeg progress monitor now checks cancellation in that phase and returns
+  the cancellation status through the shared cleanup. A malformed first progressive scan distinguishes this
+  path in the regression: the direct C probe returns error status 1 before the fix and cancellation status 2
+  after it, with no retained sample buffer. Review of that correction found no remaining actionable issue.
+
+### Additional C/C++ alternatives actually exercised
+
+- **ImageMagick MagickWand C**: direct calls and an official 7.1.2-32 Q8 source build both ran without .NET.
+  Decoder/reference hashes matched; explicitly selecting the same grayscale filter made 16/16 resize probes
+  byte-identical. The bounded source build still depends on Homebrew libraries, has nonrelocatable install
+  names and lacks today's full WebP/JXL/HEIC coverage with a clean PATH. Production adoption needs a complete,
+  reproducible coder/delegate configuration and packaging, not just a link to the scratch dylib. Neither the
+  installed reference application's native binary nor the scratch Wand build is shipped by FileToX.
+- **cmark-gfm C**: official tag `0.29.0.gfm.13` was built and compared. The prototype's TXT median was 0.109 s
+  against the frozen host's ~0.91 s, but does different work and omits required semantics. **80,662/119,792**
+  byte comparisons differed, including **26,274 TXT outputs**. Missing YAML/math/definition-list/attribute
+  handling and renderer differences prevent a global replacement. No production change was retained.
+  `build/resume/native-markdown-r1/REPORT.md` records mismatch examples, source pins and exact commands.
+- **Skia C++ SkSVGDOM**: a standalone arm64 CPU executable without .NET improved the three targeted SVG
+  raster comparisons within unchanged similarity thresholds. Scratch corrections for SVG2 href references and
+  percentage viewports raised normalized coverage from 11/16 to **15/16**, versus CoreSVG's 9/16. Image references,
+  percentage sizing and pattern/use now match C# pixels exactly; text-path passes at 32.004 dB. Vertical text is
+  still worse than CoreSVG (20.382 versus 20.832 dB), so a quality-preserving default replacement is not established.
+  Production remains unchanged. `build/resume/svg-skia-cpp-20261023/{REPORT.md,followup/REPORT.md}` preserve
+  source pins, the 17.4 MiB arm64 executable, build commands and measurements. Universal packaging, notices,
+  a bounded C bridge, resource restrictions and vector-PDF behavior still require implementation/verification.
+
+PDF text remains on PDFKit and Markdown remains on the compatible Swift parser. Their previous <=0.84 s and
+<=0.60 s goals remain unmet. COM/IPTC, CMYK, JP2 quality control, grayscale ICO filtering, external CAD validation,
+Intel/independent-OS execution and distribution signing/notarization limits above remain open.
+
+### Follow-up integration verification (completed 2026-10-24)
+
+Logs and exact Xcode argument arrays are under `build/resume/tcr-safe-r1/`:
+
+- Full Release SwiftPM run: **534 engine + 12 Core tests**, **28 skipped**, **zero failures**. This preceded the
+  final JPEG progress-monitor correction. Missing optional tools and opt-in corpus/fixture paths explain the
+  skips; they are not passes. `swift-tests-full.log`.
+- Final affected SwiftPM run after that correction: **58 tests, zero skips/failures**, including five decoder
+  tests, encoder/resize/raster/ICNS tests and all TCR/Calibre tests. `swift-tests-final-focused.log`.
+- SDK-denying Xcode **clean build-for-testing succeeded**; engine tests: **533 tests, 57 skipped, zero failures**.
+  As in the previous isolated run, the `/bin/ps`-dependent process-tree timeout test was explicitly excluded;
+  it passes in the normal full run. This clean test build also precedes the final JPEG correction.
+  `xcode-clean-build-isolated.log`, `xcode-engine-tests-isolated.log`, `xcode-results.json`.
+- The final correction was then rebuilt by Xcode inside that sandbox and **all five JPEG decoder tests passed**
+  with no skips, including progressive entropy cancellation. `xcode-final-jpeg-tests-isolated.log` and
+  `xcode-final-jpeg-command.json`. Regenerated checked-in project membership includes both new test files.
+- Final-source **Xcode Release build succeeded** in the SDK-denying sandbox. Bundle audit found **zero .NET
+  files and no .NET links**; `codesign --verify --deep --strict` passed. Helper SHA-256:
+  `ea2b8e10135f2d37ab09aef4a6ef62da9cc76db872036d081924f411ea9d1919`.
+  `xcode-release-isolated.log`, `release-audit.json`.
+- A relocated Release copy, with repository/SDK/NuGet access denied and a clean PATH, passed **22 checks**
+  (20 actual conversions and two selection checks), with no staging leftovers.
+  `release-relocated-proof-final.json`, `release-relocated-smoke-final.log`. The first buffered smoke log was
+  empty despite exit 0; it is not used as the check-count evidence. The fresh unbuffered run records all 22.
+- The final Release helper separately passed **all seven TCR cases** inside the SDK-denying sandbox. Calibre's
+  decoder confirmed the seven clean expected byte streams and valid UTF-8 again.
+  `release-tcr-command.json`, `release-tcr-replay.log`, `release-host-readbacks.json`.
+
+No 849-case full replay, Intel execution, new app UI run or distribution signing/notarization was performed in
+this follow-up. The installed reference app and original user data remain untouched. Pinned Calibre/LibreOffice
+validation copies are retained under ignored `build/optional-engines/osx-arm64/` for reproduction; they are not
+registered in user settings or embedded in the Release app. No global installation, push or deployment was made.

@@ -26,7 +26,7 @@
 
 | 엔진 id | C# 의존 | Swift 대체 | 난이도 |
 | --- | --- | --- | --- |
-| `magick` | Magick.NET(ImageMagick) | ImageIO·CoreGraphics, JPEG 쓰기는 libjpeg-turbo, 크기 조정은 ImageMagick 방식 Swift 이식. ImageIO가 쓰지 못하는 형식(PSB 읽기·쓰기, XCF 읽기, PPM 계열 세부 형식, ICO 크기 지정, TIFF 압축 방식)은 Swift 코덱으로 보완. 카메라 RAW는 LibRaw(4절) | 중 — **WebP·JPEG XL 쓰기는 4절** |
+| `magick` | Magick.NET(ImageMagick) | ImageIO·CoreGraphics, JPEG 쓰기와 8비트 RGB/회색조 읽기는 libjpeg-turbo, 크기 조정은 ImageMagick 방식 Swift 이식. CMYK/YCCK JPEG 등은 ImageIO로 읽는다. ImageIO가 쓰지 못하는 형식(PSB 읽기·쓰기, XCF 읽기, PPM 계열 세부 형식, ICO 크기 지정, TIFF 압축 방식)은 Swift 코덱으로 보완. 카메라 RAW는 LibRaw(4절) | 중 — **WebP·JPEG XL 쓰기는 4절** |
 | `pdfsharp` | PDFsharp | CoreGraphics PDF context·PDFKit(이미지→PDF, PDF 쪽 범위·분할, 합치기) | 중 |
 | `pdfium` | PDFtoImage(PDFium)·SkiaSharp | 번들 PDFium 147.0.7690.0 + 이미지 인코더 (`Vendor/PDFium`) | 중 |
 | `pdf-text` | PdfPig | PDFKit 문자·위치 정보 | 중 |
@@ -44,7 +44,12 @@
 | `ffmpeg` | 외부 FFmpeg | 같은 실행 파일 | 하 |
 | `cad` | ACadSharp·SkiaSharp | DXF 읽기·쓰기, DWG 읽기(AC1014–AC1032)·쓰기(AC1032), 장면·렌더링을 Swift·CoreGraphics로 이식 완료. 세부는 4절 | 상 |
 | `ebook` | 자체 코드 + ImageMagick·PdfSharp·PDFtoImage·SharpCompress | 이식 + ImageIO·PDFKit(쪽 편집)·PDFium(래스터)·7-Zip | 중 |
-| `pandoc`, `ghostscript`, `calibre`, `libreoffice` | 외부 프로그램 | 같은 실행 파일·인자 | 하 |
+| `pandoc`, `ghostscript`, `calibre`, `libreoffice` | 외부 프로그램 | 기존 프로그램 유지. Calibre TCR 쓰기는 아래 압축 손상 우회 적용 | 하 |
+
+Calibre의 TCR 쓰기는 기존 문서 해석·텍스트 작성기를 유지하면서 압축 직전 바이트를 확보하고 Swift TCR
+압축기로 저장한다. Calibre 9.15.0 압축기의 내용 손상을 피하기 위한 변경이다. 선택한 `ebook-convert`의
+심볼릭 링크를 해석한 디렉터리에 `calibre-debug`가 함께 있어야 한다. 없으면 완전한 Calibre 설치본을
+선택하라는 오류를 내고 출력을 확정하지 않는다. 별도 시스템 Python은 필요 없다.
 
 코어와 host도 Swift로 옮긴다: 형식 레지스트리, 프리셋·출력 규칙·이름 바꾸기, 프로필 선택, 경로 탐색(`RoutePlanner`·`ConverterCatalog`), 작업 큐와 출력 staging·확정(패치 0001), 설정·프리셋·프로필·이력 저장소(`UserDataStore`의 JSON 형식과 스키마 이전 그대로), 지역화, NDJSON 프로토콜·잠금·journal 정리.
 
@@ -75,7 +80,7 @@
 
 - JPEG 쓰기: C# helper의 ImageMagick 7.1.2-32 Q8이 쓴 libjpeg-turbo 3.2.0(`Magick.Native` 문자열로 확인)을 소스 포함해 빌드한다(`Vendor/libjpeg-turbo`, IJG 라이선스, SIMD 없음 — C 경로로도 C# 파일과 같다). `Vendor/libjpeg-turbo/FileToX/encode.c`가 ImageMagick `coders/jpeg.c`의 `WriteJPEGImage`를 Filee 설정대로 따른다: `jpeg_set_quality`(품질 미지정 92), 품질 90 이상 4:4:4·미만 libjpeg 기본 4:2:0, 품질 90 이하 빠른 정수 DCT(`JDCT_IFAST`), 기준선(progressive 아님), Huffman 표 최적화, 모든 화소가 R=G=B면 1성분 회색, JPEG 원본의 샘플링 계수 유지(`jpeg:sampling-factor` 속성), ImageMagick이 읽은 해상도·단위를 JFIF에(EXIF/TIFF 태그 우선, PNG pHYs·BMP는 px/cm, JFIF 그대로), EXIF·ICC·XMP 순서의 APP 표지. ImageMagick으로 JPEG를 쓰던 곳(이미지 변환·PDF/SVG/CAD 래스터 출력, PDF에 넣는 JPEG, 전자책 그림 변환)이 이것을 쓴다. C#이 Skia로 JPEG를 쓰던 곳(만화 PDF 쪽, PDF 스캔 쪽)은 같은 libjpeg-turbo의 Skia 설정 모드로 인코딩한다. 같은 화소에서 ImageMagick(C# helper의 `Magick.Native`)과 바이트가 같다: 그림 6개 × 품질 15개, C# 동영상 프레임 JPEG 3개.
 - 크기 조정: ImageMagick `ResizeImage`(Q8)를 Swift로 옮긴다(`MagickResize`): 필터 선택(Lanczos, 알파·팔레트·확대면 Mitchell, ICNS는 명시한 Lanczos), SincFast·CubicBC, 지지 폭·blur, 가로/세로 처리 순서, 정규화·알파 가중, 단계 사이와 결과의 8비트 반올림, 그리고 C# helper를 컴파일한 clang이 합친 곱셈-덧셈(FMA). 무작위 그림 84건·명시 Lanczos 16건·C# ICO 프레임에서 표본이 같다. 회색 PNG·팔레트 그림은 ImageMagick에서 PseudoClass라 Mitchell이 된다.
-- 남은 차이: JPEG *읽기*는 ImageIO(ImageMagick은 libjpeg)라 JPEG 원본은 화소가 조금 다르다(시험 그림 35–59 dB); 원본 주석(COM)·IPTC·CMYK JPEG 출력은 옮기지 않았다; Grayscale 옵션 뒤 정사각형 ICO 크기 조정은 Mitchell(ImageMagick은 Lanczos)이다.
+- JPEG 읽기 후속 수정: 기존 libjpeg-turbo 3.2.0으로 8비트 RGB/회색조 화소를 읽고 ImageIO의 ICC·EXIF 방향·해상도·메타데이터는 유지한다. RGB 샘플링·progressive·회색조·프로필·방향을 포함한 비-CMYK 래스터 24건과 JPEG 재인코딩 6건은 C#와 화소가 같다. CMYK/YCCK·고정밀도·지원하지 않는 색 공간은 ImageIO를 유지한다. CMYK는 여전히 C#와 색이 다르며, 원본 주석(COM)·IPTC 보존과 CMYK JPEG 출력도 미해결이다. Grayscale 옵션 뒤 정사각형 ICO 크기 조정은 Mitchell(ImageMagick은 Lanczos)이다.
 
 그 밖에 PDF 텍스트 배치(PdfPig→PDFKit), HTML 파싱(AngleSharp→libxml2), Markdown 확장(Markdig→Swift 파서)은 결과가 미세하게 달라질 수 있어 비교 검증으로 확인한다. 앱에 연결되지 않은 Filee 기능(앱 내 엔진 다운로드 `EngineInstaller`, 감시 폴더 실행 `FolderWatcher`)은 설정 데이터만 보존하고 실행 코드는 옮기지 않는다.
 

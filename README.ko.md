@@ -95,7 +95,7 @@ python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optiona
 
 이전 앱 검증에서는 Apple silicon에서 Xcode 테스트 32개, Swift Package 테스트 12개, 내장 엔진 검증 22개(실제 변환 20개·선택 판단 2개), 추가 엔진·영상·음성·실행 중 취소·첨부 이미지 충돌 표본 11개를 통과했다. Swift 통신에서도 실제 PNG→JPG, PDF 병합→여러 PNG, unknown 파일·폴더 ZIP→압축 해제와 이력을 확인했다. 실제 앱의 도넛 JPG 클릭→결과 생성→최근 이력도 통과했다. 실제 Finder Option 드래그에서도 느린 움직임, 원본 보존과 드롭 후 Finder 포커스 유지를 확인했다. 한글 HWP·DOCX에서 만든 PDF의 텍스트 추출과 PNG 렌더링도 확인했다. 영어·한국어·일본어 변경은 실행 중인 앱과 helper에 바로 반영된다. 기본 색상 선택기로 고른 색의 재실행 후 유지, 기본 프리셋 이름 번역과 사용자 이름 보존도 확인했다.
 
-현재 네이티브 구현은 SwiftPM 536개(17 skip), Xcode 598개(56 skip) 테스트에서 실패가 없었다. 마지막 Unicode 수정도 SDK 접근을 차단한 환경에서 Xcode로 다시 빌드해 문서 테스트 5개를 통과했다. 전체 변환 849건은 578 PASS / 263 WARN / 8 FAIL이며, Calibre TCR의 기존 내용 손상도 별도로 재현했다. 검증 범위·사용자 데이터 호환성·격리·서명과 남은 한계는 [최종 검증 기록](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)을 따른다.
+전체 변환 849건은 578 PASS / 263 WARN / 8 FAIL이었다. 이후 Calibre TCR 압축 손상을 우회하고 RGB/회색조 JPEG 읽기에 libjpeg-turbo를 적용했다. 위 전체 비교 수치는 이 후속 변경 전 결과다. 최신 테스트·C/C++ 대안 비교·남은 한계는 [후속 검증 기록](docs/design/engine-differential-triage.md#native-library-follow-up-2026-10-23), 기존 사용자 데이터·격리·서명 검증은 [통합 기록](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)을 따른다. 안전한 TCR 쓰기는 심볼릭 링크를 해석한 `ebook-convert` 옆에 `calibre-debug`가 있는 완전한 Calibre 설치본이 필요하며, 별도 Python 설치는 필요 없다.
 
 모든 형식 조합·코덱을 검사하지 않았다. Ghostscript는 이 머신에 없고, 현재 FFmpeg에는 일부 인코더가 없다. 자동 변환 폴더와 앱 안에서 엔진 다운로드는 아직 연결하지 않았다. 실제 로그아웃·로그인 후 자동 실행과 알림 전달은 검증하지 않았다. 외장 exFAT·SMB, Intel, 배포 공증·TCC 재실행 검증도 남아 있다.
 
