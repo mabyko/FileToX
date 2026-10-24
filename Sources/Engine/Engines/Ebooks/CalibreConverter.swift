@@ -30,16 +30,48 @@ public final class CalibreConverter: Converter {
             try FileManager.default.createDirectoryIfNeeded(folder); environment[key] = folder
         }
         progress?(0.02)
-        let result = try await ProcessRunner.run(executable, [input, temp], timeout: 600, workingDirectory: work, environment: environment, onOutput: { Self.reportProgress($0, progress) })
+        var program = executable, arguments = [input, temp]
+        let rawText = FilePath.combine(work, "tcr-text.bin")
+        if step.to == "tcr" {
+            // Keep Calibre's TCR text extraction, but bypass its corrupting compressor in this child only.
+            let folder = URL(fileURLWithPath: executable).resolvingSymlinksInPath().deletingLastPathComponent().path
+            let debug = FilePath.combine(folder, "calibre-debug")
+            guard FileManager.default.isExecutableFile(atPath: debug) else {
+                throw ConversionError("Safe TCR output requires calibre-debug beside ebook-convert. Select a complete Calibre installation in Settings.")
+            }
+            let script = FilePath.combine(work, "tcr-convert.py")
+            try Data(Self.tcrCaptureScript.utf8).write(to: URL(fileURLWithPath: script))
+            program = debug; arguments = ["-e", script, "--", input, temp, rawText]
+        }
+        let result = try await ProcessRunner.run(program, arguments, timeout: 600, workingDirectory: work, environment: environment, onOutput: { Self.reportProgress($0, progress) })
         guard result.exitCode == 0, FileManager.default.fileExists(temp) else {
             let output = result.standardError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? result.standardOutput : result.standardError
             throw ConversionError("Calibre failed (exit \(result.exitCode)). \(Self.lastLines(output))")
         }
+        if step.to == "tcr" {
+            let text = try Data(contentsOf: URL(fileURLWithPath: rawText))
+            let encoded = try TcrWriter.encode(text)
+            try encoded.write(to: URL(fileURLWithPath: temp))
+        }
+        try Task.checkCancellation()
         guard let output = try step.output.allocate(step.to) else { return [] }
         try EbookFiles.replace(temp, output)
         progress?(1)
         return [output]
     }
+    static let tcrCaptureScript = """
+    import sys
+    from pathlib import Path
+    import calibre.ebooks.compression.tcr as tcr
+    from calibre.ebooks.conversion.cli import main
+
+    source, target, raw = sys.argv[1:]
+    def capture(data):
+        Path(raw).write_bytes(data)
+        return b''
+    tcr.compress = capture
+    raise SystemExit(main(['ebook-convert', source, target]))
+    """
     static func reportProgress(_ line: String, _ progress: ProgressHandler?) {
         if let progress, let match = EbookRegex.matches(#"^\s*(\d{1,3})%\s"#, line).first, let percent = Int(EbookRegex.group(match, line, 1)) {
             progress(Double(min(100, max(0, percent))) / 100 * 0.95)

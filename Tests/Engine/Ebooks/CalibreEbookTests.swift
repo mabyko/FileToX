@@ -9,8 +9,8 @@ final class CalibreEbookTests: EbookTestCase {
     override func setUpWithError() throws { try super.setUpWithError(); copies = EngineEnvironment.ownCopies; searchSystem = EngineEnvironment.searchSystem; EngineEnvironment.searchSystem = false }
     override func tearDownWithError() throws { EngineEnvironment.ownCopies = copies; EngineEnvironment.searchSystem = searchSystem; try super.tearDownWithError() }
     private func useCalibre() throws {
-        let calibre = "build/optional-engines/osx-arm64/calibre/calibre.app"
-        guard FileManager.default.directoryExists(calibre) else { throw XCTSkip("Calibre development copy not found") }
+        let calibre = ProcessInfo.processInfo.environment["FILETOX_CALIBRE"] ?? "build/optional-engines/osx-arm64/calibre/calibre.app"
+        guard FileManager.default.fileExists(atPath: calibre) else { throw XCTSkip("Calibre development copy not found; set FILETOX_CALIBRE") }
         EngineEnvironment.ownCopies = ["calibre": calibre]
         XCTAssertTrue(CalibreConverter().status().isAvailable)
     }
@@ -46,6 +46,61 @@ final class CalibreEbookTests: EbookTestCase {
         try Data("#!/bin/sh\necho old >&2\necho one >&2\necho two >&2\necho three >&2\nexit 4\n".utf8).write(to: URL(fileURLWithPath: executable))
         do { _ = try await convert(source, "oeb", "epub", Preset(), CalibreConverter()); XCTFail("expected Calibre failure") }
         catch { XCTAssertEqual(error.localizedDescription, "Calibre failed (exit 4). one two three") }
+    }
+    func testTcrUsesCompanionAndCommitsOnlyCompressedCapturedText() async throws {
+        let bin = path("fake-calibre"); try FileManager.default.createDirectoryIfNeeded(bin)
+        let convert = FilePath.combine(bin, "ebook-convert"), debug = FilePath.combine(bin, "calibre-debug")
+        try Data("#!/bin/sh\nexit 8\n".utf8).write(to: URL(fileURLWithPath: convert))
+        let script = """
+        #!/bin/sh
+        test "$1" = -e && test "$3" = -- && test "$#" = 6 || exit 9
+        test "$CALIBRE_OVERRIDE_LANG" = en && test "$PYTHONIOENCODING" = utf-8 || exit 8
+        test -f "$2" && test -d "$CALIBRE_CONFIG_DIRECTORY" || exit 7
+        cp "$4" "$6"
+        : > "$5"
+        echo '67% Running TCR Output plugin'
+        """
+        try Data(script.utf8).write(to: URL(fileURLWithPath: debug))
+        for file in [convert, debug] { try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file) }
+        EngineEnvironment.ownCopies = ["calibre": bin]
+        let source = Data("안녕하세요\nFileToX\n".utf8)
+        let input = try save("source.epub", source)
+        let output = try await self.convert(input, "epub", "tcr", Preset(), CalibreConverter())
+        XCTAssertEqual(try TcrWriterTests.decode(Data(contentsOf: URL(fileURLWithPath: output))), source)
+        try FileManager.default.removeItem(atPath: debug)
+        do { _ = try await self.convert(input, "epub", "tcr", Preset(), CalibreConverter()); XCTFail("Expected missing companion failure") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("complete Calibre installation")) }
+    }
+    func testSafeTcrRoundTripsThroughCalibre() async throws {
+        try useCalibre()
+        let epub = try EbookBuilders.epub(folder)
+        let tcr = try await convert(epub, "epub", "tcr", Preset(), CalibreConverter())
+        let raw = try TcrWriterTests.decode(Data(contentsOf: URL(fileURLWithPath: tcr)))
+        let text = try XCTUnwrap(String(data: raw, encoding: .utf8))
+        XCTAssertTrue(text.contains("밤하늘에 별이 반짝였다."))
+        XCTAssertTrue(text.contains("주석 내용입니다."))
+        let back = try await convert(tcr, "tcr", "epub", Preset(), CalibreConverter())
+        XCTAssertTrue(PlainTextWriter.write(try EpubReader.readBook(back, folder).document).contains("밤하늘에 별이 반짝였다."))
+    }
+    func testTcrCompanionFollowsSelectedExecutableSymlink() async throws {
+        let actual = path("selected"), aliases = path("aliases")
+        for directory in [actual, aliases] { try FileManager.default.createDirectoryIfNeeded(directory) }
+        let executable = FilePath.combine(actual, "ebook-convert")
+        try Data("#!/bin/sh\nexit 8\n".utf8).write(to: URL(fileURLWithPath: executable))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable)
+        try FileManager.default.createSymbolicLink(atPath: FilePath.combine(aliases, "ebook-convert"), withDestinationPath: executable)
+        let unrelated = FilePath.combine(aliases, "calibre-debug")
+        try Data("#!/bin/sh\nprintf wrong-installation > \"$6\"\n: > \"$5\"\n".utf8).write(to: URL(fileURLWithPath: unrelated))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: unrelated)
+        EngineEnvironment.ownCopies = ["calibre": aliases]
+        let input = try save("source.epub", Data("selected-installation".utf8))
+        do { _ = try await convert(input, "epub", "tcr", Preset(), CalibreConverter()); XCTFail("Must not run the unrelated installation") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("complete Calibre installation")) }
+        let companion = FilePath.combine(actual, "calibre-debug")
+        try Data("#!/bin/sh\ncp \"$4\" \"$6\"\n: > \"$5\"\n".utf8).write(to: URL(fileURLWithPath: companion))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: companion)
+        let output = try await convert(input, "epub", "tcr", Preset(), CalibreConverter())
+        XCTAssertEqual(try TcrWriterTests.decode(Data(contentsOf: URL(fileURLWithPath: output))), Data("selected-installation".utf8))
     }
     func testCalibreWritesKindleBooksAndBuiltInReaderReadsBack() async throws {
         try useCalibre()

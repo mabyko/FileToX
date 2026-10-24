@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0101683F324338D34300D6CA /* PanelPlacementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7C338D26B27FB21E225848 /* PanelPlacementTests.swift */; };
+		039CD4F013A3D424CB5597DF /* TcrWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91707390555E2B2FB9049F99 /* TcrWriterTests.swift */; };
 		057284B725CF37FFAD59BF5B /* EbookRegexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17962B620FEB89126DD93D41 /* EbookRegexTests.swift */; };
 		0657C0314A00B9567F80B2DC /* FileToXEngineKit in Frameworks */ = {isa = PBXBuildFile; productRef = 701D2EFA5900170E6CF03367 /* FileToXEngineKit */; };
 		072694D2D4EA48852367187C /* OoxmlVariantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3628DD5274AA6FF1DC00649 /* OoxmlVariantTests.swift */; };
@@ -320,6 +321,7 @@
 		8E520FB26743726F84FC15E4 /* SelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionTests.swift; sourceTree = "<group>"; };
 		8F3012E1DCA716A4D45D6F7E /* JobQueueStagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JobQueueStagingTests.swift; sourceTree = "<group>"; };
 		90AB179F6E7C561D7812ED19 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		91707390555E2B2FB9049F99 /* TcrWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TcrWriterTests.swift; sourceTree = "<group>"; };
 		929A3D34AD028F3446789DDE /* LibreOfficeFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibreOfficeFormatTests.swift; sourceTree = "<group>"; };
 		931432C168F544F409883E9C /* GlobalDragMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalDragMonitorTests.swift; sourceTree = "<group>"; };
 		932C381495FAD7A14A07BEB3 /* DragShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DragShortcut.swift; sourceTree = "<group>"; };
@@ -673,6 +675,7 @@
 				17962B620FEB89126DD93D41 /* EbookRegexTests.swift */,
 				F60B7A0FB683F6A91C309C92 /* EbookRouteTests.swift */,
 				74797D670F64B7B88DE0A9D6 /* EbookTests.swift */,
+				91707390555E2B2FB9049F99 /* TcrWriterTests.swift */,
 			);
 			path = Ebooks;
 			sourceTree = "<group>";
@@ -1127,6 +1130,7 @@
 				B2A44C84D54CF1B125A6C93A /* SelectionTests.swift in Sources */,
 				C25B73C84CA29B46D6AEAA35 /* SpreadsheetBuilders.swift in Sources */,
 				4E17B45CFBCFFAE613839144 /* SpreadsheetFormatTests.swift in Sources */,
+				039CD4F013A3D424CB5597DF /* TcrWriterTests.swift in Sources */,
 				D9BE4AB466CFA953FDAD6490 /* UserDataStoreTests.swift in Sources */,
 				DD7226A1DC90DB47A6547EAD /* VectorTests.swift in Sources */,
 				D2EF1A8F38EA184EAC7C24A9 /* WatchAndHistoryTests.swift in Sources */,
