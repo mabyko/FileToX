@@ -33,6 +33,13 @@ let package = Package(
     targets: [
         .target(name: "FileToXCore", path: "Sources/Core"),
         .target(
+            name: "COpenJPEG", path: "Vendor/OpenJPEG",
+            exclude: ["LICENSE", "README.FileToX.md", "NOTICES"],
+            sources: ["src/thread.c", "src/bio.c", "src/cio.c", "src/dwt.c", "src/event.c", "src/ht_dec.c", "src/image.c", "src/invert.c", "src/j2k.c", "src/jp2.c", "src/mct.c", "src/mqc.c", "src/openjpeg.c", "src/opj_clock.c", "src/pi.c", "src/t1.c", "src/t2.c", "src/tcd.c", "src/tgt.c", "src/function_list.c", "src/opj_malloc.c", "src/sparse_array.c", "FileToX/encode.c"],
+            publicHeadersPath: "FileToX/include",
+            cSettings: [.headerSearchPath("src"), .define("OPJ_STATIC"), .define("MUTEX_pthread")]
+        ),
+        .target(
             name: "CPDFium",
             path: "Vendor/PDFium",
             sources: ["CPDFium.c"],
@@ -54,6 +61,7 @@ let package = Package(
             name: "FileToXEngineKit",
             dependencies: [
                 "CLibRaw",
+                "COpenJPEG",
                 "CPDFium",
                 .product(name: "CJpegTurbo", package: "libjpeg-turbo"),
                 .product(name: "libwebp", package: "libwebp-Xcode"),
