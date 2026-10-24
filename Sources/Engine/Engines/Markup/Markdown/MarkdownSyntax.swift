@@ -95,7 +95,8 @@ extension Markdown {
     // MARK: Blocks
 
     class Block: MarkdownObject {
-        weak var parent: ContainerBlock?
+        // Owners clear backlinks before releasing children, including children retained outside the tree.
+        fileprivate(set) unowned var parent: ContainerBlock?
         let parser: BlockParser?
         var isOpen = true
         var isBreakable = true
@@ -171,6 +172,8 @@ extension Markdown {
 
     class ContainerBlock: Block {
         private(set) var children: [Block] = []
+
+        deinit { for child in children { child.parent = nil } }
 
         var count: Int { children.count }
         var lastChild: Block? { children.last }
@@ -425,9 +428,36 @@ extension Markdown {
     // MARK: Inlines
 
     class Inline: MarkdownObject {
-        weak var parent: ContainerInline?
-        weak var previousSibling: Inline?
-        var nextSibling: Inline?
+        fileprivate(set) unowned var parent: ContainerInline?
+        // Keep the identity separately: loading an unowned reference to a sibling in deinit would trap.
+        private unowned var previousSiblingStorage: Inline?
+        private weak var detachedPreviousSibling: Inline?
+        private var previousSiblingID: ObjectIdentifier?
+        fileprivate(set) final var previousSibling: Inline? {
+            get { previousSiblingID == nil ? detachedPreviousSibling : previousSiblingStorage }
+            set {
+                detachedPreviousSibling = nil
+                previousSiblingStorage = newValue
+                previousSiblingID = newValue.map(ObjectIdentifier.init)
+            }
+        }
+        var nextSibling: Inline? {
+            willSet {
+                // Markdig can unlink a detached node without clearing its backward link.
+                if let nextSibling, nextSibling !== newValue, nextSibling.previousSiblingID == ObjectIdentifier(self) {
+                    nextSibling.detachedPreviousSibling = self
+                    nextSibling.previousSiblingStorage = nil
+                    nextSibling.previousSiblingID = nil
+                }
+            }
+        }
+
+        deinit {
+            // Detached chains can still point at a node that has since acquired a different previous sibling.
+            if let nextSibling, nextSibling.previousSiblingID == ObjectIdentifier(self) {
+                nextSibling.previousSibling = nil
+            }
+        }
 
         var isClosed: Bool {
             get { closedFlag }
@@ -455,8 +485,9 @@ extension Markdown {
         /// linked back.
         func insertBefore(_ previous: Inline) {
             precondition(previous.parent == nil, "Inline has already a parent")
-            previousSibling?.nextSibling = previous
+            let previousNext = previousSibling
             previousSibling = previous
+            previousNext?.nextSibling = previous
             previous.nextSibling = self
             if let parent {
                 parent.onChildInsert(previous)
@@ -465,14 +496,18 @@ extension Markdown {
         }
 
         func remove() {
-            previousSibling?.nextSibling = nextSibling
-            nextSibling?.previousSibling = previousSibling
+            let previous = previousSibling
+            let next = nextSibling
             if let parent {
                 parent.onChildRemove(self)
                 previousSibling = nil
-                nextSibling = nil
                 self.parent = nil
+                next?.previousSibling = previous
+                nextSibling = nil
+            } else {
+                next?.previousSibling = previous
             }
+            previous?.nextSibling = next
         }
 
         /// Replaces this inline by `inline`; children move into it (or after it when it is a leaf). Returns the last
@@ -551,6 +586,14 @@ extension Markdown {
         override var isContainerInline: Bool { true }
         private(set) var firstChild: Inline?
         private(set) var lastChild: Inline?
+
+        deinit {
+            var child = firstChild
+            while let current = child {
+                current.parent = nil
+                child = current.nextSibling
+            }
+        }
 
         func clear() {
             var child = lastChild

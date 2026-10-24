@@ -115,6 +115,118 @@ final class MarkdownTests: XCTestCase {
         XCTAssertTrue(group.tryGet("third") === link)
     }
 
+    func testRetainedBlockLosesParentWhenContainerIsReleased() {
+        let child = Markdown.ParagraphBlock(nil)
+        weak var released: Markdown.ContainerBlock?
+        do {
+            let parent = Markdown.ContainerBlock(nil)
+            released = parent
+            parent.add(child)
+            XCTAssertTrue(child.parent === parent)
+        }
+        XCTAssertNil(released)
+        XCTAssertNil(child.parent)
+    }
+
+    func testRetainedInlinesLoseOnlyReleasedBacklinks() {
+        let middle = Markdown.LiteralInline(Markdown.Slice("middle"))
+        let last = Markdown.LiteralInline(Markdown.Slice("last"))
+        weak var releasedParent: Markdown.ContainerInline?
+        weak var releasedFirst: Markdown.Inline?
+        do {
+            let parent = Markdown.ContainerInline()
+            let first = Markdown.LiteralInline(Markdown.Slice("first"))
+            releasedParent = parent
+            releasedFirst = first
+            parent.appendChild(first).appendChild(middle).appendChild(last)
+            XCTAssertTrue(middle.previousSibling === first)
+        }
+        XCTAssertNil(releasedParent)
+        XCTAssertNil(releasedFirst)
+        XCTAssertNil(middle.parent)
+        XCTAssertNil(last.parent)
+        XCTAssertNil(middle.previousSibling)
+        XCTAssertTrue(middle.nextSibling === last)
+        XCTAssertTrue(last.previousSibling === middle)
+    }
+
+    func testRetainedChildrenSurviveTransferAndClear() {
+        let block = Markdown.ParagraphBlock(nil)
+        let inline = Markdown.Inline()
+        let blocks = Markdown.ContainerBlock(nil)
+        let inlines = Markdown.ContainerInline()
+        do {
+            let previousBlocks = Markdown.ContainerBlock(nil)
+            let previousInlines = Markdown.ContainerInline()
+            previousBlocks.add(block)
+            previousInlines.appendChild(inline)
+            previousBlocks.transferChildrenTo(blocks)
+            previousInlines.transferChildrenTo(inlines)
+        }
+        XCTAssertTrue(block.parent === blocks)
+        XCTAssertTrue(inline.parent === inlines)
+        blocks.clear()
+        inlines.clear()
+        XCTAssertNil(block.parent)
+        XCTAssertNil(inline.parent)
+    }
+
+    func testDetachedSiblingCleanupPreservesRewiredBacklink() {
+        var previous: Markdown.Inline? = Markdown.Inline()
+        let next = Markdown.Inline()
+        previous!.insertAfter(next)
+        previous!.remove()
+        let replacement = Markdown.Inline()
+        replacement.insertAfter(next)
+        previous = nil
+        XCTAssertTrue(next.previousSibling === replacement)
+        XCTAssertTrue(replacement.nextSibling === next)
+    }
+
+    func testUnlinkedDetachedNodeLosesReleasedPreviousSibling() {
+        let removed = Markdown.Inline()
+        let replaced = Markdown.Inline()
+        weak var released: Markdown.Inline?
+        do {
+            let previous = Markdown.Inline()
+            released = previous
+            previous.insertAfter(removed)
+            removed.remove()
+            XCTAssertTrue(removed.previousSibling === previous)
+            previous.insertAfter(replaced)
+            previous.insertBefore(Markdown.Inline())
+        }
+        XCTAssertNil(released)
+        XCTAssertNil(removed.previousSibling)
+    }
+
+    func testReusedDetachedNodeLeavesSafeBacklinkOnOldSuccessor() {
+        let successor = Markdown.Inline()
+        weak var released: Markdown.Inline?
+        do {
+            let previous = Markdown.Inline()
+            released = previous
+            previous.insertAfter(successor)
+            Markdown.Inline().insertBefore(previous)
+            XCTAssertTrue(successor.previousSibling === previous)
+        }
+        XCTAssertNil(released)
+        XCTAssertNil(successor.previousSibling)
+    }
+
+    func testRetainedDetachedSiblingLosesReleasedPreviousSibling() {
+        let next = Markdown.Inline()
+        weak var released: Markdown.Inline?
+        do {
+            let previous = Markdown.Inline()
+            released = previous
+            previous.insertAfter(next)
+            XCTAssertTrue(next.previousSibling === previous)
+        }
+        XCTAssertNil(released)
+        XCTAssertNil(next.previousSibling)
+    }
+
     func testInlineOpeningCharactersCoverEveryUTF16CodeUnit() {
         let parser = Markdown.InlineParser()
         parser.openingCharacters = [Markdown.Char(0), Markdown.Char(0xD800), Markdown.Char(0xFFFF), "~"]
