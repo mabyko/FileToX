@@ -36,6 +36,8 @@ struct ImageFrame {
     static let jpegSamplingKey = "FileToXJpegSampling" as CFString
     /// Opaque JPEG COM and Photoshop APP13 marker segments, removed by keepMetadata=false.
     static let jpegMarkersKey = "FileToXJpegMarkers" as CFString
+    /// Actual JPEG APP2 ICC bytes; empty means the source had no valid embedded profile (ImageIO may assign one).
+    static let jpegICCKey = "FileToXJpegICC" as CFString
     /// Resolution as the file stored it, [x, y, unit] with unit 1 = per inch, 2 = per centimetre (ImageMagick's
     /// `resolution` and `units`, which the JPEG writer copies into JFIF). `dpi` holds the same in inches.
     static let resolutionKey = "FileToXResolution" as CFString
@@ -164,7 +166,10 @@ enum ImageEncoder {
         if !options.keepMetadata {
             frame.properties[ImageFrame.metadataKey] = nil
             frame.properties[ImageFrame.jpegMarkersKey] = nil
-            if !options.keepColorProfile { frame.image = ImagePixels.untagged(frame.image) }
+            if !options.keepColorProfile {
+                frame.image = ImagePixels.untagged(frame.image)
+                frame.properties[ImageFrame.jpegICCKey] = Data()
+            }
         }
 
         if noAlpha.contains(targetFormat) && ImagePixels.hasAlpha(frame.image) {
@@ -365,7 +370,7 @@ enum ImageEncoder {
     }
 
     private static let privateKeys: Set<CFString> = [ImageFrame.metadataKey, ImageFrame.loopCountKey, ImageFrame.icoSizesKey, ImageFrame.losslessKey,
-                                                     ImageFrame.qualityKey, ImageFrame.jpegSamplingKey, ImageFrame.resolutionKey, ImageFrame.jpegMarkersKey, ImageFrame.icoPaletteKey]
+                                                     ImageFrame.qualityKey, ImageFrame.jpegSamplingKey, ImageFrame.resolutionKey, ImageFrame.jpegMarkersKey, ImageFrame.jpegICCKey, ImageFrame.icoPaletteKey]
 
     /// Sets the EXIF orientation of the frame and of its metadata.
     private static func setOrientation(_ frame: inout ImageFrame, _ orientation: Int) {

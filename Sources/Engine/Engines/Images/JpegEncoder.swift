@@ -63,7 +63,7 @@ enum JpegEncoder {
             CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFOrientation, orientation as CFNumber)
             tagged.properties[ImageFrame.metadataKey] = metadata
         }
-        let blobs = CodecPixels.metadataBlobs(tagged)
+        let blobs = CodecPixels.metadataBlobs(tagged, colorModel: cmyk ? .cmyk : gray ? .monochrome : .rgb)
         // ImageMagick's EXIF profile keeps the APP1 identifier.
         let exif = blobs.exif.map { Data("Exif\0\0".utf8) + $0 }
 
@@ -124,6 +124,28 @@ enum JpegEncoder {
     private static func withBlob<T>(_ blob: Data?, _ body: (UnsafePointer<UInt8>?, Int) -> T) -> T {
         guard let blob, !blob.isEmpty else { return body(nil, 0) }
         return blob.withUnsafeBytes { body($0.bindMemory(to: UInt8.self).baseAddress, blob.count) }
+    }
+
+    /// Complete, uniquely numbered APP2 ICC chunks; reject truncated or unusable source profiles.
+    static func embeddedProfile(_ file: Data) -> Data? {
+        let header = Data("ICC_PROFILE\0".utf8)
+        var chunks: [Int: Data] = [:]
+        var total = 0
+        for (marker, payload) in segments(file) where marker == 0xE2 && payload.starts(with: header) {
+            guard payload.count > 14 else { return nil }
+            let sequence = Int(payload[12]), count = Int(payload[13])
+            guard count > 0, sequence > 0, sequence <= count, total == 0 || total == count,
+                  chunks[sequence] == nil else { return nil }
+            total = count
+            chunks[sequence] = Data(payload.dropFirst(14))
+        }
+        guard total > 0, chunks.count == total else { return nil }
+        var profile = Data()
+        for sequence in 1...total { profile.append(chunks[sequence]!) }
+        guard profile.count >= 128 else { return nil }
+        let size = profile.prefix(4).reduce(0) { $0 << 8 | Int($1) }
+        guard size >= 128, size <= profile.count, CGColorSpace(iccData: profile as CFData) != nil else { return nil }
+        return profile
     }
 
     /// COM and Photoshop APP13, including multipart resources and markers between progressive scans.

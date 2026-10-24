@@ -49,7 +49,7 @@ enum PsdCodec {
         if let dpi = frame.dpi, dpi.x > 0 {
             resources.resource(0x03ED, resolutionInfo(dpi))
         }
-        if ImagePixels.hasColorProfile(frame.image), let icc = frame.image.colorSpace?.copyICCData() as Data? {
+        if let icc = CodecPixels.colorProfile(frame, colorModel: gray ? .monochrome : .rgb) {
             resources.resource(0x040F, [UInt8](icc))
         }
         out.u32(resources.data.count)

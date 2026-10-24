@@ -59,7 +59,7 @@ static void write_profiles(j_compress_ptr info, const FTXJpegImage *image) {
         for (size_t i = 0; i < image->icc_length; i += 65519) {
             size_t length = image->icc_length - i < 65519 ? image->icc_length - i : 65519;
             chunk[12] = (unsigned char)(i / 65519 + 1);
-            chunk[13] = (unsigned char)(image->icc_length / 65519 + 1);
+            chunk[13] = (unsigned char)(image->icc_length / 65519 + (image->icc_length % 65519 != 0));
             memcpy(chunk + 14, image->icc + i, length);
             jpeg_write_marker(info, JPEG_APP0 + 2, chunk, (unsigned int)(length + 14));
         }

@@ -56,6 +56,7 @@ enum ImageReader {
         let jpeg = format == "jpg" ? try Data(contentsOf: URL(fileURLWithPath: path)) : nil
         let sampling = jpeg.flatMap(JpegEncoder.samplingFactors)
         let markers = jpeg.map(JpegEncoder.preservedMarkers)
+        let icc = jpeg.flatMap(JpegEncoder.embeddedProfile)
         let animation = (fileProperties[kCGImagePropertyGIFDictionary] ?? fileProperties[kCGImagePropertyWebPDictionary]) as? [CFString: Any]
         let loops = (animation?[kCGImagePropertyGIFLoopCount] ?? animation?[kCGImagePropertyWebPLoopCount]) as? NSNumber
 
@@ -78,6 +79,7 @@ enum ImageReader {
             if let jpeg { image = try decodeJpeg(jpeg, fallback: image) }
             let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
             var frame = ImageFrame(image: image, delay: delay(properties), dpi: storedDpi(properties, format: format))
+            if jpeg != nil { frame.properties[ImageFrame.jpegICCKey] = icc ?? Data() }
             if let resolution = storedResolution(properties, format: format) { frame.properties[ImageFrame.resolutionKey] = resolution }
             if format == "gif" { frame.properties[ImageFrame.icoPaletteKey] = true }
             if image.colorSpace?.model == .monochrome && !["jpg", "png", "bmp"].contains(format) {
@@ -112,12 +114,10 @@ enum ImageReader {
         guard let fallbackSpace = fallback.colorSpace, fallbackSpace.model == model else { return fallback }
         var space = fallbackSpace
         if model == .cmyk {
-            let iccHeader = Data("ICC_PROFILE\0".utf8)
-            let embedded = JpegEncoder.segments(data).contains { marker, payload in
-                marker == 0xE2 && payload.count > 14 && payload.starts(with: iccHeader)
-            }
             // ImageIO assigns Generic CMYK to untagged JPEGs too; that is not an embedded source profile.
-            if !embedded { space = CGColorSpaceCreateDeviceCMYK() }
+            if JpegEncoder.embeddedProfile(data).flatMap({ CGColorSpace(iccData: $0 as CFData) })?.model != .cmyk {
+                space = CGColorSpaceCreateDeviceCMYK()
+            }
         }
         guard let provider = CGDataProvider(data: samples as CFData),
               let image = CGImage(width: Int(width), height: Int(height), bitsPerComponent: 8, bitsPerPixel: 8 * Int(components),

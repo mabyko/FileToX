@@ -95,7 +95,7 @@ enum WebpEncoder {
 
     /// ICC profile, EXIF and XMP as WebP chunks (ImageMagick's WebPWriteImageProfile).
     private static func addMetadata(_ encoded: [UInt8], _ frame: ImageFrame) throws -> [UInt8] {
-        let blobs = CodecPixels.metadataBlobs(frame)
+        let blobs = CodecPixels.metadataBlobs(frame, colorModel: .rgb)
         guard blobs.icc != nil || blobs.exif != nil || blobs.xmp != nil else { return encoded }
         return try encoded.withUnsafeBufferPointer { buffer -> [UInt8] in
             var bitstream = WebPData(bytes: buffer.baseAddress, size: buffer.count)
@@ -236,10 +236,23 @@ enum CodecPixels {
         return (rgba, 4)
     }
 
-    /// The frame's ICC profile (unless plain sRGB), EXIF (TIFF-structured, as ImageIO writes it) and XMP (the
+    /// Exact source ICC bytes when known, restricted to the current pixels and the encoder's color model.
+    static func colorProfile(_ frame: ImageFrame, colorModel: CGColorSpaceModel? = nil) -> Data? {
+        let profile: Data?
+        if let source = frame.properties[ImageFrame.jpegICCKey] as? Data {
+            profile = source
+        } else {
+            profile = ImagePixels.hasColorProfile(frame.image) ? frame.image.colorSpace?.copyICCData() as Data? : nil
+        }
+        guard let profile, let space = CGColorSpace(iccData: profile as CFData),
+              space.model == frame.image.colorSpace?.model, space.model == (colorModel ?? space.model) else { return nil }
+        return profile
+    }
+
+    /// The frame's ICC profile, EXIF (TIFF-structured, as ImageIO writes it) and XMP (the
     /// metadata outside the EXIF/TIFF namespaces).
-    static func metadataBlobs(_ frame: ImageFrame) -> (icc: Data?, exif: Data?, xmp: Data?) {
-        let icc = ImagePixels.hasColorProfile(frame.image) ? frame.image.colorSpace?.copyICCData() as Data? : nil
+    static func metadataBlobs(_ frame: ImageFrame, colorModel: CGColorSpaceModel? = nil) -> (icc: Data?, exif: Data?, xmp: Data?) {
+        let icc = colorProfile(frame, colorModel: colorModel)
         guard let value = frame.properties[ImageFrame.metadataKey], CFGetTypeID(value as CFTypeRef) == CGImageMetadataGetTypeID() else {
             return (icc, nil, nil)
         }
