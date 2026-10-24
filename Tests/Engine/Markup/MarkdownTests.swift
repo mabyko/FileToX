@@ -128,6 +128,56 @@ final class MarkdownTests: XCTestCase {
         XCTAssertNil(child.parent)
     }
 
+    func testReplacingBlockWithItsChildPreservesTheCurrentParent() {
+        let outer = Markdown.ContainerBlock(nil), child = Markdown.ParagraphBlock(nil)
+        weak var released: Markdown.ContainerBlock?
+        do {
+            let inner = Markdown.ContainerBlock(nil)
+            released = inner
+            outer.add(inner)
+            inner.add(child)
+            inner.replaceBy(child, moveChildren: false)
+            XCTAssertTrue(child.parent === outer)
+        }
+        XCTAssertNil(released)
+        XCTAssertTrue(child.parent === outer)
+        child.remove()
+        XCTAssertNil(child.parent)
+        XCTAssertEqual(outer.count, 0)
+    }
+
+    func testInsertBeforeThenRemoveRetainedInlineLosesReleasedParent() {
+        let last = Markdown.Inline()
+        weak var released: Markdown.ContainerInline?
+        do {
+            let parent = Markdown.ContainerInline()
+            let first = Markdown.Inline(), inserted = Markdown.Inline()
+            released = parent
+            parent.appendChild(first).appendChild(last)
+            last.insertBefore(inserted)
+            inserted.remove()
+            withExtendedLifetime(parent) {}
+        }
+        XCTAssertNil(released)
+        XCTAssertNil(last.parent)
+    }
+
+    func testInsertBeforeThenClearRetainedInlineLosesReleasedParent() {
+        let first = Markdown.Inline()
+        weak var released: Markdown.ContainerInline?
+        do {
+            let parent = Markdown.ContainerInline()
+            let last = Markdown.Inline(), inserted = Markdown.Inline()
+            released = parent
+            parent.appendChild(first).appendChild(last)
+            last.insertBefore(inserted)
+            parent.clear()
+            withExtendedLifetime(parent) {}
+        }
+        XCTAssertNil(released)
+        XCTAssertNil(first.parent)
+    }
+
     func testRetainedInlinesLoseOnlyReleasedBacklinks() {
         let middle = Markdown.LiteralInline(Markdown.Slice("middle"))
         let last = Markdown.LiteralInline(Markdown.Slice("last"))

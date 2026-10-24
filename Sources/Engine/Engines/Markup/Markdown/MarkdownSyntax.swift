@@ -95,8 +95,7 @@ extension Markdown {
     // MARK: Blocks
 
     class Block: MarkdownObject {
-        // Owners clear backlinks before releasing children, including children retained outside the tree.
-        fileprivate(set) unowned var parent: ContainerBlock?
+        weak var parent: ContainerBlock?
         let parser: BlockParser?
         var isOpen = true
         var isBreakable = true
@@ -172,8 +171,6 @@ extension Markdown {
 
     class ContainerBlock: Block {
         private(set) var children: [Block] = []
-
-        deinit { for child in children { child.parent = nil } }
 
         var count: Int { children.count }
         var lastChild: Block? { children.last }
@@ -428,7 +425,7 @@ extension Markdown {
     // MARK: Inlines
 
     class Inline: MarkdownObject {
-        fileprivate(set) unowned var parent: ContainerInline?
+        weak var parent: ContainerInline?
         // Keep the identity separately: loading an unowned reference to a sibling in deinit would trap.
         private unowned var previousSiblingStorage: Inline?
         private weak var detachedPreviousSibling: Inline?
@@ -586,14 +583,6 @@ extension Markdown {
         override var isContainerInline: Bool { true }
         private(set) var firstChild: Inline?
         private(set) var lastChild: Inline?
-
-        deinit {
-            var child = firstChild
-            while let current = child {
-                current.parent = nil
-                child = current.nextSibling
-            }
-        }
 
         func clear() {
             var child = lastChild
