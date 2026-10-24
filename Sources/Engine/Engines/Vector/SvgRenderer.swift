@@ -1,6 +1,6 @@
 // Port of Filee.Engines/Vector/SvgRenderer.cs: loads SVG/SVGZ and draws it onto PDF pages as real vector graphics or onto
-// a bitmap for raster targets. Svg.Skia/SkiaSharp are replaced by AppKit's SVG renderer (CoreSVG) after SvgNormalizer
-// has prepared the file (CSS, text as outlines, no network references).
+// a bitmap for raster targets. Self-contained primitive raster drawings use a bounded native Skia bridge;
+// CoreSVG keeps all other SVG features and vector PDF after CSS/text/resource normalization.
 
 import AppKit
 import CoreGraphics
@@ -21,6 +21,7 @@ enum SvgRenderer {
     /// A loaded drawing.
     struct Drawing {
         let image: NSImage
+        let nativeData: Data?
         /// The SVG viewport (width/height or viewBox) in CSS pixels.
         let bounds: CGRect
     }
@@ -36,7 +37,7 @@ enum SvgRenderer {
         guard size.width > 0, size.height > 0, size.width.isFinite, size.height.isFinite else {
             throw ConversionError("The SVG file has no drawable content or no size.")
         }
-        return Drawing(image: image, bounds: CGRect(origin: .zero, size: size))
+        return Drawing(image: image, nativeData: NativeSvgRasterizer.supports(bytes) ? prepared : nil, bounds: CGRect(origin: .zero, size: size))
     }
 
     /// The file's SVG text as bytes: SVGZ (or a gzipped .svg) is decompressed.
@@ -96,9 +97,14 @@ enum SvgRenderer {
     static func rasterize(_ drawing: Drawing, scale: Float) throws -> ImageFrame {
         let width = max(1, Int((Float(drawing.bounds.width) * scale).rounded(.up)))
         let height = max(1, Int((Float(drawing.bounds.height) * scale).rounded(.up)))
-        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else {
             throw ConversionError("The drawing is too large to render (\(width) × \(height) pixels).")
+        }
+        if let data = drawing.nativeData, try NativeSvgRasterizer.render(data, bounds: drawing.bounds, scale: scale, into: context),
+           let image = context.makeImage() {
+            let dpi = Double(cssDpi * scale)
+            return ImageFrame(image: image, dpi: (dpi, dpi))
         }
         context.clear(CGRect(x: 0, y: 0, width: width, height: height))
         // The drawing's own size times the scale; the bitmap is rounded up to whole pixels at the bottom and right.

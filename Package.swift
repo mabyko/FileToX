@@ -2,6 +2,8 @@
 import PackageDescription
 import Foundation
 
+let nativeSvgLibraryPath = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/SkiaSVG/lib").path
+
 let pdfiumLibraryPath = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/PDFium/lib").path
 
 // The engine is a line-by-line port of C# (Filee); Swift 5 mode keeps its many shared mutable engine objects
@@ -40,6 +42,15 @@ let package = Package(
             cSettings: [.headerSearchPath("src"), .define("OPJ_STATIC"), .define("MUTEX_pthread")]
         ),
         .target(
+            name: "CNativeSvg",
+            path: "Vendor/SkiaSVG",
+            exclude: ["headers", "lib", "FileToX/bridge.cpp", "FileToX/selfcheck.c", "build.py", "PROVENANCE.json", "README.md"],
+            sources: ["FileToX/link.c"],
+            publicHeadersPath: "FileToX/include",
+            linkerSettings: [.unsafeFlags([nativeSvgLibraryPath + "/libFileToXSvg.a"]),
+                             .linkedLibrary("c++"), .linkedFramework("Foundation"), .linkedFramework("CoreText"), .linkedFramework("CoreGraphics")]
+        ),
+        .target(
             name: "CPDFium",
             path: "Vendor/PDFium",
             sources: ["CPDFium.c"],
@@ -63,6 +74,7 @@ let package = Package(
                 "CLibRaw",
                 "COpenJPEG",
                 "CPDFium",
+                "CNativeSvg",
                 .product(name: "CJpegTurbo", package: "libjpeg-turbo"),
                 .product(name: "libwebp", package: "libwebp-Xcode"),
                 .product(name: "libjxl", package: "libjxl-Xcode"),
@@ -70,7 +82,7 @@ let package = Package(
                 .product(name: "brotli", package: "libjxl-Xcode"),
             ],
             path: "Sources/Engine",
-            resources: [.copy("Resources")],
+            resources: [.copy("Resources"), .copy("Engines/Vector/Skia.LICENSES.txt")],
             swiftSettings: engineSettings,
             linkerSettings: [.linkedLibrary("xml2"), .linkedLibrary("z")]
         ),

@@ -486,3 +486,111 @@ extension VectorTests {
         XCTAssertNil(root.elements()[2].attributeValue(XNamespace("http://www.w3.org/1999/xlink") + "href"))
     }
 }
+
+extension VectorTests {
+    func testNativeSvgCapabilityUsesTheWholeDomAndConservativeAttributes() throws {
+        func data(_ body: String, attributes: String = "") -> Data {
+            Data("<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' \(attributes)>\(body)</svg>".utf8)
+        }
+        XCTAssertTrue(NativeSvgRasterizer.supports(data("<g fill='#fff'><rect width='40' height='40'/><path id='writing-mode' fill='none' stroke='black' stroke-width='.5' stroke-linecap='round' d='M0 0L40 40'/></g>")))
+        for body in [
+            "<g><text writing-mode='tb'>Vertical</text></g>",
+            "<style>.v { writing-mode:tb }</style><text class='v'>Vertical</text>",
+            "<g style='writing-mode:tb'><text>Vertical</text></g>",
+            "<use href='#symbol'/>", "<defs><symbol id='symbol'/></defs>",
+            "<image href='data:image/svg+xml;base64,PHN2Zy8+'/>",
+            "<svg width='10' height='10'><rect width='10' height='10'/></svg>",
+            "<rect width='10' height='10' transform='rotate(30)'/>",
+            "<rect width='10' height='10' fill='url(#g)'/>",
+            "<path d='M0 0L10 10' filter='url(#blur)'/>",
+            "<rect width='10' height='10' fill='transparent'/>",
+            "<rect width='10' height='10' fill='RED'/>",
+            "<rect width='10' height='10' stroke-miterlimit='.5'/>",
+            "<foreignObject/>", "<f:path xmlns:f='urn:foreign' d='M0 0L10 10'/>",
+        ] { XCTAssertFalse(NativeSvgRasterizer.supports(data(body)), body) }
+        for attributes in ["viewBox='0 0 40 40 garbage'", "viewBox='0 0 nan 40'", "height='1e30'"] {
+            XCTAssertFalse(NativeSvgRasterizer.supports(data("<path d='M0 0L10 10'/>", attributes: attributes)))
+        }
+    }
+
+    func testNativeSvgBridgeWritesRgbaAndRejectsInvalidInput() throws {
+        let source = Data("<svg xmlns='http://www.w3.org/2000/svg' width='2' height='2'><rect width='2' height='2' fill='red'/></svg>".utf8)
+        let context = try XCTUnwrap(CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 8,
+                                              space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+        XCTAssertFalse(try NativeSvgRasterizer.render(Data("not XML".utf8), bounds: CGRect(x: 0, y: 0, width: 2, height: 2), scale: 1, into: context))
+        XCTAssertFalse(try NativeSvgRasterizer.render(source, bounds: CGRect(x: 0, y: 0, width: 2, height: 2), scale: .nan, into: context))
+        XCTAssertTrue(try NativeSvgRasterizer.render(source, bounds: CGRect(x: 0, y: 0, width: 2, height: 2), scale: 1, into: context))
+        let bitmap = ImagePixels.bitmap(try XCTUnwrap(context.makeImage()))
+        XCTAssertEqual(bitmap.pixels, Array(repeating: [UInt8(255), 0, 0, 255], count: 4).flatMap { $0 })
+    }
+
+    func testNativePrimitiveRasterKeepsImageLifetimeAndPdfVectors() throws {
+        let source = try write("native.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><rect fill='red' width='40' height='20'/><path stroke='blue' d='M0 0L40 20'/></svg>")
+        let drawing = try SvgRenderer.load(source)
+        XCTAssertNotNil(drawing.nativeData)
+        let frame = try autoreleasepool { try SvgRenderer.rasterize(drawing, scale: 1) }
+        XCTAssertEqual(GraphicsTestKit.pixel(frame.image, 30, 5).r, 255)
+        XCTAssertEqual(frame.dpi?.0, 96)
+        let pdf = FilePath.combine(dir, "native.pdf")
+        try SvgRenderer.writePdf(drawing, pdf, title: "native", pdfA: false)
+        let page = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: pdf))?.page(at: 0)?.pageRef)
+        var content = "", images: [(Int, Int)] = [], fonts = 0
+        PdfContent.collect(page, &content, &images, &fonts)
+        XCTAssertTrue(images.isEmpty)
+        XCTAssertNotNil(content.range(of: #"\s(c|l|re)\s"#, options: .regularExpression))
+        // A native parser failure preserves the existing CoreSVG drawing.
+        let fallback = SvgRenderer.Drawing(image: drawing.image, nativeData: Data("bad XML".utf8), bounds: drawing.bounds)
+        XCTAssertEqual(GraphicsTestKit.pixel(try SvgRenderer.rasterize(fallback, scale: 1).image, 30, 5).r, 255)
+    }
+
+    func testCancelledNativeSvgDoesNotWriteAnOutput() async throws {
+        let source = try write("cancel.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><rect fill='red' width='40' height='20'/></svg>")
+        let task = Task { try await GraphicsTestKit.convert(vector, source, to: "png") }
+        task.cancel()
+        do { _ = try await task.value; XCTFail("cancelled native render succeeded") }
+        catch is CancellationError { }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: FilePath.combine(dir, "cancel.png")))
+    }
+}
+
+extension VectorTests {
+    func testNativeSvgzKeepsViewportResizeAndDpi() throws {
+        let source = Data("<svg xmlns='http://www.w3.org/2000/svg' width='100' height='50'><rect fill='white' width='100' height='50'/><path d='M0 0L100 50' fill='none' stroke='black' stroke-width='.7'/></svg>".utf8)
+        let path = FilePath.combine(dir, "native.svgz")
+        try Deflate.deflate(source, windowBits: 31).write(to: URL(fileURLWithPath: path))
+        let drawing = try SvgRenderer.load(path)
+        XCTAssertNotNil(drawing.nativeData)
+        XCTAssertEqual(drawing.bounds.size, CGSize(width: 100, height: 50))
+        var preset = Preset()
+        preset.image.resize = .longEdge
+        preset.image.longEdge = 300
+        let scale = SvgRenderer.rasterScale(drawing.bounds, preset.image, preset.pdf)
+        XCTAssertEqual(scale, 3)
+        let frame = try SvgRenderer.rasterize(drawing, scale: scale)
+        XCTAssertEqual([frame.image.width, frame.image.height], [300, 150])
+        XCTAssertEqual(frame.dpi?.0, 288)
+        preset.image.resize = .percent
+        preset.image.resizePercent = 50
+        XCTAssertEqual(SvgRenderer.rasterScale(drawing.bounds, preset.image, preset.pdf), 5.12, accuracy: 0.00001)
+        XCTAssertFalse(NativeSvgRasterizer.supports(Data(repeating: 0, count: 8 * 1024 * 1024 + 1)))
+    }
+}
+
+extension VectorTests {
+    func testNativeSvgRendersConcurrentlyWithIndependentBuffers() async throws {
+        let path = try write("parallel.svg", "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><rect fill='red' width='40' height='20'/></svg>")
+        let drawing = try SvgRenderer.load(path)
+        XCTAssertNotNil(drawing.nativeData)
+        try await withThrowingTaskGroup(of: Bool.self) { group in
+            for scale in 1...8 {
+                group.addTask {
+                    let image = try SvgRenderer.rasterize(drawing, scale: Float(scale)).image
+                    let pixel = GraphicsTestKit.pixel(image, image.width / 2, image.height / 2)
+                    return image.width == 40 * scale && image.height == 20 * scale && pixel.r == 255 && pixel.a == 255
+                }
+            }
+            for try await valid in group { XCTAssertTrue(valid) }
+        }
+    }
+}
