@@ -314,7 +314,29 @@ enum ImageEncoder {
             encoded = try Jpeg2000Encoder.replacingCodestream(in: encoded, image: frame.image, quality: quality)
         }
         if format == "png", let frame = frames.first { encoded = try preservingJpegMetadata(encoded, frame) }
+        if format == "bmp" { encoded = zeroingBmpPadding(encoded) }
         try FileManager.default.writeFile(path, encoded)
+    }
+
+    /// ImageIO leaves the row padding of an uncompressed 24-bit BMP uninitialized (stray memory, different every run).
+    /// Zeroed only when the header describes exactly the pixel rows that end the file; anything else stays as written.
+    static func zeroingBmpPadding(_ bmp: Data) -> Data {
+        guard bmp.count >= 54, bmp.starts(with: [0x42, 0x4D]) else { return bmp }
+        let offset = Int(BinaryPrimitives.readUInt32LittleEndian(bmp, 10)), header = Int(BinaryPrimitives.readUInt32LittleEndian(bmp, 14))
+        let width = Int(BinaryPrimitives.readInt32LittleEndian(bmp, 18)), rows = abs(Int(BinaryPrimitives.readInt32LittleEndian(bmp, 22)))
+        let used = width * 3, stride = (used + 3) / 4 * 4
+        guard Int(BinaryPrimitives.readUInt32LittleEndian(bmp, 2)) == bmp.count, header >= 40, offset >= 14 + header, offset <= bmp.count,
+              BinaryPrimitives.readUInt16LittleEndian(bmp, 26) == 1, BinaryPrimitives.readUInt16LittleEndian(bmp, 28) == 24,
+              BinaryPrimitives.readUInt32LittleEndian(bmp, 30) == 0, width > 0, rows > 0, stride > used,
+              (bmp.count - offset) % stride == 0, (bmp.count - offset) / stride == rows,
+              // ImageIO records the unpadded size; 0 and the padded size are the other valid values.
+              [0, used * rows, stride * rows].contains(Int(BinaryPrimitives.readUInt32LittleEndian(bmp, 34))) else { return bmp }
+        var result = bmp
+        for row in 0..<rows {
+            let start = result.startIndex + offset + row * stride
+            result.resetBytes(in: start + used..<start + stride)
+        }
+        return result
     }
 
     /// ImageMagick's PNG raw-profile convention keeps Photoshop resources that ImageIO cannot serialize.

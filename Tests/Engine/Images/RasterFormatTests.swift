@@ -241,3 +241,97 @@ extension RasterFormatTests {
         XCTAssertEqual(decoded.frames.count, 2)
     }
 }
+
+extension RasterFormatTests {
+    /// A 24-bit BI_RGB BMP laid out like ImageIO's (40-byte header, unpadded biSizeImage) with 0xA5 in every row's padding.
+    private func poisonedBmp(width: Int, height: Int) -> Data {
+        let used = width * 3, stride = (used + 3) / 4 * 4, rows = abs(height)
+        let writer = BinaryWriter()
+        writer.write([0x42, 0x4D] as [UInt8])
+        for value in [UInt32(54 + stride * rows), 0, 54, 40] { writer.write(value) }
+        writer.write(Int32(width))
+        writer.write(Int32(height))
+        writer.write(UInt16(1))
+        writer.write(UInt16(24))
+        writer.write(UInt32(0))
+        writer.write(UInt32(used * rows))
+        writer.write([UInt8](repeating: 0, count: 16))
+        for row in 0..<rows {
+            writer.write((0..<used).map { UInt8(($0 * 7 + row * 31) & 0xFF | 1) })
+            writer.write([UInt8](repeating: 0xA5, count: stride - used))
+        }
+        return writer.data
+    }
+
+    private func isPadding(_ index: Int, width: Int) -> Bool {
+        let stride = (width * 3 + 3) / 4 * 4
+        return index >= 54 && (index - 54) % stride >= width * 3
+    }
+
+    func testBmpRowPaddingIsZeroedOnlyWithinAStrictHeader() {
+        for width in 1...9 {
+            for height in [-3, 3, 1] {
+                let poisoned = poisonedBmp(width: width, height: height)
+                let zeroed = ImageEncoder.zeroingBmpPadding(poisoned)
+                XCTAssertEqual(zeroed.count, poisoned.count)
+                for i in 0..<poisoned.count {
+                    XCTAssertEqual(zeroed[i], isPadding(i, width: width) ? 0 : poisoned[i], "width \(width), height \(height), byte \(i)")
+                }
+            }
+        }
+        // biSizeImage may also be 0 or the padded size.
+        for size in [UInt32(0), UInt32(16 * 3)] {
+            var bmp = poisonedBmp(width: 5, height: 3)
+            BinaryPrimitives.writeUInt32LittleEndian(&bmp, 34, size)
+            XCTAssertFalse(ImageEncoder.zeroingBmpPadding(bmp).enumerated().contains { isPadding($0.offset, width: 5) && $0.element != 0 })
+        }
+        // Anything the header does not describe exactly is left byte for byte as it is.
+        let valid = poisonedBmp(width: 5, height: 3)
+        func patched(_ offset: Int, _ value: UInt32, bytes: Int = 4) -> Data {
+            var bmp = valid
+            if bytes == 2 { BinaryPrimitives.writeUInt16LittleEndian(&bmp, offset, UInt16(value)) } else { BinaryPrimitives.writeUInt32LittleEndian(&bmp, offset, value) }
+            return bmp
+        }
+        func resized(_ bmp: Data) -> Data {
+            var bmp = bmp
+            BinaryPrimitives.writeUInt32LittleEndian(&bmp, 2, UInt32(bmp.count))
+            return bmp
+        }
+        let rejected = [
+            Data("BA".utf8) + valid.dropFirst(2), patched(2, UInt32(valid.count + 1)), patched(2, UInt32(valid.count - 1)),
+            patched(14, 12), patched(14, 39), patched(10, 53), patched(10, UInt32(valid.count + 1)), patched(10, 0xFFFF_FFFF),
+            patched(26, 2, bytes: 2), patched(28, 32, bytes: 2), patched(28, 8, bytes: 2), patched(30, 1), patched(30, 3),
+            patched(18, 0), patched(18, UInt32(bitPattern: -5)), patched(18, 0x7FFF_FFFF), patched(22, 0), patched(22, 0x7FFF_FFFF),
+            patched(34, 7), resized(valid + [0]), resized(valid.dropLast()), resized(valid + Data(repeating: 0xA5, count: 16)),
+            Data(valid.prefix(53)), poisonedBmp(width: 4, height: 3),
+        ]
+        for (index, bmp) in rejected.enumerated() { XCTAssertEqual(ImageEncoder.zeroingBmpPadding(bmp), bmp, "variant \(index)") }
+    }
+
+    func testBmpWriterZeroesPaddingAndKeepsImageIOPixelsAcrossWidths() throws {
+        for width in Array(1...9) + [41] {
+            for (space, components) in [(CGColorSpace(name: CGColorSpace.sRGB)!, 3), (CGColorSpaceCreateDeviceGray(), 1)] {
+                let samples = (0..<width * 3 * components).map { UInt8(($0 * 53 + width * 17) & 255) }
+                let image = ImagePixels.make(samples, width, 3, components: components, space: space, alpha: false)
+                let file = FilePath.combine(dir, "w\(width)-\(components).bmp")
+                try ImageEncoder.save([ImageFrame(image: image)], to: file, format: "bmp")
+                let written = try Data(contentsOf: URL(fileURLWithPath: file))
+                // ImageIO alone writes the same file except for the padding it leaves undefined.
+                let raw = NSMutableData()
+                let destination = try XCTUnwrap(CGImageDestinationCreateWithData(raw, "com.microsoft.bmp" as CFString, 1, nil))
+                CGImageDestinationAddImage(destination, image, nil)
+                XCTAssertTrue(CGImageDestinationFinalize(destination))
+                let imageIO = raw as Data
+                XCTAssertEqual(written.count, imageIO.count)
+                XCTAssertEqual(BinaryPrimitives.readUInt16LittleEndian(written, 28), 24)
+                for i in 0..<min(written.count, imageIO.count) {
+                    XCTAssertEqual(written[i], isPadding(i, width: width) ? 0 : imageIO[i], "width \(width), byte \(i)")
+                }
+                let decoded = try GraphicsTestKit.decode(file).frames[0]
+                let reference = try XCTUnwrap(CGImageSourceCreateWithData(imageIO as CFData, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) })
+                XCTAssertEqual(ImagePixels.straight(decoded).samples, ImagePixels.straight(reference).samples)
+                if components == 3 { XCTAssertEqual(ImagePixels.straight(decoded).samples, samples) }
+            }
+        }
+    }
+}
