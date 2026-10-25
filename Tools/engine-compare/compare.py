@@ -124,7 +124,8 @@ def compare_output(a, b, left, right, thresholds):
             return "FAIL", ["PDF page count changed"], metrics
         scores = []
         for x, y in zip(ma["pages"], mb["pages"]):
-            if abs(x["width"]-y["width"]) > 1 or abs(x["height"]-y["height"]) > 1:
+            # Captured PDFKit boxes ignore rotation; the raster inspector checks rotated dimensions.
+            if not thresholds.get("pdfRender") and (abs(x["width"]-y["width"]) > 1 or abs(x["height"]-y["height"]) > 1):
                 return "FAIL", ["PDF page size changed by more than 1pt"], metrics
             scores.append(ratio(x["text"], y["text"]))
         metrics["pageTextRatios"] = scores
@@ -305,7 +306,8 @@ def main():
     pdf_limit = ("PDF media-box page content is raster-compared at 144 DPI; annotations are not rendered. " if args.pdf_render else
                  "Empty-text PDFs compare geometry only. ")
     report = {"schema": 1, "baseline": str(roots[0]), "candidate": str(roots[1]), "thresholds": thresholds,
-              "inspectionPolicy": {"tcr": "exact-decoded-bytes", "imageReferences": "diagnostic-only", "pdfRasterDpi": 144 if args.pdf_render else None},
+              "inspectionPolicy": {"tcr": "exact-decoded-bytes", "imageReferences": "diagnostic-only",
+                                   "pdfRasterDpi": 144 if args.pdf_render else None, "pdfRasterVersion": 2 if args.pdf_render else None},
               "summary": dict(Counter(r["status"] for r in results)), "groups": summaries, "cases": results,
               "limits": "Engine groups are inferred. Media compares structure/duration, fonts compare table tags/glyph count. " + pdf_limit + "Unsupported decoders produce WARN when bytes differ."}
     write_json(args.out / "report.json", report)

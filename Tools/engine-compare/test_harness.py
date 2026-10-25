@@ -5,6 +5,7 @@ import base64
 import gzip
 import hashlib
 import json
+import math
 import tarfile
 from pathlib import Path
 import sys
@@ -133,10 +134,11 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(result["status"], "PASS")
             self.assertEqual(result["outputs"][0]["imageReferences"]["baseline"]["coverage"], "unavailable")
 
-    def pdf(self, path, content, rotation=0, producer="test", width=20):
+    def pdf(self, path, content, rotation=0, producer="test", width=20, height=20, origin=(0, 0)):
         stream = content.encode()
+        x, y = origin
         objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
-                   f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} 20] /Rotate {rotation} /Resources << >> /Contents 4 0 R >>".encode(),
+                   f"<< /Type /Page /Parent 2 0 R /MediaBox [{x} {y} {x+width} {y+height}] /Rotate {rotation} /Resources << >> /Contents 4 0 R >>".encode(),
                    f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream", f"<< /Producer ({producer}) >>".encode()]
         data = bytearray(b"%PDF-1.4\n"); offsets = [0]
         for i, obj in enumerate(objects, 1):
@@ -145,6 +147,21 @@ class HarnessTests(unittest.TestCase):
         for offset in offsets[1:]: data.extend(f"{offset:010} 00000 n \n".encode())
         data.extend(f"trailer\n<< /Size {len(offsets)} /Root 1 0 R /Info 5 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
         path.write_bytes(data)
+
+    def test_pdf_raster_fills_the_144_dpi_canvas(self):
+        black, white = self.root / "black.pdf", self.root / "white.pdf"
+        for rotation in (0, 90, 180, 270):
+            for origin in ((0, 0), (7, -3)):
+                with self.subTest(rotation=rotation, origin=origin):
+                    x, y = origin
+                    self.pdf(black, f"0 g {x} {y} 20 10 re f", rotation=rotation,
+                             width=20, height=10, origin=origin)
+                    self.pdf(white, "", rotation=rotation, width=20, height=10, origin=origin)
+                    result = native("pdf-compare", black, white)
+                    self.assertEqual((result["dpi"], result["rasterVersion"]), (144, 2))
+                    # Every RGB byte must differ by 255; alpha remains 255 in both.
+                    # A 72-DPI page centered in the canvas differs in only a quarter of it.
+                    self.assertAlmostEqual(result["frames"][0]["psnr"], 10 * math.log10(4 / 3), places=6)
 
     def test_pdf_raster_detects_textless_layout_loss_and_preserves_rotation(self):
         a, b = self.root / "a.pdf", self.root / "b.pdf"
@@ -161,6 +178,27 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(compare_output(fingerprint(a), fingerprint(b), a, b, thresholds)[0], "WARN")
         self.pdf(b, "", width=999999999)
         with self.assertRaisesRegex(RuntimeError, "pixel limit"): native("pdf-compare", b, b)
+
+    def test_pdf_raster_clips_content_to_its_own_media_box(self):
+        a, b = self.root / "a.pdf", self.root / "b.pdf"
+        for width, other_width in ((20, 21), (20.25, 20.25)):
+            with self.subTest(width=width, other_width=other_width):
+                self.pdf(a, f"0 g {width} 0 1 10 re f", width=width, height=10)
+                self.pdf(b, "", width=other_width, height=10)
+                score = native("pdf-compare", a, b)
+                self.assertTrue(score["sameGeometry"])
+                self.assertEqual(score["frames"][0], {"psnr": 99, "ssim": 1})
+
+    def test_pdf_raster_comparison_accepts_equivalent_nonsquare_rotation(self):
+        a, b = self.root / "a.pdf", self.root / "b.pdf"
+        self.pdf(a, "1 0 0 rg 0 0 10 10 re f", width=20, height=10)
+        self.pdf(b, "1 0 0 rg 0 0 10 10 re f", width=10, height=20, rotation=90)
+        thresholds = {"psnr": 30, "ssim": .95, "text": .95, "pdfRender": True}
+        status, reasons, metrics = compare_output(fingerprint(a), fingerprint(b), a, b, thresholds)
+        self.assertEqual(status, "WARN", reasons)
+        self.assertEqual(metrics["raster"]["frames"][0], {"psnr": 99, "ssim": 1})
+        self.pdf(b, "", width=12, height=20, rotation=90)
+        self.assertEqual(compare_output(fingerprint(a), fingerprint(b), a, b, thresholds)[0], "FAIL")
 
     def test_pdf_raster_timeout_is_an_unavailable_warning(self):
         pdf = {"kind": "pdf", "sha256": "a", "metadata": {"pageCount": 1, "pages": [{"width": 20, "height": 20, "text": ""}]}}
@@ -180,7 +218,9 @@ class HarnessTests(unittest.TestCase):
             args = [sys.executable, "-I", str(Path(__file__).with_name("compare.py")), *map(str, folders), "--out", str(output)]
             if enabled: args.append("--pdf-render")
             subprocess.run(args, check=True, capture_output=True)
-            limits = json.loads((output / "report.json").read_text())["limits"]
+            report = json.loads((output / "report.json").read_text())
+            limits = report["limits"]
+            self.assertEqual(report["inspectionPolicy"]["pdfRasterVersion"], 2 if enabled else None)
             self.assertEqual("144 DPI" in limits, enabled)
             self.assertEqual("geometry only" in limits, not enabled)
 

@@ -64,6 +64,12 @@ thresholds apply. Core Graphics renders the complete media box on white, with pa
 16 million pixels/8192 pixels per page side. Rendering limits/timeouts produce explicit unavailable WARNs; pages
 are not silently sampled. PDF annotations are not rendered, and global SSIM is not full layout verification.
 
+Reports with `inspectionPolicy.pdfRasterVersion: 2` apply an explicit 2x scale before page rotation and placement,
+clip content to each page's media box, and compare rotation-aware dimensions with the same 1pt tolerance.
+Earlier reports have no raster version: their nominal 144-DPI canvas contained a centered 72-DPI page because
+Core Graphics' page transform only scales down. Keep those reports; reinspection with version 2 changes sampling
+and scores without changing the source PDFs or similarity thresholds.
+
 For default-engine comparison, omit `--optional-root` and use `matrix-default.json`
 and `run-default/cases.json`. Optionally capture a candidate matrix with `matrix.py`
 and diff its JSON against the corresponding baseline matrix.

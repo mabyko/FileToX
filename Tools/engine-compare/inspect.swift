@@ -144,7 +144,10 @@ func pdfPixels(_ page: CGPDFPage, width: Int, height: Int) throws -> [UInt8] {
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else { return false }
         context.setFillColor(CGColor(gray: 1, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        let rect = CGRect(origin: .zero, size: CGSize(width: size.width * 2, height: size.height * 2))
+        // getDrawingTransform only scales down, so apply the 144-DPI scale explicitly.
+        context.scaleBy(x: 2, y: 2)
+        let rect = CGRect(origin: .zero, size: size)
+        context.clip(to: rect)
         context.concatenate(page.getDrawingTransform(.mediaBox, rect: rect, rotate: 0, preserveAspectRatio: true))
         context.drawPDFPage(page)
         return true
@@ -172,7 +175,8 @@ func comparePdfs(_ left: String, _ right: String) throws -> [String: Any] {
         scores.append(pixelScores(try pdfPixels(x, width: Int(width), height: Int(height)),
                                   try pdfPixels(y, width: Int(width), height: Int(height))))
     }
-    return ["sameGeometry": true, "frames": scores, "dpi": 144, "background": "white", "renderer": "CoreGraphics-mediaBox"]
+    return ["sameGeometry": true, "frames": scores, "dpi": 144, "rasterVersion": 2,
+            "background": "white", "renderer": "CoreGraphics-mediaBox"]
 }
 
 do {
