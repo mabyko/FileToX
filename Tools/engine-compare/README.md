@@ -163,7 +163,8 @@ The self-check covers strict stdout, IDs, fast completion, EOF/shutdown, normali
 text, archive hashes, image geometry/scores, strict states, and capped-plan coverage.
 It also checks PAX/gzip volatility against real member loss, scoped XML metadata,
 embedded-image colour/geometry loss, inline picture extraction, TGA palette order,
-generated-cover guards, and strict media packet/timing comparisons.
+TGA image-ID comments with known raw/RLE pixel values, generated-cover guards,
+and strict media packet/timing comparisons.
 Further checks cover TCR coding equivalence/corruption/truncation/expansion limits, confined image references,
 version-independent malformed-HTML diagnostics, PDF raster color loss/rotation/limits, and render timeouts.
 Only tools are committed; corpus, native binaries, output artifacts and reports

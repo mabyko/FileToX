@@ -3,6 +3,7 @@
 import copy
 import base64
 import gzip
+import hashlib
 import json
 import tarfile
 from pathlib import Path
@@ -322,6 +323,29 @@ class HarnessTests(unittest.TestCase):
         scores = native("compare", a, b)
         self.assertTrue(scores["sameGeometry"])
         self.assertEqual(scores["frames"][0]["psnr"], 99)
+
+    def test_tga_image_id_is_metadata_and_pixel_changes_are_detected(self):
+        # The former Q8 matrix inspector treated the image ID comment as pixels.
+        header = bytearray(18)
+        header[12] = 3; header[14] = 1; header[16] = 24; header[17] = 32
+        bgr = bytes([0, 0, 255, 0, 255, 0, 255, 0, 0])
+        rgba = bytes([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255])
+        expected = hashlib.sha256(rgba).hexdigest()
+        paths = []
+        for image_type in (2, 10):
+            for length in (0, 34, 255):
+                with self.subTest(image_type=image_type, image_id_bytes=length):
+                    header[0] = length; header[2] = image_type
+                    path = self.root / f"id-{image_type}-{length}.tga"
+                    payload = bgr if image_type == 2 else bytes([2]) + bgr
+                    path.write_bytes(header + b"X" * length + payload)
+                    self.assertEqual(native("image", path)["frames"][0]["pixelSha256"], expected)
+                    paths.append(path)
+        scores = native("compare", paths[0], paths[-1])
+        self.assertEqual(scores["frames"][0], {"psnr": 99, "ssim": 1})
+        changed = self.root / "changed.tga"
+        changed.write_bytes(paths[0].read_bytes()[:18] + bytes(9))
+        self.assertLess(native("compare", paths[0], changed)["frames"][0]["psnr"], 30)
 
     def test_embedded_zip_images_use_pixels_and_reject_geometry_and_colour_loss(self):
         a, b, small, dark = [self.root / name for name in ("a.png", "b.png", "small.png", "dark.png")]
