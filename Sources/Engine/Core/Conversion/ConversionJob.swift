@@ -18,15 +18,16 @@ public final class ConversionJob: @unchecked Sendable {
     public let preset: Preset
     public let presetDisplayName: String
     public let files: [FileResult]
+    let validateOutput: ((String) throws -> Void)?
     public internal(set) var state = JobState.queued
     let lock = NSRecursiveLock()
     private var cancelled = false
     private var task: Task<Void, Never>?
-    public init(_ sources: [String], _ preset: Preset, _ presetDisplayName: String) { self.sources = sources; self.preset = preset; self.presetDisplayName = presetDisplayName; files = sources.map(FileResult.init) }
+    public init(_ sources: [String], _ preset: Preset, _ presetDisplayName: String, validateOutput: ((String) throws -> Void)? = nil) { self.sources = sources; self.preset = preset; self.presetDisplayName = presetDisplayName; self.validateOutput = validateOutput; files = sources.map(FileResult.init) }
     public var progress: Double { lock.withLock { files.isEmpty ? 1 : files.reduce(0) { $0 + $1.progress } / Double(files.count) } }
     public var outputs: [String] { lock.withLock { files.flatMap(\.outputs) } }
     public var isCancellationRequested: Bool { lock.withLock { cancelled } }
-    public func cancel() { lock.withLock { cancelled = true; task?.cancel() } }
-    func attach(_ task: Task<Void, Never>?) { lock.withLock { self.task = task; if cancelled { task?.cancel() } } }
+    public func cancel() { let task = lock.withLock { cancelled = true; return self.task }; task?.cancel() }
+    func attach(_ task: Task<Void, Never>?) { let cancel = lock.withLock { self.task = task; return cancelled }; if cancel { task?.cancel() } }
     func checkCancellation() throws { if isCancellationRequested { throw CancellationError() }; try Task.checkCancellation() }
 }

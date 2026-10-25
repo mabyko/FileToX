@@ -14,11 +14,13 @@ final class Host: @unchecked Sendable {
     private var stopping = false
     private var watchStopped = false, watchStarted = false, watchGeneration = 0
     private var watchStatuses: [[String: Any]]
-    init(_ wire: WireWriter, _ store: UserDataStore, _ converters: [Converter], _ loc: Localizer, languageFixed: Bool, watcher: WatchFolderMonitor? = nil, onStaging: @escaping (String) throws -> Void) {
+    private let outputIsDirectory: (String) -> Bool
+    init(_ wire: WireWriter, _ store: UserDataStore, _ converters: [Converter], _ loc: Localizer, languageFixed: Bool, watcher: WatchFolderMonitor? = nil, beforeOutputCommit: ((String) throws -> Void)? = nil, outputIsDirectory: @escaping (String) -> Bool = { FileManager.default.directoryExists($0) }, onStaging: @escaping (String) throws -> Void) {
         self.wire = wire; self.store = store; self.loc = loc; self.languageFixed = languageFixed
         catalog = ConverterCatalog(converters); catalog.priority = store.settings.enginePriority
         EngineEnvironment.ownCopies = store.settings.engineOwnCopies
-        queue = JobQueue(catalog, pdfMerger: EngineRegistry.findPdfMerger(converters), combiner: EngineRegistry.findFileCombiner(converters), tiffMerger: EngineRegistry.findTiffMerger(converters), onStaging: onStaging)
+        queue = JobQueue(catalog, pdfMerger: EngineRegistry.findPdfMerger(converters), combiner: EngineRegistry.findFileCombiner(converters), tiffMerger: EngineRegistry.findTiffMerger(converters), beforeOutputCommit: beforeOutputCommit, onStaging: onStaging)
+        self.outputIsDirectory = outputIsDirectory
         flush = DispatchSource.makeTimerSource(queue: .global())
         self.watcher = watcher ?? WatchFolderMonitor(excluding: [store.directory, EngineEnvironment.downloadRoot, ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()])
         watchStatuses = Self.initialWatchStatus(store.settings.watchFolders)
@@ -164,7 +166,7 @@ final class Host: @unchecked Sendable {
         if finished, var files = result["files"] as? [[String: Any]] {
             for index in files.indices {
                 let paths = files[index]["outputs"] as? [String] ?? []
-                files[index]["outputs"] = paths.map { ["path": $0, "isDirectory": FileManager.default.directoryExists($0)] as [String: Any] }
+                files[index]["outputs"] = paths.map { ["path": $0, "isDirectory": outputIsDirectory($0)] as [String: Any] }
             }
             result["files"] = files
         }
@@ -212,8 +214,23 @@ final class Host: @unchecked Sendable {
         let accepted = gate.withLock { () -> Bool in
             guard !stopping, !watchStopped, generation == watchGeneration, settings == store.settings, presets == store.presets else { return false }
             watchStatuses = watcher.statuses
+            let invalid = Set(watchStatuses.filter { $0["state"] as? String == "error" }.compactMap { $0["id"] as? String })
+            for tracked in jobs.values { if let batch = tracked.watch, invalid.contains(batch.rule.id) { tracked.job.cancel() } }
             for batch in batches {
-                let job = queue.enqueue(batch.files.keys.sorted(), settings.withDefaultOutput(batch.preset), loc.displayName(batch.preset))
+                let job = queue.enqueue(batch.files.keys.sorted(), settings.withDefaultOutput(batch.preset), loc.displayName(batch.preset), validateOutput: { [weak self] path in
+                    guard let self else { throw CancellationError() }
+                    let originals = self.gate.withLock { () -> [String]? in
+                        guard !self.stopping, !self.watchStopped, self.store.settings.watchFolders.contains(batch.rule) else { return nil }
+                        return self.store.settings.watchFolders.filter { !$0.folder.isEmpty }.map(\.originalsFolder)
+                    }
+                    guard let originals else { throw CancellationError() }
+                    try batch.validateOutput(path, currentOriginals: originals)
+                    let stillCurrent = self.gate.withLock {
+                        !self.stopping && !self.watchStopped && self.store.settings.watchFolders.contains(batch.rule) &&
+                        self.store.settings.watchFolders.filter { !$0.folder.isEmpty }.map(\.originalsFolder) == originals
+                    }
+                    if !stillCurrent { throw OutputCommitException("error.output_commit_failed", "The protected watch folders changed during output validation.") }
+                })
                 jobs[job.id] = Tracked(job: job, watch: batch); jobOrder.append(job.id)
             }
             return true

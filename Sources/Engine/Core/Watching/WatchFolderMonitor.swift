@@ -25,6 +25,19 @@ final class WatchFolderMonitor {
     }
     struct Batch {
         let rule: WatchRule, preset: Preset, files: [String: Stamp]
+        let physicalOutputRoot: String, protectedOriginals: [String]
+        func validateOutput(_ path: String, currentOriginals: [String] = []) throws {
+            let root = WatchFolderMonitor.canonical(rule.resolvedOutputFolder)
+            guard FileSystemPaths.equal(root, physicalOutputRoot), WatchFolderMonitor.contains(physicalOutputRoot, WatchFolderMonitor.canonical(path)) else {
+                throw OutputCommitException("error.output_commit_failed", "The watch output folder changed after validation.")
+            }
+            let originals = (protectedOriginals + currentOriginals).map(WatchFolderMonitor.canonical)
+            do {
+                try Validation.watchOutput(physicalOutputRoot, originals: originals, resolve: { $0 })
+                try Validation.watchOutput(WatchFolderMonitor.canonical(path), originals: originals, resolve: { $0 })
+            }
+            catch { throw OutputCommitException("error.output_commit_failed", "The watch output now overlaps saved originals.") }
+        }
     }
     struct Contents { let identity: RootIdentity; let files: [String: Stamp] }
     private struct Observation { let stamp: Stamp; let since: TimeInterval; var handled: Bool }
@@ -51,6 +64,10 @@ final class WatchFolderMonitor {
             do {
                 try Validation.watchRule(rule, originals: rules.filter { !$0.folder.isEmpty }.map(\.originalsFolder), resolve: Self.canonical)
                 guard let preset = presets.first(where: { $0.id == rule.presetId }) else { throw ConversionError("Choose an existing preset for this watch folder.") }
+                let originalFolders = rules.filter { !$0.folder.isEmpty }.map(\.originalsFolder)
+                let protectedOriginals = originalFolders + originalFolders.map(Self.canonical)
+                let physicalOutput = Self.canonical(rule.resolvedOutputFolder)
+                try Validation.watchOutput(physicalOutput, originals: protectedOriginals, resolve: Self.canonical)
                 let root = Self.canonical(rule.folder)
                 guard !outputRoots.contains(where: { Self.contains($0, root) }) else { throw ConversionError("A watch folder cannot be inside an output, originals, or engine data folder.") }
                 let contents = try reader?(rule, root, outputRoots) ?? collect(rule, root: root, excluding: outputRoots)
@@ -71,7 +88,11 @@ final class WatchFolderMonitor {
                     next[path] = observation
                 }
                 snapshots[rule.id] = Snapshot(rule: rule, root: contents.identity, files: next)
-                if !ready.isEmpty { batches.append(Batch(rule: rule, preset: rule.apply(preset), files: ready)); errors.removeValue(forKey: rule.id) }
+                if !ready.isEmpty {
+                    var effective = rule.apply(preset); effective.output.customFolder = physicalOutput
+                    batches.append(Batch(rule: rule, preset: effective, files: ready, physicalOutputRoot: physicalOutput, protectedOriginals: protectedOriginals))
+                    errors.removeValue(forKey: rule.id)
+                }
                 status["state"] = files.keys.contains(where: active.contains) ? "running" : "watching"
                 if let error = errors[rule.id] { status["state"] = "error"; status["detail"] = error }
             } catch { status["state"] = "error"; status["detail"] = error.localizedDescription }

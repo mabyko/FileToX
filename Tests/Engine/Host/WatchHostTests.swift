@@ -2,6 +2,97 @@ import XCTest
 @testable import FileToXEngineKit
 
 final class WatchHostTests: XCTestCase {
+    func testBlockedCommitAndFinishedOutputKindDoNotBlockStatusStopSettingsOrCancel() async throws {
+        for blockKind in [false, true] {
+            let d = CoreTempDir(), blocked = expectation(description: blockKind ? "output kind blocked" : "commit blocked"), responded = expectation(description: "RPCs responsive")
+            let release = DispatchSemaphore(value: 0), lock = NSLock(); var once = false
+            func pause() {
+                let wait = lock.withLock { () -> Bool in if once { return false }; once = true; return true }
+                if wait { blocked.fulfill(); _ = release.wait(timeout: .now() + 8) }
+            }
+            defer { release.signal() }
+            let store = UserDataStore(d.path + "/core"); try store.load()
+            let log = try d.file("wire.jsonl", ""), output = try FileHandle(forWritingTo: URL(fileURLWithPath: log))
+            defer { try? output.close() }
+            let wire = WireWriter(output.fileDescriptor)
+            let host = Host(wire, store, [CoreFakeConverter("fake", ConversionEdge("txt", "md"))], Localizer("en"), languageFixed: true,
+                            beforeOutputCommit: { _ in if !blockKind { pause() } }, outputIsDirectory: { _ in if blockKind { pause() }; return false }, onStaging: { _ in })
+            let source = try d.file("source.txt", "keep source")
+            _ = try host.handle("first", "job.start", ["paths": [source], "targetFormat": "md"])
+            await fulfillment(of: [blocked], timeout: 2)
+            try await Task.sleep(nanoseconds: 200_000_000)
+            DispatchQueue.global().async {
+                do {
+                    _ = try host.handle("status", "watch.status", [:])
+                    _ = try host.handle("settings", "settings.save", ["baseRevision": 1, "settings": try WireJson.toNode(store.settings)])
+                    let id = try XCTUnwrap(hostObject(Self.messages(log).first { $0["id"] as? String == "first" }?["result"])["jobId"] as? String)
+                    _ = try host.handle("cancel", "job.cancel", ["jobId": id])
+                    _ = try host.handle("stop", "watch.stop", [:])
+                    _ = try host.handle("library", "library.get", [:])
+                } catch { XCTFail("RPC failed while output I/O was blocked: \(error)") }
+                responded.fulfill()
+            }
+            await fulfillment(of: [responded], timeout: 1)
+            XCTAssertTrue(Self.messages(log).contains { $0["event"] as? String == "job.updated" }, "Progress must flush while output I/O is blocked")
+            release.signal(); await host.cancelAll(3); wire.complete(1)
+            let entries = store.history
+            XCTAssertEqual(entries.count, 1)
+            XCTAssertEqual(entries.first?.outputs.count, blockKind ? 1 : 0)
+            XCTAssertEqual(try String(contentsOfFile: source, encoding: .utf8), "keep source")
+            XCTAssertTrue(d.leftovers().isEmpty)
+        }
+    }
+
+    func testPhysicalValidationErrorCancelsAlreadyQueuedWatchWork() async throws {
+        let d = CoreTempDir(), started = expectation(description: "manual queue blocker")
+        let store = UserDataStore(d.path + "/core"); try store.load()
+        var preset = corePreset("md"); preset.id = "watch-preset"; preset.output.fileNamePattern = "victim"; preset.output.conflict = .overwrite
+        store.presets.append(preset)
+        var rule = WatchRule(); rule.folder = d.path + "/inbox"; rule.presetId = preset.id; rule.outputFolder = d.path + "/alias"
+        let saved = try d.file("inbox/originals/victim.md", "saved original")
+        try FileManager.default.createDirectoryIfNeeded(d.path + "/safe")
+        try FileManager.default.createSymbolicLink(atPath: rule.outputFolder, withDestinationPath: d.path + "/safe")
+        store.settings.watchFolders = [rule]
+        let c = CoreFakeConverter(edges: [ConversionEdge("txt", "md")]) { step in
+            if FilePath.fileName(step.inputPath) == "blocker.txt" { started.fulfill(); try await Task.sleep(nanoseconds: 20_000_000_000); return [] }
+            XCTFail("Invalidated queued watch input must never reach the converter"); return []
+        }
+        let log = try d.file("wire.jsonl", ""), output = try FileHandle(forWritingTo: URL(fileURLWithPath: log))
+        defer { try? output.close() }
+        let wire = WireWriter(output.fileDescriptor)
+        let host = Host(wire, store, [c], Localizer("en"), languageFixed: true, watcher: WatchFolderMonitor(), onStaging: { _ in })
+        host.startWatching(); try await waitForWatch(host, state: "watching")
+        _ = try host.handle("blocker", "job.start", ["paths": [try d.file("blocker.txt")], "targetFormat": "md"])
+        await fulfillment(of: [started], timeout: 2)
+        let source = try d.file("inbox/new.txt", "new input")
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline {
+            if hostObjects(hostObject(try host.handle("running", "watch.status", [:]))["rules"]).first?["state"] as? String == "running" { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(hostObjects(hostObject(try host.handle("queued", "watch.status", [:]))["rules"]).first?["state"] as? String, "running")
+        try FileManager.default.removeItem(atPath: rule.outputFolder)
+        try FileManager.default.createSymbolicLink(atPath: rule.outputFolder, withDestinationPath: rule.originalsFolder)
+        try await waitForWatch(host, state: "error")
+        let id = try XCTUnwrap(hostObject(Self.messages(log).first { $0["id"] as? String == "blocker" }?["result"])["jobId"] as? String)
+        _ = try host.handle("unblock", "job.cancel", ["jobId": id])
+        var watchHistory: [String: Any]?
+        let completed = Date().addingTimeInterval(3)
+        while Date() < completed {
+            let history = hostObjects(hostObject(try host.handle("history", "history.get", [:]))["entries"])
+            watchHistory = history.first { $0["watchRuleId"] as? String == rule.id }
+            if watchHistory != nil { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(watchHistory?["state"] as? String, "cancelled")
+        await host.cancelAll(3); wire.complete(1)
+        XCTAssertEqual(store.history.first { $0.watchRuleId == rule.id }?.state, .cancelled)
+        XCTAssertEqual(try String(contentsOfFile: saved, encoding: .utf8), "saved original")
+        XCTAssertEqual(try String(contentsOfFile: source, encoding: .utf8), "new input")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: d.path + "/safe/victim.md"))
+        XCTAssertTrue(d.leftovers().isEmpty)
+    }
+
     func testLoadedOriginalsAliasRuleIsBlockedAndSavingDirectOverlapIsRejected() throws {
         let d = CoreTempDir(), store = UserDataStore(d.path + "/core")
         try store.load()

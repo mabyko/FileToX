@@ -7,15 +7,16 @@ public final class JobQueue: @unchecked Sendable {
     private let tiffMerger: TiffMerger?
     private let onStaging: ((String) throws -> Void)?
     private let outputExists: (String) -> Bool
+    private let beforeOutputCommit: ((String) throws -> Void)?
     private let lock = NSLock()
     private var tail: Task<Void, Never>?
     private var gates: [String: EngineConcurrencyGate] = [:]
-    private var reserved = Set<String>()
+    private var reserved: [String: String] = [:]
     public var jobUpdated: ((ConversionJob) -> Void)?
     public var jobFinished: ((ConversionJob) -> Void)?
-    public init(_ catalog: ConverterCatalog, pdfMerger: PdfMerger? = nil, combiner: FileCombiner? = nil, tiffMerger: TiffMerger? = nil, outputExists: @escaping (String) -> Bool = { FileManager.default.fileExists($0) || FileManager.default.directoryExists($0) }, onStaging: ((String) throws -> Void)? = nil) { self.catalog = catalog; self.pdfMerger = pdfMerger; self.combiner = combiner; self.tiffMerger = tiffMerger; self.outputExists = outputExists; self.onStaging = onStaging }
-    @discardableResult public func enqueue(_ sources: [String], _ preset: Preset, _ presetDisplayName: String) -> ConversionJob {
-        let job = ConversionJob(sources, preset, presetDisplayName)
+    public init(_ catalog: ConverterCatalog, pdfMerger: PdfMerger? = nil, combiner: FileCombiner? = nil, tiffMerger: TiffMerger? = nil, outputExists: @escaping (String) -> Bool = { FileManager.default.fileExists($0) || FileManager.default.directoryExists($0) }, beforeOutputCommit: ((String) throws -> Void)? = nil, onStaging: ((String) throws -> Void)? = nil) { self.catalog = catalog; self.pdfMerger = pdfMerger; self.combiner = combiner; self.tiffMerger = tiffMerger; self.outputExists = outputExists; self.beforeOutputCommit = beforeOutputCommit; self.onStaging = onStaging }
+    @discardableResult public func enqueue(_ sources: [String], _ preset: Preset, _ presetDisplayName: String, validateOutput: ((String) throws -> Void)? = nil) -> ConversionJob {
+        let job = ConversionJob(sources, preset, presetDisplayName, validateOutput: validateOutput)
         lock.withLock {
             let previous = tail
             tail = Task { [self] in
@@ -52,8 +53,9 @@ public final class JobQueue: @unchecked Sendable {
             job.lock.withLock {
                 job.state = job.isCancellationRequested ? .cancelled : job.files.allSatisfy { $0.state == .done || $0.state == .skipped } ? .completed : job.files.contains { $0.state == .done } ? .completedWithErrors : .failed
             }
-        } catch { job.lock.withLock { job.state = .failed } }
-        lock.withLock { for path in job.outputs { reserved.remove(path.lowercased()) } }
+        } catch is CancellationError { job.lock.withLock { job.state = .cancelled } }
+        catch { job.lock.withLock { job.state = .failed } }
+        lock.withLock { for path in job.outputs where reserved[path.lowercased()] == job.id { reserved.removeValue(forKey: path.lowercased()) } }
         OutputCommit.tryDelete(work)
         notify(job); jobFinished?(job)
     }
@@ -154,7 +156,7 @@ public final class JobQueue: @unchecked Sendable {
     }
     private func commit(_ job: ConversionJob, _ file: FileResult, _ allocator: FinalAllocator, _ produced: [String]) throws -> Bool {
         try job.checkCancellation()
-        do { try job.lock.withLock { try allocator.commit(produced, &file.outputs) }; return true }
+        do { try allocator.commit(produced) { path in job.lock.withLock { file.outputs.append(path) } }; return true }
         catch let error as OutputCommitException { fail(job, file, error.errorKey, error.message); return false }
     }
     private func copyDates(_ source: String, _ outputs: [String]) {
@@ -181,17 +183,28 @@ public final class JobQueue: @unchecked Sendable {
             while true {
                 try job.checkCancellation()
                 guard let path = OutputPathResolver.resolve(job.preset.output, tokens, ext, reserved: { path in
-                    self.queue.lock.withLock { self.queue.reserved.contains(path.lowercased()) }
+                    self.queue.lock.withLock { self.queue.reserved[path.lowercased()] != nil }
                 }, exists: { path in self.job.isCancellationRequested ? false : self.queue.outputExists(path) }, suffix: suffix) else { return nil }
+                try job.validateOutput?(path)
                 // Disk checks and rename-pattern matching must never hold the enqueue/reservation lock.
-                guard queue.lock.withLock({ queue.reserved.insert(path.lowercased()).inserted }) else { continue }
-                do { try job.checkCancellation(); try FileManager.default.createDirectoryIfNeeded(FilePath.directoryName(path)!); return try staged.stage(path) }
+                guard queue.lock.withLock({ () -> Bool in
+                    guard queue.reserved[path.lowercased()] == nil else { return false }
+                    queue.reserved[path.lowercased()] = job.id; return true
+                }) else { continue }
+                do { try job.checkCancellation(); try job.validateOutput?(path); try FileManager.default.createDirectoryIfNeeded(FilePath.directoryName(path)!); return try staged.stage(path) }
                 catch { release(path); throw error }
             }
         }
-        func commit(_ produced: [String], _ outputs: inout [String]) throws { try staged.commit(produced, &outputs, job.preset.output, job.sources, release) }
+        func commit(_ produced: [String], published: (String) -> Void) throws {
+            try staged.commit(produced, job.preset.output, job.sources, release, validate: { path in
+                try self.queue.beforeOutputCommit?(path)
+                try self.job.checkCancellation()
+                try self.job.validateOutput?(path)
+                try self.job.checkCancellation()
+            }, published: published)
+        }
         func abort() { staged.abort(release) }
-        private func release(_ path: String) { _ = queue.lock.withLock { queue.reserved.remove(path.lowercased()) } }
+        private func release(_ path: String) { queue.lock.withLock { if queue.reserved[path.lowercased()] == job.id { queue.reserved.removeValue(forKey: path.lowercased()) } } }
     }
     private final class TempAllocator: OutputAllocator {
         let work: String, base: String

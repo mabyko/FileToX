@@ -2,6 +2,59 @@ import XCTest
 @testable import FileToXEngineKit
 
 final class JobQueueStagingTests: XCTestCase {
+    func testCancellationDuringSecondCommitKeepsFirstPublishedOutputAndStateLockResponsive() async throws {
+        let d = CoreTempDir(), blocked = expectation(description: "second commit blocked"), responsive = expectation(description: "state and cancel returned")
+        let release = DispatchSemaphore(value: 0), lock = NSLock(); var once = false
+        let c = converter("pdf", "png") { step in try (1...3).map { try self.write(step.output.allocate("png", suffix: "_p\($0)")!, "page") } }
+        let q = JobQueue(ConverterCatalog([c]), beforeOutputCommit: { path in
+            let shouldBlock = lock.withLock { () -> Bool in
+                if !path.hasSuffix("_p2.png") || once { return false }; once = true; return true
+            }
+            if shouldBlock { blocked.fulfill(); _ = release.wait(timeout: .now() + 8) }
+        })
+        let source = try d.file("doc.pdf"), job = ConversionJob([source], corePreset("png"), "pages")
+        let task = Task { await q.run(job) }
+        await fulfillment(of: [blocked], timeout: 2)
+        DispatchQueue.global().async {
+            XCTAssertEqual(job.outputs, [d.path + "/doc_p1.png"])
+            job.cancel(); responsive.fulfill()
+        }
+        await fulfillment(of: [responsive], timeout: 1)
+        release.signal(); await task.value
+        XCTAssertEqual(job.state, .cancelled); XCTAssertEqual(job.files[0].state, .cancelled)
+        XCTAssertEqual(job.outputs, [d.path + "/doc_p1.png"])
+        XCTAssertEqual(try d.read("doc_p1.png"), "page")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: d.path + "/doc_p2.png"))
+        XCTAssertEqual(try String(contentsOfFile: source, encoding: .utf8), "x"); XCTAssertTrue(d.leftovers().isEmpty)
+    }
+
+    func testCancelledDirectoryMergeAccountsForAlreadyPublishedChildren() async throws {
+        let d = CoreTempDir(), blocked = expectation(description: "one child already published"), responsive = expectation(description: "cancel returned")
+        let release = DispatchSemaphore(value: 0), lock = NSLock(); var once = false, job: ConversionJob!
+        for index in 1...3 { _ = try d.file("pack/\(index).txt", "old") }
+        let c = converter("zip", "folder") { step in
+            let folder = try XCTUnwrap(step.output.allocate(""))
+            try FileManager.default.createDirectoryIfNeeded(folder)
+            for index in 1...3 { _ = try self.write(folder + "/\(index).txt", "new") }
+            return [folder]
+        }
+        let q = JobQueue(ConverterCatalog([c]), beforeOutputCommit: { _ in
+            let shouldBlock = lock.withLock { () -> Bool in
+                if once || job.outputs.isEmpty { return false }; once = true; return true
+            }
+            if shouldBlock { blocked.fulfill(); _ = release.wait(timeout: .now() + 8) }
+        })
+        job = ConversionJob([try d.file("pack.zip")], corePreset("folder") { $0.output.conflict = .overwrite }, "directory")
+        let task = Task { await q.run(job) }
+        await fulfillment(of: [blocked], timeout: 2)
+        DispatchQueue.global().async { job.cancel(); responsive.fulfill() }
+        await fulfillment(of: [responsive], timeout: 1)
+        release.signal(); await task.value
+        XCTAssertEqual(job.state, .cancelled)
+        XCTAssertEqual(job.outputs, [d.path + "/pack"])
+        XCTAssertEqual(try (1...3).map { try d.read("pack/\($0).txt") }.filter { $0 == "new" }.count, 1)
+        XCTAssertTrue(d.leftovers().isEmpty)
+    }
     func testBlockedOutputCheckDoesNotHoldEnqueueLockAndCancellationCleansReservations() async throws {
         let d = CoreTempDir(), checking = expectation(description: "disk check blocked"), enqueued = expectation(description: "enqueue returned")
         let done = expectation(description: "both cancelled"); done.expectedFulfillmentCount = 2

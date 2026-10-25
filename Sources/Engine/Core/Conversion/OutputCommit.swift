@@ -18,25 +18,31 @@ public extension OutputCommit {
             throw failed(path)
         }
     }
-    static func move(_ staged: String, _ final: String, overwrite: Bool, sources: [String]) throws {
+    static func move(_ staged: String, _ final: String, overwrite: Bool, sources: [String], validate: (String) throws -> Void = { _ in }, didMove: () -> Void = {}) throws {
+        try validate(final)
         let directory = FileManager.default.directoryExists(staged)
         if !exists(final) {
+            try validate(final)
             if try !renameExclusive(staged, final, directory) { throw OutputCommitException("error.output_exists", "\(final) appeared while converting.") }
+            didMove()
             return
         }
         try checkExisting(staged, final, overwrite, sources)
         if !directory {
+            try validate(final)
             if Darwin.rename(staged, final) != 0 { throw failed(final) }
+            didMove()
             return
         }
-        for entry in try entries(staged) { try move(entry, FilePath.combine(final, FilePath.fileName(entry)), overwrite: overwrite, sources: sources) }
+        for entry in try entries(staged) { try move(entry, FilePath.combine(final, FilePath.fileName(entry)), overwrite: overwrite, sources: sources, validate: validate, didMove: didMove) }
         tryDelete(staged)
     }
-    static func check(_ staged: String, _ final: String, overwrite: Bool, sources: [String]) throws {
+    static func check(_ staged: String, _ final: String, overwrite: Bool, sources: [String], validate: (String) throws -> Void = { _ in }) throws {
+        try validate(final)
         if !exists(final) { return }
         try checkExisting(staged, final, overwrite, sources)
         if FileManager.default.directoryExists(staged) {
-            for entry in try entries(staged) { try check(entry, FilePath.combine(final, FilePath.fileName(entry)), overwrite: overwrite, sources: sources) }
+            for entry in try entries(staged) { try check(entry, FilePath.combine(final, FilePath.fileName(entry)), overwrite: overwrite, sources: sources, validate: validate) }
         }
     }
     static func isSource(_ path: String, _ sources: [String]) -> Bool {
@@ -89,21 +95,27 @@ final class StagedOutputs {
         return staged
     }
     func commit(_ produced: [String], _ outputs: inout [String], _ rule: OutputRule, _ sources: [String], _ release: (String) -> Void) throws {
+        try commit(produced, rule, sources, release, validate: { _ in }, published: { outputs.append($0) })
+    }
+    func commit(_ produced: [String], _ rule: OutputRule, _ sources: [String], _ release: (String) -> Void, validate: (String) throws -> Void, published: (String) -> Void) throws {
         var entries = take()
         for entry in entries { OutputCommit.untrack(staged: entry.staged) }
         let wanted = Set(produced), overwrite = rule.conflict == .overwrite
         defer { for e in entries where !e.stageDir.isEmpty { release(e.final); OutputCommit.tryDelete(e.stageDir) } }
         for i in entries.indices {
             let e = entries[i]
+            try validate(e.final)
             if !wanted.contains(e.staged) || !(FileManager.default.fileExists(e.staged) || FileManager.default.directoryExists(e.staged)) {
                 release(e.final); OutputCommit.tryDelete(e.stageDir); entries[i].stageDir = ""; continue
             }
             let folder = FilePath.directoryName(e.final)!
             let sides = try OutputCommit.entries(e.stageDir).filter { $0 != e.staged }
-            for side in sides { try OutputCommit.check(side, FilePath.combine(folder, FilePath.fileName(side)), overwrite: overwrite, sources: sources) }
-            try OutputCommit.move(e.staged, e.final, overwrite: overwrite, sources: sources)
-            outputs.append(e.final)
-            for side in sides { try OutputCommit.move(side, FilePath.combine(folder, FilePath.fileName(side)), overwrite: overwrite, sources: sources) }
+            for side in sides { try OutputCommit.check(side, FilePath.combine(folder, FilePath.fileName(side)), overwrite: overwrite, sources: sources, validate: validate) }
+            var recorded = false
+            func record() { if !recorded { recorded = true; published(e.final) } }
+            try OutputCommit.move(e.staged, e.final, overwrite: overwrite, sources: sources, validate: validate, didMove: record)
+            record()
+            for side in sides { try OutputCommit.move(side, FilePath.combine(folder, FilePath.fileName(side)), overwrite: overwrite, sources: sources, validate: validate) }
             OutputCommit.tryDelete(e.stageDir); entries[i].stageDir = ""
         }
     }

@@ -60,18 +60,21 @@ enum Validation {
             throw invalid("A watch output folder cannot be the input folder or its parent.")
         }
         if !rule.folder.isEmpty {
-            let output = resolve(rule.resolvedOutputFolder).lowercased()
-            for path in originals ?? [rule.originalsFolder] {
-                let original = resolve(path).lowercased()
-                if WatchFolderMonitor.contains(original, output) || WatchFolderMonitor.contains(output, original) {
-                    throw invalid("A watch output folder must not overlap a saved originals folder.")
-                }
-            }
+            try watchOutput(rule.resolvedOutputFolder, originals: originals ?? [rule.originalsFolder], resolve: resolve)
         }
         for pattern in rule.include {
             if let error = FileNameFilter.validate(pattern) { throw invalid("Watch folder: invalid include pattern: \(error)") }
         }
         try renames(rule.renames, "Watch folder")
+    }
+    static func watchOutput(_ path: String, originals: [String], resolve: (String) -> String) throws {
+        let output = resolve(path).lowercased()
+        for path in originals {
+            let original = resolve(path).lowercased()
+            if WatchFolderMonitor.contains(original, output) || WatchFolderMonitor.contains(output, original) {
+                throw invalid("A watch output must not overlap a saved originals folder.")
+            }
+        }
     }
     private static func unique(_ ids: [String], _ what: String) throws { var seen = Set<String>(); for id in ids where !seen.insert(id).inserted { throw invalid("Duplicate \(what) id \(id).") } }
     private static func invalid(_ message: String) -> WireException { WireException("invalid_input", message) }

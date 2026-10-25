@@ -3,6 +3,69 @@ import PDFKit
 @testable import FileToXEngineKit
 
 final class WatchFolderMonitorTests: XCTestCase {
+    func testQueuedAliasRetargetIsRejectedAtAllocationWithoutAnotherScan() async throws {
+        let d = CoreTempDir(), monitor = WatchFolderMonitor(), started = expectation(description: "blocking job"), finished = expectation(description: "two jobs finished")
+        finished.expectedFulfillmentCount = 2
+        var r = rule(d.path + "/inbox"), p = preset
+        p.output.fileNamePattern = "victim"; p.output.conflict = .overwrite
+        try FileManager.default.createDirectoryIfNeeded(d.path + "/safe")
+        r.outputFolder = d.path + "/alias"
+        try FileManager.default.createSymbolicLink(atPath: r.outputFolder, withDestinationPath: d.path + "/safe")
+        let saved = try d.file("inbox/originals/victim.md", "saved original")
+        _ = monitor.scan([r], presets: [p], now: 0)
+        let source = try d.file("inbox/new.txt", "new input")
+        _ = monitor.scan([r], presets: [p], now: 0)
+        let batch = try XCTUnwrap(monitor.scan([r], presets: [p], now: 4).first)
+        let c = CoreFakeConverter(edges: [ConversionEdge("txt", "md")]) { step in
+            if FilePath.fileName(step.inputPath) == "blocker.txt" { started.fulfill(); try await Task.sleep(nanoseconds: 20_000_000_000); return [] }
+            guard let path = try step.output.allocate("md") else { return [] }
+            try Data("converted".utf8).write(to: URL(fileURLWithPath: path)); return [path]
+        }
+        let q = JobQueue(ConverterCatalog([c])); q.jobFinished = { _ in finished.fulfill() }
+        let first = q.enqueue([try d.file("blocker.txt")], corePreset("md"), "blocker")
+        await fulfillment(of: [started], timeout: 2)
+        let watched = q.enqueue(batch.files.keys.sorted(), batch.preset, "watch", validateOutput: { try batch.validateOutput($0) })
+        try FileManager.default.removeItem(atPath: r.outputFolder)
+        try FileManager.default.createSymbolicLink(atPath: r.outputFolder, withDestinationPath: r.originalsFolder)
+        first.cancel()
+        await fulfillment(of: [finished], timeout: 3); await q.dispose()
+        XCTAssertEqual(watched.state, .failed); XCTAssertTrue(watched.outputs.isEmpty)
+        XCTAssertEqual(try String(contentsOfFile: saved, encoding: .utf8), "saved original")
+        XCTAssertEqual(try String(contentsOfFile: source, encoding: .utf8), "new input")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: d.path + "/safe/victim.md"))
+        XCTAssertTrue(d.leftovers().isEmpty)
+    }
+
+    func testCommitRechecksRetargetedAliasAndNewlyProtectedOriginalsRoots() async throws {
+        for change in ["root", "nested", "retarget"] {
+            let d = CoreTempDir(), monitor = WatchFolderMonitor()
+            var r = rule(d.path + "/inbox"), p = preset; p.output.fileNamePattern = "victim"; p.output.conflict = .overwrite
+            let main = try d.file("inbox/originals/victim.md", "main original"), other = try d.file("other/originals/victim.md", "other original")
+            let safe = d.path + "/other/originals"; r.outputFolder = d.path + "/alias"
+            try FileManager.default.createSymbolicLink(atPath: r.outputFolder, withDestinationPath: safe)
+            _ = monitor.scan([r], presets: [p], now: 0)
+            _ = try d.file("inbox/new.txt", "source")
+            _ = monitor.scan([r], presets: [p], now: 0)
+            let batch = try XCTUnwrap(monitor.scan([r], presets: [p], now: 4).first)
+            var currentOriginals: [String] = []
+            let c = CoreFakeConverter(edges: [ConversionEdge("txt", "md")]) { step in
+                let staged = try XCTUnwrap(step.output.allocate("md"))
+                XCTAssertEqual(OutputCommit.finalPath(of: staged), WatchFolderMonitor.canonical(safe) + "/victim.md")
+                try Data("overwrite attempt".utf8).write(to: URL(fileURLWithPath: staged))
+                if change == "retarget" {
+                    try FileManager.default.removeItem(atPath: r.outputFolder)
+                    try FileManager.default.createSymbolicLink(atPath: r.outputFolder, withDestinationPath: r.originalsFolder)
+                } else { currentOriginals = [safe + (change == "nested" ? "/nested/originals" : "")] }
+                return [staged]
+            }
+            let job = ConversionJob(batch.files.keys.sorted(), batch.preset, "watch", validateOutput: { try batch.validateOutput($0, currentOriginals: currentOriginals) })
+            await JobQueue(ConverterCatalog([c])).run(job)
+            XCTAssertEqual(job.state, .failed); XCTAssertTrue(job.outputs.isEmpty)
+            XCTAssertEqual(try String(contentsOfFile: main, encoding: .utf8), "main original")
+            XCTAssertEqual(try String(contentsOfFile: other, encoding: .utf8), "other original")
+            XCTAssertTrue(d.leftovers().isEmpty)
+        }
+    }
     func testActualThreeInputZipAndPdfJobsMoveEverySuccessfulOriginal() async throws {
         for format in ["zip", "pdf"] {
             let d = CoreTempDir(), monitor = WatchFolderMonitor()
@@ -98,7 +161,7 @@ final class WatchFolderMonitorTests: XCTestCase {
             _ = try d.file("new.txt", "source")
             _ = monitor.scan([r], presets: [p], now: 0)
             let batch = try XCTUnwrap(monitor.scan([r], presets: [p], now: 4).first)
-            XCTAssertEqual(batch.preset.output.location, .customFolder); XCTAssertEqual(batch.preset.output.customFolder, r.resolvedOutputFolder)
+            XCTAssertEqual(batch.preset.output.location, .customFolder); XCTAssertEqual(batch.preset.output.customFolder, WatchFolderMonitor.canonical(r.resolvedOutputFolder))
             let job = await coreRun(JobQueue(ConverterCatalog([CoreFakeConverter("fake", ConversionEdge("txt", "md"))])), batch.files.keys.sorted(), batch.preset)
             XCTAssertEqual(job.state, .completed)
             XCTAssertTrue(job.outputs.allSatisfy { WatchFolderMonitor.contains(WatchFolderMonitor.canonical(r.resolvedOutputFolder), WatchFolderMonitor.canonical($0)) })
@@ -225,7 +288,7 @@ final class WatchFolderMonitorTests: XCTestCase {
         XCTAssertTrue(monitor.scan([r], presets: [preset], now: now + (3)).isEmpty)
         let batch = try XCTUnwrap(monitor.scan([r], presets: [preset], now: now + (7)).first)
         XCTAssertEqual(Array(batch.files.keys), [WatchFolderMonitor.canonical(source)]); XCTAssertNil(batch.files[WatchFolderMonitor.canonical(existing)])
-        XCTAssertEqual(batch.preset.output.customFolder, r.resolvedOutputFolder)
+        XCTAssertEqual(batch.preset.output.customFolder, WatchFolderMonitor.canonical(r.resolvedOutputFolder))
         XCTAssertTrue(monitor.scan([r], presets: [preset], now: now + (20)).isEmpty)
         let job = ConversionJob(batch.files.keys.sorted(), batch.preset, "Watch")
         monitor.complete(batch, job: job, currentRules: [r])
