@@ -85,4 +85,39 @@ final class ArchiveSupportTests: XCTestCase {
         XCTAssertEqual(try Deflate.inflate(streamed, windowBits: 31), data)
         XCTAssertThrowsError(try Deflate.inflate(packed.prefix(packed.count / 2)))
     }
+
+    /// Output of a call that then fails reaches the sink (so byte limits count it), and the stream is still rejected.
+    func testInflateHandsOutOutputOfAFailingCallBeforeRejectingIt() throws {
+        func inflated(_ input: Data, windowBits: Int32) -> (bytes: Int, error: Error?) {
+            var bytes = 0
+            do { try Deflate.inflate(input, windowBits: windowBits) { bytes += $0.count } } catch { return (bytes, error) }
+            return (bytes, nil)
+        }
+        // A wrong Adler-32 is found after the last byte: in the same call as all of a short stream's output (Z_DATA_ERROR).
+        for size in [1000, (1 << 20) - 1, (3 << 20) + 5] {
+            var zlib = try Deflate.deflate(Data(count: size), windowBits: 15)
+            zlib[zlib.count - 1] ^= 1
+            let result = inflated(zlib, windowBits: 15)
+            XCTAssertEqual(result.bytes, size)
+            XCTAssertTrue(result.error is ZipError, "\(size): \(String(describing: result.error))")
+            XCTAssertThrowsError(try Deflate.inflate(zlib, windowBits: 15))
+        }
+        // A stored block of 1000 bytes, then a reserved block type: invalid data after output in one call (Z_DATA_ERROR).
+        let stored = Data([0x00, 0xE8, 0x03, 0x17, 0xFC]) + Data(repeating: 0x5A, count: 1000)
+        let invalid = inflated(stored + [0x07], windowBits: -15)
+        XCTAssertEqual(invalid.bytes, 1000)
+        XCTAssertTrue(invalid.error is ZipError)
+        // The block cut short: its bytes come out, then the input ends (Z_BUF_ERROR without progress).
+        let truncated = inflated(stored.prefix(505), windowBits: -15)
+        XCTAssertEqual(truncated.bytes, 500)
+        XCTAssertTrue(truncated.error is ZipError)
+        // A sink's own limit stops the stream on that output.
+        var bytes = 0
+        var zlib = try Deflate.deflate(Data(count: 1000), windowBits: 15)
+        zlib[zlib.count - 1] ^= 1
+        XCTAssertThrowsError(try Deflate.inflate(zlib, windowBits: 15) { bytes += $0.count; if bytes > 999 { throw CancellationError() } }) {
+            XCTAssertTrue($0 is CancellationError)
+        }
+        XCTAssertEqual(try Deflate.inflate(stored + [0x03, 0x00], windowBits: -15), Data(repeating: 0x5A, count: 1000))
+    }
 }

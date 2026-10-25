@@ -236,16 +236,38 @@ enum CodecPixels {
         return (rgba, 4)
     }
 
-    /// Exact source ICC bytes when known, restricted to the current pixels and the encoder's color model.
-    static func colorProfile(_ frame: ImageFrame, colorModel: CGColorSpaceModel? = nil) -> Data? {
+    /// The profile when its header size fits the data and Core Graphics can use it; nil for truncated or unusable bytes.
+    static func validProfile(_ profile: Data) -> Data? {
+        guard profile.count >= 128 else { return nil }
+        let size = profile.prefix(4).reduce(0) { $0 << 8 | Int($1) }
+        guard size >= 128, size <= profile.count, CGColorSpace(iccData: profile as CFData) != nil else { return nil }
+        return profile
+    }
+
+    /// What `ImageFrame.iccKey` records for a decoded frame: the last valid embedded profile equal to the space ImageIO
+    /// decoded it in (an indexed picture's base), empty when ImageIO used its untagged default, and nil when it took the
+    /// colour from anything else (a profile we reject, sRGB/gAMA/cHRM/cICP), which then stays inferred.
+    static func sourceProfile(_ candidates: [Data], decoded: CGColorSpace?, declared: Bool = false) -> Data? {
+        guard let space = decoded?.model == .indexed ? decoded?.baseColorSpace : decoded else { return nil }
+        if let actual = candidates.last(where: { CGColorSpace(iccData: $0 as CFData).map { CFEqual($0, space) } ?? false }) { return actual }
+        let untagged: Set<String> = [CGColorSpace.sRGB as String, CGColorSpace.genericGrayGamma2_2 as String, CGColorSpace.genericCMYK as String,
+                                     "kCGColorSpaceDeviceCMYK"]
+        return !declared && (space.name as String?).map(untagged.contains) == true ? Data() : nil
+    }
+
+    /// Exact source ICC bytes while the samples keep the colour space they were decoded in (else the profile of the
+    /// current space), restricted to the encoder's colour model. `space` is that of the samples written when it isn't
+    /// the image's own.
+    static func colorProfile(_ frame: ImageFrame, colorModel: CGColorSpaceModel? = nil, space: CGColorSpace? = nil) -> Data? {
+        guard let space = space ?? frame.image.colorSpace else { return nil }
         let profile: Data?
-        if let source = frame.properties[ImageFrame.jpegICCKey] as? Data {
-            profile = source
+        if let source = frame.properties[ImageFrame.iccKey] as? Data {
+            profile = CGColorSpace(iccData: source as CFData).map { CFEqual($0, space) } == true ? source : nil
         } else {
             profile = ImagePixels.hasColorProfile(frame.image) ? frame.image.colorSpace?.copyICCData() as Data? : nil
         }
-        guard let profile, let space = CGColorSpace(iccData: profile as CFData),
-              space.model == frame.image.colorSpace?.model, space.model == (colorModel ?? space.model) else { return nil }
+        guard let profile, let profileSpace = CGColorSpace(iccData: profile as CFData),
+              profileSpace.model == space.model, profileSpace.model == (colorModel ?? profileSpace.model) else { return nil }
         return profile
     }
 

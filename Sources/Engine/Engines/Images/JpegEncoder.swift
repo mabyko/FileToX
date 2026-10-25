@@ -11,6 +11,8 @@ import ImageIO
 enum JpegEncoder {
     /// "3.2.0".
     static let version = String(cString: ftx_jpeg_version())
+    /// Largest ICC profile a JPEG holds: 255 APP2 markers of 65519 profile bytes.
+    static let maxProfileLength = 65519 * 255
 
     static func write(_ frame: ImageFrame, to path: String) throws {
         try FileManager.default.writeFile(path, try encode(frame))
@@ -64,6 +66,10 @@ enum JpegEncoder {
             tagged.properties[ImageFrame.metadataKey] = metadata
         }
         let blobs = CodecPixels.metadataBlobs(tagged, colorModel: cmyk ? .cmyk : gray ? .monochrome : .rgb)
+        // 255 APP2 markers of 65519 bytes (the native encoder's limit too); never drop a valid profile to make it fit.
+        if let icc = blobs.icc, icc.count > maxProfileLength {
+            throw ConversionError("The colour profile (\(icc.count) bytes) is too large for JPEG, which holds at most \(maxProfileLength) bytes.")
+        }
         // ImageMagick's EXIF profile keeps the APP1 identifier.
         let exif = blobs.exif.map { Data("Exif\0\0".utf8) + $0 }
 
@@ -142,10 +148,7 @@ enum JpegEncoder {
         guard total > 0, chunks.count == total else { return nil }
         var profile = Data()
         for sequence in 1...total { profile.append(chunks[sequence]!) }
-        guard profile.count >= 128 else { return nil }
-        let size = profile.prefix(4).reduce(0) { $0 << 8 | Int($1) }
-        guard size >= 128, size <= profile.count, CGColorSpace(iccData: profile as CFData) != nil else { return nil }
-        return profile
+        return CodecPixels.validProfile(profile)
     }
 
     /// COM and Photoshop APP13, including multipart resources and markers between progressive scans.

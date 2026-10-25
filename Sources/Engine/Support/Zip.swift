@@ -409,7 +409,9 @@ public enum Deflate {
     /// Most input bytes given to zlib at once (its counters are 32-bit); tests lower it to exercise the slicing.
     nonisolated(unsafe) static var inputSlice = 1 << 30
 
-    /// Inflates raw deflate data, handing out chunks of at most 1 MiB.
+    /// Inflates raw deflate data, handing out chunks of at most 1 MiB. Every chunk is handed out before its zlib status is
+    /// checked: output is only proven valid at the end of the stream, and a call can produce output and then fail (a bad
+    /// checksum), which the sink's byte limits must still count. A broken stream still throws.
     public static func inflate(_ input: Data, windowBits: Int32 = -15, _ sink: (Data) throws -> Void) throws {
         var stream = z_stream()
         guard inflateInit2_(&stream, windowBits, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
@@ -435,10 +437,10 @@ public enum Deflate {
                     status = zlib.inflate(&stream, Z_NO_FLUSH)
                     return buffer.count - Int(stream.avail_out)
                 }
+                if produced > 0 { try sink(Data(output[0..<produced])) }
                 if status != Z_OK && status != Z_STREAM_END && !(status == Z_BUF_ERROR && produced > 0) {
                     throw ZipError.corrupt(stream.msg.map { String(cString: $0) } ?? String(cString: zError(status)))
                 }
-                if produced > 0 { try sink(Data(output[0..<produced])) }
                 if status == Z_BUF_ERROR && produced == 0 { throw ZipError.corrupt("unexpected end of compressed data") }
             } while status != Z_STREAM_END
         }

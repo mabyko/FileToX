@@ -36,8 +36,10 @@ struct ImageFrame {
     static let jpegSamplingKey = "FileToXJpegSampling" as CFString
     /// Opaque JPEG COM and Photoshop APP13 marker segments, removed by keepMetadata=false.
     static let jpegMarkersKey = "FileToXJpegMarkers" as CFString
-    /// Actual JPEG APP2 ICC bytes; empty means the source had no valid embedded profile (ImageIO may assign one).
-    static let jpegICCKey = "FileToXJpegICC" as CFString
+    /// Exact ICC bytes of the JPEG (APP2) or PNG (iCCP) profile ImageIO decoded the frame with; empty when it used its
+    /// untagged default. Absent for other sources, for colour ImageIO took from elsewhere and once the samples leave
+    /// that colour space: the profile is then inferred from the image's current space.
+    static let iccKey = "FileToXICC" as CFString
     /// Resolution as the file stored it, [x, y, unit] with unit 1 = per inch, 2 = per centimetre (ImageMagick's
     /// `resolution` and `units`, which the JPEG writer copies into JFIF). `dpi` holds the same in inches.
     static let resolutionKey = "FileToXResolution" as CFString
@@ -128,6 +130,7 @@ enum ImageEncoder {
     /// Applies resize / colour / metadata options to one frame and records the target's encoder settings.
     static func applyOptions(_ frame: ImageFrame, _ options: ImageOptions, targetFormat: String) throws -> ImageFrame {
         var frame = frame
+        let decodedSpace = frame.image.colorSpace
         try Task.checkCancellation()
         if let orientation = (frame.properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue, orientation != 1 {
             frame.image = ImagePixels.oriented(frame.image, orientation)
@@ -168,7 +171,7 @@ enum ImageEncoder {
             frame.properties[ImageFrame.jpegMarkersKey] = nil
             if !options.keepColorProfile {
                 frame.image = ImagePixels.untagged(frame.image)
-                frame.properties[ImageFrame.jpegICCKey] = Data()
+                frame.properties[ImageFrame.iccKey] = Data()
             }
         }
 
@@ -204,6 +207,9 @@ enum ImageEncoder {
         default:
             break
         }
+        // Source ICC bytes describe the samples only in the space they were decoded in (an indexed picture resized or
+        // turned upright is sRGB now); otherwise the profile is inferred from the current space.
+        if let space = frame.image.colorSpace, let decodedSpace, !CFEqual(space, decodedSpace) { frame.properties[ImageFrame.iccKey] = nil }
         return frame
     }
 
@@ -240,6 +246,7 @@ enum ImageEncoder {
                 // picture to BMP as bare pixels without a header; drawn as sRGB, its colours match the BMP writer's own
                 // conversion of RGB in the palette's colour space.
                 frames[i].image = ImagePixels.image(ImagePixels.bitmap(frames[i].image))
+                frames[i].properties[ImageFrame.iccKey] = nil
             }
         }
         guard let first = frames.first else { throw ConversionError("There is no image to write.") }
@@ -315,7 +322,7 @@ enum ImageEncoder {
            quality < 100, frame.image.width > 1 || frame.image.height > 1 {
             encoded = try Jpeg2000Encoder.replacingCodestream(in: encoded, image: frame.image, quality: quality)
         }
-        if format == "png", let frame = frames.first { encoded = try preservingJpegMetadata(encoded, frame) }
+        if format == "png", let frame = frames.first { encoded = try preservingJpegMetadata(withSourceProfile(encoded, frame), frame) }
         if format == "bmp" {
             // ImageIO reports success for pictures it can't write as BMP; never hand on a file without a BMP header.
             guard isBmp(encoded) else { throw ConversionError("Could not write \(FilePath.fileName(path)) as BMP.") }
@@ -351,6 +358,67 @@ enum ImageEncoder {
         return result
     }
 
+    /// A PNG's valid iCCP profiles before PLTE/IDAT in file order (intact CRC, compression method 0, complete zlib
+    /// stream, usable ICC), whether it declares colour with sRGB, gAMA, cHRM or cICP, and the bytes inflated to find
+    /// them: no chunk is inflated once 16 MiB are (one 1 MiB inflate buffer may pass it). Nil when it is no PNG.
+    static func pngProfiles(_ file: Data) -> (profiles: [Data], declared: Bool, inflated: Int)? {
+        guard file.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) else { return nil }
+        var i = file.startIndex + 8, declared = false, profiles: [Data] = [], inflated = 0
+        while file.endIndex - i >= 12 {
+            let length = file[i..<i + 4].reduce(0) { $0 << 8 | Int($1) }
+            let type = String(decoding: file[i + 4..<i + 8], as: UTF8.self)
+            guard length <= file.endIndex - i - 12, type != "PLTE", type != "IDAT" else { break }
+            if type == "iCCP" && inflated <= 1 << 24 {
+                let crc = file[i + 4..<i + 8 + length].withUnsafeBytes { zlib.crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) }
+                let payload = file[i + 8..<i + 8 + length]
+                if crc == file[i + 8 + length..<i + 12 + length].reduce(0, { $0 << 8 | UInt($1) }),
+                   let nul = payload.prefix(80).firstIndex(of: 0), nul > payload.startIndex, payload.endIndex - nul > 2, payload[nul + 1] == 0 {
+                    var profile = Data()
+                    // Real profiles are far smaller (a JPEG can carry at most 255 × 65519 bytes); the budget covers every
+                    // iCCP chunk, so repeated compressed chunks can't make reading inflate more.
+                    let complete = (try? Deflate.inflate(payload[(nul + 2)...], windowBits: 15) { chunk in
+                        profile += chunk
+                        inflated += chunk.count
+                        if inflated > 1 << 24 { throw ConversionError("The PNG colour profiles are too large.") }
+                    }) != nil
+                    if complete, let valid = CodecPixels.validProfile(profile) { profiles.append(valid) }
+                }
+            }
+            declared = declared || ["sRGB", "gAMA", "cHRM", "cICP"].contains(type)
+            i += 12 + length
+        }
+        return (profiles, declared, inflated)
+    }
+
+    /// PNG colour chunks for the source's actual ICC bytes instead of ImageIO's choice for the colour space, which turns
+    /// untagged gray into Generic Gray Gamma 2.2, a genuine sRGB profile into an sRGB chunk and Adobe RGB into its own
+    /// copy. Untracked frames (rendered pages) keep ImageIO's chunks; so does the sRGB chunk of untagged RGB.
+    private static func withSourceProfile(_ png: Data, _ frame: ImageFrame) throws -> Data {
+        guard frame.properties[ImageFrame.iccKey] is Data else { return png }
+        // ImageIO keeps an indexed picture's palette, written in its base space.
+        let space = frame.image.colorSpace
+        let profile = CodecPixels.colorProfile(frame, space: space?.model == .indexed ? space?.baseColorSpace : space)
+        let dropped: Set<String> = profile == nil ? ["iCCP", "cICP"] : ["iCCP", "cICP", "sRGB"]
+        var result = png.prefix(33) // signature and IHDR
+        if let profile { result += try pngChunk("iCCP", Data("icc".utf8) + [0, 0] + Deflate.deflate(profile, windowBits: 15)) }
+        var offset = 33
+        while png.count - offset >= 12 {
+            let end = offset + 12 + png[offset..<offset + 4].reduce(0) { $0 << 8 | Int($1) }
+            guard end <= png.count else { break }
+            if !dropped.contains(String(decoding: png[offset + 4..<offset + 8], as: UTF8.self)) { result += png[offset..<end] }
+            offset = end
+        }
+        return result + png[offset...]
+    }
+
+    /// One PNG chunk: big-endian length, type, payload and CRC.
+    private static func pngChunk(_ type: String, _ payload: Data) throws -> Data {
+        guard payload.count <= Int32.max else { throw ConversionError("The PNG metadata is too large.") }
+        let bytes = Data(type.utf8) + payload
+        let crc = bytes.withUnsafeBytes { zlib.crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) }
+        return withUnsafeBytes(of: UInt32(payload.count).bigEndian) { Data($0) } + bytes + withUnsafeBytes(of: UInt32(crc).bigEndian) { Data($0) }
+    }
+
     /// ImageMagick's PNG raw-profile convention keeps Photoshop resources that ImageIO cannot serialize.
     private static func preservingJpegMetadata(_ png: Data, _ frame: ImageFrame) throws -> Data {
         guard let markers = frame.properties[ImageFrame.jpegMarkersKey] as? Data else { return png }
@@ -361,16 +429,7 @@ enum ImageEncoder {
             if marker == 0xED { photoshop.append(payload.dropFirst(14)) }
         }
         var chunks = Data()
-        func text(_ name: String, _ value: Data) throws {
-            let payload = Data(name.utf8) + Data([0]) + value
-            guard payload.count <= Int32.max else { throw ConversionError("The PNG metadata is too large.") }
-            let size = UInt32(payload.count)
-            for shift in stride(from: 24, through: 0, by: -8) { chunks.append(UInt8(truncatingIfNeeded: size >> shift)) }
-            let bytes = Data("tEXt".utf8) + payload
-            chunks.append(bytes)
-            let crc = bytes.withUnsafeBytes { zlib.crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) }
-            for shift in stride(from: 24, through: 0, by: -8) { chunks.append(UInt8(truncatingIfNeeded: crc >> shift)) }
-        }
+        func text(_ name: String, _ value: Data) throws { chunks += try pngChunk("tEXt", Data(name.utf8) + Data([0]) + value) }
         if !comments.isEmpty { try text("Comment", Data(comments.prefix { $0 != 0 })) }
         if !photoshop.isEmpty {
             var profile = Data(("\n8bim\n" + String(format: "%8lu", photoshop.count)).utf8)
@@ -404,7 +463,7 @@ enum ImageEncoder {
     }
 
     private static let privateKeys: Set<CFString> = [ImageFrame.metadataKey, ImageFrame.loopCountKey, ImageFrame.icoSizesKey, ImageFrame.losslessKey,
-                                                     ImageFrame.qualityKey, ImageFrame.jpegSamplingKey, ImageFrame.resolutionKey, ImageFrame.jpegMarkersKey, ImageFrame.jpegICCKey, ImageFrame.icoPaletteKey]
+                                                     ImageFrame.qualityKey, ImageFrame.jpegSamplingKey, ImageFrame.resolutionKey, ImageFrame.jpegMarkersKey, ImageFrame.iccKey, ImageFrame.icoPaletteKey]
 
     /// Sets the EXIF orientation of the frame and of its metadata.
     private static func setOrientation(_ frame: inout ImageFrame, _ orientation: Int) {

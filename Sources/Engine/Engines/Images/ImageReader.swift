@@ -56,7 +56,12 @@ enum ImageReader {
         let jpeg = format == "jpg" ? try Data(contentsOf: URL(fileURLWithPath: path)) : nil
         let sampling = jpeg.flatMap(JpegEncoder.samplingFactors)
         let markers = jpeg.map(JpegEncoder.preservedMarkers)
-        let icc = jpeg.flatMap(JpegEncoder.embeddedProfile)
+        // Embedded profiles, matched below with the space ImageIO decoded each frame in: its colour space alone can't tell
+        // a source profile from the default it assigns.
+        var profiles = jpeg.map { (profiles: [JpegEncoder.embeddedProfile($0)].compactMap { $0 }, declared: false) }
+        if format == "png" {
+            profiles = ImageEncoder.pngProfiles(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)).map { ($0.profiles, $0.declared) }
+        }
         let animation = (fileProperties[kCGImagePropertyGIFDictionary] ?? fileProperties[kCGImagePropertyWebPDictionary]) as? [CFString: Any]
         let loops = (animation?[kCGImagePropertyGIFLoopCount] ?? animation?[kCGImagePropertyWebPLoopCount]) as? NSNumber
 
@@ -79,7 +84,9 @@ enum ImageReader {
             if let jpeg { image = try decodeJpeg(jpeg, fallback: image) }
             let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
             var frame = ImageFrame(image: image, delay: delay(properties), dpi: storedDpi(properties, format: format))
-            if jpeg != nil { frame.properties[ImageFrame.jpegICCKey] = icc ?? Data() }
+            if let profiles, let icc = CodecPixels.sourceProfile(profiles.profiles, decoded: image.colorSpace, declared: profiles.declared) {
+                frame.properties[ImageFrame.iccKey] = icc
+            }
             if let resolution = storedResolution(properties, format: format) { frame.properties[ImageFrame.resolutionKey] = resolution }
             if format == "gif" { frame.properties[ImageFrame.icoPaletteKey] = true }
             if image.colorSpace?.model == .monochrome && !["jpg", "png", "bmp"].contains(format) {
@@ -97,7 +104,8 @@ enum ImageReader {
         return frames
     }
 
-    /// Replace only pixels; ImageIO still supplies the ICC space, EXIF orientation, resolution and metadata.
+    /// Replace only pixels; ImageIO still supplies EXIF orientation, resolution, metadata and, unless the file holds a
+    /// complete profile for these samples, their colour space.
     static func decodeJpeg(_ data: Data, fallback: CGImage) throws -> CGImage {
         try Task.checkCancellation()
         var pixels: UnsafeMutablePointer<UInt8>?
@@ -112,12 +120,12 @@ enum ImageReader {
         try Task.checkCancellation()
         let model: CGColorSpaceModel = components == 4 ? .cmyk : components == 1 ? .monochrome : .rgb
         guard let fallbackSpace = fallback.colorSpace, fallbackSpace.model == model else { return fallback }
-        var space = fallbackSpace
-        if model == .cmyk {
-            // ImageIO assigns Generic CMYK to untagged JPEGs too; that is not an embedded source profile.
-            if JpegEncoder.embeddedProfile(data).flatMap({ CGColorSpace(iccData: $0 as CFData) })?.model != .cmyk {
-                space = CGColorSpaceCreateDeviceCMYK()
-            }
+        // ImageIO assigns Generic CMYK to untagged JPEGs too; that is not an embedded source profile.
+        var space = model == .cmyk ? CGColorSpaceCreateDeviceCMYK() : fallbackSpace
+        // The libjpeg samples take their meaning from the file's complete profile, which ImageIO misses when its chunks
+        // are out of order.
+        if let embedded = JpegEncoder.embeddedProfile(data).flatMap({ CGColorSpace(iccData: $0 as CFData) }), embedded.model == model {
+            space = embedded
         }
         guard let provider = CGDataProvider(data: samples as CFData),
               let image = CGImage(width: Int(width), height: Int(height), bitsPerComponent: 8, bitsPerPixel: 8 * Int(components),
