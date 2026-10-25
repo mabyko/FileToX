@@ -248,16 +248,16 @@ enum SvgNormalizer {
         }
     }
 
-    /// The CSS `font` shorthand: [style] [variant] [weight] [stretch] size[/line-height] family.
+    /// The CSS `font` shorthand: [style] [variant] [weight] [stretch] size[/line-height] family. The weight stays as
+    /// written; `applyStyles` resolves bolder and lighter against the parent's computed weight after the cascade.
     private static func expandFont(_ value: String) -> [(String, String)] {
-        // shortcut: relative shorthand weights use 400, expand only after broader font-shorthand verification.
         var style = "normal", variant = "normal", weight = "400", stretch = "normal"
         var rest = value.trimmingCharacters(in: .whitespaces)
         while let space = rest.firstIndex(where: \.isWhitespace) {
             let token = String(rest[..<space]).lowercased()
             if ["italic", "oblique"].contains(token) { style = token }
             else if token == "small-caps" { variant = token }
-            else if ["bold", "bolder", "lighter"].contains(token) || (Int(token).map { (1...1000).contains($0) } ?? false) { weight = String(numericWeight(token, parent: 400)) }
+            else if ["bold", "bolder", "lighter"].contains(token) || (Int(token).map { (1...1000).contains($0) } ?? false) { weight = token }
             else if token.hasSuffix("condensed") || token.hasSuffix("expanded") { stretch = token }
             else if token != "normal" { break }
             rest = rest[space...].trimmingCharacters(in: .whitespaces)

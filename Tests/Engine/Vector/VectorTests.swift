@@ -755,6 +755,7 @@ extension VectorTests {
         let bodies = [
             "<text x='100' y='40' text-anchor='middle' font-weight='bolder'>A&#x301;<tspan font-weight='lighter'>bc</tspan>Def</text>",
             "<style>g {writing-mode:tb} text {font-weight:bolder}</style><text x='100' y='5'>A&#x301;<tspan font-weight='lighter'>bc</tspan></text>",
+            "<text x='10' y='40' style='font:bolder 30px Helvetica'>A&#x301;<tspan style='font:italic lighter 30px Helvetica'>bc</tspan></text>",
         ]
         for body in bodies {
             func normalize(_ content: String) -> Data {
@@ -770,20 +771,43 @@ extension VectorTests {
     }
 
     func testRelativeWeightTextKeepsVectorPdfOutput() throws {
-        let source = try write("relative-weight.svg", """
-            <svg xmlns='http://www.w3.org/2000/svg' width='200' height='80'>
-              <g font-weight='200'><text x='10' y='50' font-size='40' font-family='Helvetica' font-weight='bolder'>Abc</text></g>
-            </svg>
-            """)
-        let drawing = try SvgRenderer.load(source)
-        XCTAssertNil(drawing.nativeData)
-        let pdf = FilePath.combine(dir, "relative-weight.pdf")
-        try SvgRenderer.writePdf(drawing, pdf, title: "relative weight", pdfA: false)
-        let page = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: pdf))?.page(at: 0)?.pageRef)
-        var content = "", images: [(Int, Int)] = [], fonts = 0
-        PdfContent.collect(page, &content, &images, &fonts)
-        XCTAssertTrue(images.isEmpty)
-        XCTAssertEqual(fonts, 0)
-        XCTAssertNotNil(content.range(of: #"\s(c|l|re)\s"#, options: .regularExpression))
+        for (name, weight) in [("longhand", "font-size='40' font-family='Helvetica' font-weight='bolder'"),
+                               ("shorthand", "style='font:bolder 40px Helvetica'")] {
+            let source = try write("relative-weight-\(name).svg", """
+                <svg xmlns='http://www.w3.org/2000/svg' width='200' height='80'>
+                  <g font-weight='200'><text x='10' y='50' \(weight)>Abc</text></g>
+                </svg>
+                """)
+            let drawing = try SvgRenderer.load(source)
+            XCTAssertNil(drawing.nativeData)
+            let pdf = FilePath.combine(dir, "relative-weight-\(name).pdf")
+            try SvgRenderer.writePdf(drawing, pdf, title: "relative weight", pdfA: false)
+            let page = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: pdf))?.page(at: 0)?.pageRef)
+            var content = "", images: [(Int, Int)] = [], fonts = 0
+            PdfContent.collect(page, &content, &images, &fonts)
+            XCTAssertTrue(images.isEmpty, name)
+            XCTAssertEqual(fonts, 0, name)
+            XCTAssertNotNil(content.range(of: #"\s(c|l|re)\s"#, options: .regularExpression), name)
+        }
+    }
+
+    func testFontShorthandRelativeWeightsUseTheComputedParent() throws {
+        // CSS Fonts 4 allows bolder and lighter in the shorthand; they compute like the longhand.
+        for (parent, bolder, lighter) in [(200, 400, 100), (400, 700, 100), (700, 900, 400), (900, 900, 700)] {
+            for (relative, expected) in [("bolder", bolder), ("lighter", lighter)] {
+                for declaration in ["style='font:\(relative) 12px Helvetica'", "font='\(relative) 12px Helvetica'", "class='relative'"] {
+                    let source = Data("""
+                        <svg xmlns='http://www.w3.org/2000/svg' width='200' height='60'>
+                          <style>.parent {font:\(parent) 12px Helvetica} .relative {font:italic \(relative) 12px Helvetica}</style>
+                          <g class='parent'><g><g id='probe' \(declaration)/></g></g>
+                        </svg>
+                        """.utf8)
+                    let root = try XDocument.load(data: SvgNormalizer.normalize(source, baseDirectory: dir)).root
+                    let probe = try XCTUnwrap(root.descendants().first { $0.attributeValue("id") == "probe" })
+                    XCTAssertEqual(probe.attributeValue("font-weight"), String(expected), "\(parent), \(declaration)")
+                    XCTAssertEqual(probe.attributeValue("font-style"), declaration.hasPrefix("class") ? "italic" : "normal")
+                }
+            }
+        }
     }
 }
