@@ -50,7 +50,8 @@ class ReadbackTests(unittest.TestCase):
             self.assertEqual(value["textParts"]["content"], " A")
             self.assertEqual(value["structure"]["textRecords"], 1)
         a, b = self.root / "a.pdb", self.root / "b.pdb"
-        a.write_bytes(self.pdb(b" A")); b.write_bytes(self.pdb(b" A", True))
+        name = b"Same title".ljust(32, b"\0")
+        a.write_bytes(name + self.pdb(b" A")[32:]); b.write_bytes(name + self.pdb(b" A", True)[32:])
         old = {"kind": "binary", "sha256": "same"}
         status, _, metrics = compare_output(old, old, a, b, self.thresholds)
         self.assertEqual(status, "PASS")
@@ -60,6 +61,21 @@ class ReadbackTests(unittest.TestCase):
         b.write_bytes(b"bad")
         self.assertEqual(compare_output(old, old, a, b, self.thresholds)[0], "FAIL")
         self.assertEqual(compare_output(old, old, b, a, self.thresholds)[0], "WARN")
+
+    def test_palm_database_name_changes_fail_with_identical_body(self):
+        names = [name.ljust(32, b"\0") for name in (b"Original title", b"Different title")]
+        for extension, data in ((".pdb", self.pdb(b" A")), (".mobi", self.mobi(b"<p> A</p>")),
+                                (".azw3", self.mobi(b"<p> A</p>", version=8))):
+            with self.subTest(extension=extension):
+                paths = [self.root / (side + extension) for side in ("left", "right")]
+                for path, name in zip(paths, names): path.write_bytes(name + data[32:])
+                fingerprints = [{"kind": "binary", "sha256": hashlib.sha256(p.read_bytes()).hexdigest()} for p in paths]
+                status, reasons, metrics = compare_output(*fingerprints, *paths, self.thresholds)
+                self.assertEqual(status, "FAIL")
+                self.assertIn("Decoded document structure or metadata changed", reasons)
+                self.assertEqual(metrics["readback"]["textRatios"]["content"], 1)
+                self.assertEqual([metrics["readback"]["structure"][side]["databaseNameHex"] for side in ("baseline", "candidate")],
+                                 [name.hex() for name in names])
 
     def test_palm_offsets_and_declared_lengths_are_validated(self):
         for offset, value in ((78, 1), (86, 96), (100, LIMIT + 1)):

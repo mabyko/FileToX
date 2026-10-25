@@ -227,7 +227,7 @@ def palm(data, extension):
     value = text(payload, codec)
     if signature == b"BOOKMOBI": markup(out, "content", value)
     else: out["textParts"]["content"] = value
-    out["structure"].update({"databaseType": signature.decode("ascii"), "textRecords": ntext, "recordCount": count,
+    out["structure"].update({"databaseNameHex": take(data, 0, 32).hex(), "databaseType": signature.decode("ascii"), "textRecords": ntext, "recordCount": count,
                              "recordSize": record_size, "encoding": codec, "firstResource": first_image})
     if signature == b"TEXtREAd": out["structure"]["readingPosition"] = position
     for index, record in enumerate(records[ntext + 1:], ntext + 1):
