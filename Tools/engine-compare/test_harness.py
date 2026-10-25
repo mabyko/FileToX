@@ -59,6 +59,12 @@ class HarnessTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_internal_inspector_starts_in_isolated_python(self):
+        result = subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("fingerprint.py"))],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr.strip(), "Internal inspector: --woff2 PATH")
+
     def tcr(self, payload, entries=None):
         entries = entries or {}
         return b"!!8-Bit!!" + b"".join(bytes([len(entries.get(i, bytes([i])))]) + entries.get(i, bytes([i])) for i in range(256)) + payload

@@ -11,7 +11,6 @@ import sys
 import unicodedata
 import zipfile
 import zlib
-from semantic import read_tcr_payload
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "build/engine-compare/bin/inspect"
@@ -198,6 +197,7 @@ def fingerprint(path, sevenzip=None):
         elif kind == "zip":
             result["metadata"] = zip_entries(path)
         elif kind == "binary" and ext == "tcr":
+            from semantic import read_tcr_payload
             payload = read_tcr_payload(path)
             result["metadata"] = {"semanticType": "tcr", "decodedSize": len(payload),
                                   "decodedSha256": hashlib.sha256(payload).hexdigest()}
