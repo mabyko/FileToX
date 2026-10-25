@@ -85,6 +85,10 @@ enum SvgNormalizer {
                     cascade[name] = (expanded, rank)
                 }
             }
+            // The obsolete orientation attribute is a shorthand for the modern property, before inheritance.
+            for name in ["glyph-orientation-vertical", "text-orientation"] {
+                if let value = element.attributeValue(XName(name)) { apply(name, value, [0, 0, 0, 0]) }
+            }
             for rule in rules where matches(rule.selector, element) {
                 for declaration in rule.declarations { apply(declaration.property, declaration.value, [declaration.important ? 1 : 0, 1, rule.specificity, rule.order]) }
             }
@@ -243,6 +247,11 @@ enum SvgNormalizer {
         switch property {
         case "font":
             return expandFont(value)
+        case "glyph-orientation-vertical":
+            let keyword = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard let orientation = ["auto": "mixed", "0": "upright", "0deg": "upright", "90": "sideways", "90deg": "sideways",
+                                     "inherit": "inherit", "initial": "initial", "unset": "unset"][keyword] else { return [] }
+            return [("text-orientation", orientation)]
         default:
             return [(property, value)]
         }
@@ -346,14 +355,16 @@ enum SvgNormalizer {
             "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin",
             "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "paint-order", "visibility", "color", "font-family", "font-size",
             "font-weight", "font-style", "font-stretch", "font-variant", "letter-spacing", "word-spacing", "text-anchor", "text-decoration",
-            "direction", "writing-mode", "text-orientation", "glyph-orientation-vertical", "xml:space",
+            "direction", "writing-mode", "text-orientation", "xml:space",
         ]
 
         func adding(_ element: XElement) -> TextStyle {
             var style = self
             for attribute in element.attributes {
                 let name = attribute.name.namespaceName == XNamespace.xml.namespaceName ? "xml:" + attribute.name.localName : attribute.name.localName
-                guard TextStyle.inherited.contains(name), attribute.value != "inherit" else { continue }
+                let keyword = attribute.value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard TextStyle.inherited.contains(name), !["inherit", "unset"].contains(keyword) else { continue }
+                if keyword == "initial" { style.values[name] = nil; continue }
                 if name == "font-size" {
                     style.values[name] = String(SvgNormalizer.length(attribute.value, fontSize: style.fontSize, percentOf: style.fontSize) ?? style.fontSize)
                 } else if name == "font-weight" {
@@ -367,14 +378,7 @@ enum SvgNormalizer {
 
         var vertical: Bool { ["tb", "tb-rl", "vertical-rl", "vertical-lr"].contains((values["writing-mode"] ?? "").lowercased()) }
 
-        var verticalOrientation: String {
-            if let value = values["text-orientation"] { return value.lowercased() }
-            switch values["glyph-orientation-vertical"]?.lowercased() {
-            case "0", "0deg": return "upright"
-            case "90", "90deg": return "sideways"
-            default: return "mixed"
-            }
-        }
+        var verticalOrientation: String { values["text-orientation"]?.lowercased() ?? "mixed" }
 
         var fontSize: Double { values["font-size"].flatMap(Double.init) ?? 16 }
         var weight: Int { values["font-weight"].flatMap(Int.init) ?? 400 }
@@ -434,12 +438,14 @@ enum SvgNormalizer {
             var anchor = "start"
             var opacity: String?
             var vertical = false
+            var baselineShift = 0.0
         }
 
         let element: XElement
         let style: TextStyle
         var runs: [Run] = []
         var penX = 0.0, penY = 0.0
+        var baselineShift = 0.0
         var pendingX: [Double] = [], pendingY: [Double] = [], pendingDX: [Double] = [], pendingDY: [Double] = []
         var lastWasSpace = true
         var unsupported = false
@@ -457,6 +463,17 @@ enum SvgNormalizer {
             if style.values["xml:space"] != "preserve", let last = runs.indices.last {
                 runs[last].text = String(runs[last].text.reversed().drop { $0 == " " }.reversed())
             }
+            // shortcut: styled vertical bidi chunks stay with CoreSVG until shaping spans the whole anchored chunk.
+            var chunkRuns = 0, bidirectional = false
+            for run in runs where !run.text.isEmpty && run.vertical {
+                if run.startsChunk { chunkRuns = 0; bidirectional = false }
+                chunkRuns += 1
+                if run.style.verticalOrientation != "upright" {
+                    bidirectional = bidirectional || run.style.values["direction"]?.lowercased() == "rtl"
+                        || SvgNormalizer.rightToLeftCharacters.firstMatch(in: run.text, range: NSRange(location: 0, length: (run.text as NSString).length)) != nil
+                }
+                if chunkRuns > 1 && bidirectional { return nil }
+            }
             measure()
             anchorChunks()
             return build()
@@ -467,6 +484,7 @@ enum SvgNormalizer {
             if !isRoot && node.attributeValue("display") == "none" { return }
             // shortcut: mixed vertical/horizontal inlines stay with CoreSVG until orthogonal inline layout is implemented.
             if self.style.vertical && !style.vertical { unsupported = true }
+            if self.style.vertical, let bidi = node.attributeValue("unicode-bidi"), bidi.lowercased() != "normal" { unsupported = true }
             let size = style.fontSize
             // Positions of the element apply to its first characters.
             let x = SvgNormalizer.lengths(node.attributeValue("x"), fontSize: size), y = SvgNormalizer.lengths(node.attributeValue("y"), fontSize: size)
@@ -482,7 +500,7 @@ enum SvgNormalizer {
             case let value?: shift = SvgNormalizer.length(value, fontSize: size, percentOf: size) ?? 0
             case nil: break
             }
-            if self.style.vertical { penX += shift } else { penY -= shift }
+            baselineShift += shift
             for child in node.nodes {
                 switch child {
                 case .element(let element) where ["tspan", "a", "textPath"].contains(element.name.localName):
@@ -493,7 +511,7 @@ enum SvgNormalizer {
                     break
                 }
             }
-            if self.style.vertical { penX -= shift } else { penY += shift }
+            baselineShift -= shift
         }
 
         /// Adds characters with SVG's white-space handling; characters with their own x/y/dx/dy start runs of their own.
@@ -520,21 +538,22 @@ enum SvgNormalizer {
             for character in text {
                 let positioned = !pendingX.isEmpty || !pendingY.isEmpty || !pendingDX.isEmpty || !pendingDY.isEmpty
                 // Upright cursive scripts use isolated forms, so each grapheme is shaped separately.
-                if positioned || (self.style.vertical && style.verticalOrientation == "upright") || runs.isEmpty || runs[runs.count - 1].style.values != style.values || runs[runs.count - 1].opacity != opacity {
+                if positioned || (self.style.vertical && style.verticalOrientation == "upright") || runs.isEmpty || runs[runs.count - 1].style.values != style.values || runs[runs.count - 1].opacity != opacity || runs[runs.count - 1].baselineShift != baselineShift {
                     var run = Run(text: "", style: style, font: SvgNormalizer.font(style), opacity: opacity)
                     run.vertical = self.style.vertical
+                    run.baselineShift = baselineShift
                     if run.vertical {
                         if let x = pendingX.first { penX = x; run.startsChunk = true; pendingX.removeFirst() }
                         if let y = pendingY.first { run.y = y; run.startsChunk = true; pendingY.removeFirst() } else { run.y = .nan }
                         if let dx = pendingDX.first { penX += dx; pendingDX.removeFirst() }
                         if let dy = pendingDY.first { run.width = dy; pendingDY.removeFirst() }
-                        run.x = penX
+                        run.x = penX + baselineShift
                     } else {
                         if let x = pendingX.first { run.x = x; run.startsChunk = true; pendingX.removeFirst() } else { run.x = .nan }
                         if let y = pendingY.first { penY = y; pendingY.removeFirst() }
                         if let dx = pendingDX.first { run.width = dx; pendingDX.removeFirst() }
                         if let dy = pendingDY.first { penY += dy; pendingDY.removeFirst() }
-                        run.y = penY
+                        run.y = penY - baselineShift
                     }
                     run.anchor = style.values["text-anchor"] ?? "start"
                     if run.vertical && style.verticalOrientation != "upright" && style.values["direction"]?.lowercased() == "rtl" {
@@ -625,6 +644,7 @@ enum SvgNormalizer {
     }
 
     private static let uprightCharacters = try! NSRegularExpression(pattern: "^[\\p{vo=U}\\p{vo=Tu}\\p{vo=Tr}]")
+    private static let rightToLeftCharacters = try! NSRegularExpression(pattern: "[\\p{bc=R}\\p{bc=AL}]")
 
     private static func line(_ text: String, _ font: CTFont, _ style: TextStyle, vertical: Bool) -> CTLine {
         var attributes: [NSAttributedString.Key: Any] = [.init(kCTFontAttributeName as String): font]

@@ -710,6 +710,55 @@ extension VectorTests {
         XCTAssertNotNil(content.range(of: #"\s(c|l|re)\s"#, options: .regularExpression))
     }
 
+    func testStyledVerticalBidiChunksKeepTheirTextForTheRenderer() throws {
+        for (direction, text) in [("rtl", "אב<tspan fill='red'>גד</tspan>הו"),
+                                  ("ltr", "אב<tspan fill='red'>גד</tspan>הו"),
+                                  ("rtl", "AB<tspan fill='red'>CD</tspan>EF")] {
+            let body = "<text x='60' y='150' writing-mode='tb' direction='\(direction)'>\(text)</text>"
+            let root = try XDocument.load(data: SvgNormalizer.normalize(verticalSource(body), baseDirectory: dir)).root
+            XCTAssertEqual(root.descendants().filter { $0.name.localName == "text" }.count, 1)
+            XCTAssertTrue(root.descendants().filter { $0.name.localName == "path" }.isEmpty)
+            XCTAssertEqual(root.descendants().first { $0.name.localName == "tspan" }?.attributeValue("fill"), "red")
+            XCTAssertFalse(verticalInkBounds(try verticalImage(body)).isNull)
+        }
+        XCTAssertFalse(try verticalPaths("<text x='60' y='150' writing-mode='tb' direction='rtl'>אבגדהו</text>").isEmpty)
+        XCTAssertFalse(try verticalPaths("<text x='60' y='15' writing-mode='tb'>A<tspan fill='red'>B</tspan>C</text>").isEmpty)
+    }
+
+    func testLegacyVerticalOrientationSharesTheModernCascade() throws {
+        let prefix = "<g text-orientation='sideways'><text x='60' y='15' writing-mode='tb' "
+        let expected = try verticalPaths(prefix + "text-orientation='upright'>AB한</text></g>")
+        XCTAssertEqual(expected, try verticalPaths(prefix + "glyph-orientation-vertical='0'>AB한</text></g>"))
+        XCTAssertEqual(expected, try verticalPaths(prefix + "style='text-orientation:sideways;glyph-orientation-vertical:0'>AB한</text></g>"))
+        XCTAssertEqual(expected, try verticalPaths(prefix + "style='glyph-orientation-vertical:0!important;text-orientation:sideways'>AB한</text></g>"))
+        let sideways = try verticalPaths(prefix + "text-orientation='sideways'>AB한</text></g>")
+        XCTAssertNotEqual(expected, sideways)
+        XCTAssertEqual(sideways, try verticalPaths(prefix + "style='glyph-orientation-vertical:0;text-orientation:sideways'>AB한</text></g>"))
+        XCTAssertEqual(sideways, try verticalPaths(prefix + "glyph-orientation-vertical='0' style='text-orientation:sideways'>AB한</text></g>"))
+    }
+
+    func testVerticalOrientationInheritanceIgnoresKeywordCase() throws {
+        let expected = try verticalPaths("<text x='60' y='15' writing-mode='tb' text-orientation='upright'>AB한</text>")
+        for keyword in ["inherit", "INHERIT", "unset", "UNSET"] {
+            XCTAssertEqual(expected, try verticalPaths("<text x='60' y='15' writing-mode='tb' text-orientation='upright'><tspan text-orientation='\(keyword)'>AB한</tspan></text>"))
+        }
+        XCTAssertEqual(try verticalPaths("<text x='60' y='15' writing-mode='tb'>AB한</text>"),
+                       try verticalPaths("<g text-orientation='upright'><text x='60' y='15' writing-mode='tb' text-orientation='INITIAL'>AB한</text></g>"))
+    }
+
+    func testBaselineShiftsSurviveAbsoluteCoordinatesAndRunBoundaries() throws {
+        for (mode, x, y, delta, restore) in [("tb", 70, 30, "dx='10'", "dx='-10'"),
+                                           ("horizontal-tb", 60, 20, "dy='-10'", "dy='10'")] {
+            let prefix = "<text x='60' y='30' writing-mode='\(mode)'"
+            XCTAssertEqual(try verticalPaths(prefix + " baseline-shift='10'>ABC</text>"),
+                           try verticalPaths("<text x='\(x)' y='\(y)' writing-mode='\(mode)'>ABC</text>"))
+            XCTAssertEqual(try verticalPaths(prefix + ">A<tspan baseline-shift='10'>B</tspan>C</text>"),
+                           try verticalPaths(prefix + ">A<tspan \(delta)>B</tspan><tspan \(restore)>C</tspan></text>"))
+        }
+        XCTAssertEqual(try verticalPaths("<text x='60' y='15' writing-mode='tb' baseline-shift='10'><tspan x='80' baseline-shift='5'>B</tspan></text>"),
+                       try verticalPaths("<text x='95' y='15' writing-mode='tb'>B</text>"))
+    }
+
     func testUprightVerticalCursiveTextUsesIsolatedGraphemes() throws {
         let letters = "سلام"
         let source = "<text x='60' y='15' writing-mode='tb' text-orientation='upright'>\(letters)</text>"
