@@ -34,7 +34,8 @@ struct ImageFrame {
     static let qualityKey = "FileToXQuality" as CFString
     /// Sampling factors of a JPEG source, [h, v] per component (ImageMagick's "jpeg:sampling-factor" property).
     static let jpegSamplingKey = "FileToXJpegSampling" as CFString
-    /// Opaque JPEG COM and Photoshop APP13 marker segments, removed by keepMetadata=false.
+    /// Opaque JPEG COM and Photoshop APP13 marker segments (a PNG's comments and Photoshop blocks as such segments),
+    /// removed by keepMetadata=false.
     static let jpegMarkersKey = "FileToXJpegMarkers" as CFString
     /// The source's Photoshop metadata resource blocks (IPTC, its digest, caption, copyright flag, URL) as stored
     /// (`PsdCodec.metadataResources`), written into PSD/PSB, and for sources other than JPEG (whose own marker segments

@@ -504,6 +504,37 @@ final class ImageParityTests: XCTestCase {
         XCTAssertNil(try read(tiffWithPhotoshopData([], [0, 1, 2, 3]), format: "tiff").properties[ImageFrame.photoshopKey])
     }
 
+    func testPngCommentsReachJpegAndPngOutputsBesideTheirIptc() throws {
+        let record = iim([(2, 5, "With comment")]), iptc = resource(0x0404, record)
+        func chunk(_ type: String, _ payload: [UInt8]) -> [UInt8] {
+            let body = Array(type.utf8) + payload
+            let crc = Int(body.withUnsafeBytes { crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) })
+            return [24, 16, 8, 0].map { UInt8(payload.count >> $0 & 255) } + body + [24, 16, 8, 0].map { UInt8(crc >> $0 & 255) }
+        }
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let plain = FilePath.combine(folder, "plain.png")
+        try ImageEncoder.save([ImageFrame(image: pattern(3, width: 6, height: 4))], to: plain, format: "png")
+        let png = [UInt8](try Data(contentsOf: URL(fileURLWithPath: plain)))
+        let latin = Array("Plain comment".utf8), korean = Array("한글 메모".utf8)
+        let raw = Array("\niptc\n\(String(format: "%8lu", record.count))\n".utf8) + Array(record.map { String(format: "%02x", $0) }.joined().utf8) + [10]
+        let chunks = chunk("tEXt", Array("Comment".utf8) + [0] + latin)
+            + chunk("iTXt", Array("Comment".utf8) + [0, 1, 0, 0, 0] + [UInt8](try Deflate.deflate(Data(korean), windowBits: 15)))
+            + chunk("tEXt", Array("Raw profile type iptc".utf8) + [0] + raw)
+        let frame = try read(Data(png.prefix(33) + chunks + png.dropFirst(33)), format: "png")
+        let jpeg = try written(frame, "jpg")
+        XCTAssertEqual(JpegEncoder.segments(jpeg).filter { $0.0 == 0xFE }.map { [UInt8]($0.1) }, [latin, korean])
+        XCTAssertEqual([UInt8](PsdCodec.metadataResources(jpeg, format: "jpg")), iptc)
+        XCTAssertEqual(imageIOIptc(jpeg)?[kCGImagePropertyIPTCObjectName] as? String, "With comment")
+        let output = try written(frame, "png")
+        XCTAssertEqual(PsdCodec.pngText(output, keywords: ["Comment"]).map { [UInt8]($0.text) }, [latin + korean])
+        XCTAssertEqual([UInt8](PsdCodec.metadataResources(output, format: "png")), iptc)
+        var options = ImageOptions()
+        options.keepMetadata = false
+        XCTAssertTrue(JpegEncoder.preservedMarkers(try written(frame, "jpg", options)).isEmpty)
+        XCTAssertTrue(PsdCodec.pngText(try written(frame, "png", options), keywords: ["Comment", "Raw profile type 8bim"]).isEmpty)
+    }
+
     func testPsdAndPsbKeepExifXmpAndDocumentResourcesButHaveNoPlaceForComments() throws {
         let caption = resource(0x03F0, [5] + Array("Notes".utf8)), iptc = resource(0x0404, iim([(2, 5, "Resources"), (2, 25, "kw")]))
         let copyright = resource(0x040A, [1]), url = resource(0x040B, Array("https://example.com/a".utf8))

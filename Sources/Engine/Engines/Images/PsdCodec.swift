@@ -133,7 +133,7 @@ enum PsdCodec {
             let header = Data("Photoshop 3.0\0".utf8)
             blocks = metadataBlocks(JpegEncoder.segments(file).filter { $0.0 == 0xED && $0.1.starts(with: header) }.flatMap { $0.1.dropFirst(header.count) })
         case "png":
-            blocks = pngMetadata(file)
+            blocks = rawProfileBlocks(pngText(file, keywords: rawProfileKeywords))
         case "tiff":
             let tags = EmbeddedProfiles.tiffValues(file, tags: [34377, 33723], directories: 1)?.first ?? [:]
             blocks = tags[34377].map { metadataBlocks([UInt8]($0)) } ?? []
@@ -208,11 +208,18 @@ enum PsdCodec {
         return blocks
     }
 
-    /// Metadata blocks of a PNG's raw profile tEXt/zTXt/iTXt chunks with intact CRCs. Inflating shares one 16 MiB budget
-    /// that counts all output, also of streams that then fail; once it is spent no later chunk is inflated.
-    private static func pngMetadata(_ file: Data) -> [(id: Int, bytes: [UInt8])] {
+    /// The keywords of ImageMagick's PNG raw profiles holding Photoshop resources and bare IPTC.
+    static let rawProfileKeywords: Set<String> = ["Raw profile type 8bim", "Raw profile type iptc"]
+
+    /// The metadata blocks of a PNG's raw profiles (`pngText` with `rawProfileKeywords`), flattened.
+    static func rawProfileResources(_ texts: [(keyword: String, text: Data)]) -> Data { Data(rawProfileBlocks(texts).flatMap(\.bytes)) }
+
+    /// The text of a PNG's tEXt/zTXt/iTXt chunks with one of `keywords` and an intact CRC, in file order. Inflating
+    /// shares one 16 MiB budget that counts all output, also of streams that then fail; once it is spent no later chunk
+    /// is inflated.
+    static func pngText(_ file: Data, keywords: Set<String>) -> [(keyword: String, text: Data)] {
         guard file.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) else { return [] }
-        var photoshop: [(id: Int, bytes: [UInt8])] = [], bare: [(id: Int, bytes: [UInt8])] = []
+        var texts: [(keyword: String, text: Data)] = []
         var i = file.startIndex + 8, budget = 1 << 24
         while file.endIndex - i >= 12 {
             let length = file[i..<i + 4].reduce(0) { $0 << 8 | Int($1) }
@@ -222,7 +229,7 @@ enum PsdCodec {
             i += 12 + length
             if type == "IEND" { break }
             guard ["tEXt", "zTXt", "iTXt"].contains(type), let nul = payload.prefix(80).firstIndex(of: 0),
-                  let name = ["Raw profile type 8bim": "8bim", "Raw profile type iptc": "iptc"][String(decoding: payload[..<nul], as: UTF8.self)],
+                  case let keyword = String(decoding: payload[..<nul], as: UTF8.self), keywords.contains(keyword),
                   stored == chunk.withUnsafeBytes({ zlib.crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) }) else { continue }
             var text = Data(payload[(nul + 1)...]), compressed = type == "zTXt"
             if type == "iTXt" {
@@ -248,8 +255,17 @@ enum PsdCodec {
                 guard complete else { continue }
                 text = inflated
             }
+            texts.append((keyword, text))
+        }
+        return texts
+    }
+
+    /// Metadata blocks of raw profiles among PNG texts.
+    private static func rawProfileBlocks(_ texts: [(keyword: String, text: Data)]) -> [(id: Int, bytes: [UInt8])] {
+        var photoshop: [(id: Int, bytes: [UInt8])] = [], bare: [(id: Int, bytes: [UInt8])] = []
+        for (keyword, text) in texts where rawProfileKeywords.contains(keyword) {
             guard let profile = rawProfile(text) else { continue }
-            if name == "8bim" {
+            if keyword == "Raw profile type 8bim" {
                 photoshop += metadataBlocks(profile)
             } else if profile.starts(with: Array("8BIM".utf8)) {
                 bare += metadataBlocks(profile)

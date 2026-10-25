@@ -153,6 +153,18 @@ enum JpegEncoder {
         return CodecPixels.validProfile(profile)
     }
 
+    /// Comments as COM segments, each split into segments of at most 65,533 bytes.
+    static func commentSegments(_ comments: [Data]) -> Data {
+        var result = Data()
+        for comment in comments {
+            for start in stride(from: comment.startIndex, to: comment.endIndex, by: 65533) {
+                let part = comment[start..<min(start + 65533, comment.endIndex)]
+                result += [0xFF, 0xFE, UInt8((part.count + 2) >> 8), UInt8((part.count + 2) & 255)] + part
+            }
+        }
+        return result
+    }
+
     /// Photoshop resource blocks as APP13 "Photoshop 3.0" segments; a block may continue in the next segment.
     static func photoshopSegments(_ blocks: Data) -> Data {
         let header = Data("Photoshop 3.0\0".utf8), room = 65533 - header.count
