@@ -206,6 +206,21 @@ final class MarkdownTests: XCTestCase {
         XCTAssertTrue(headerless.columnDefinitions.isEmpty)
     }
 
+    func testHeaderlessTablesPreserveInvalidHeaderColonSpan() throws {
+        let pipeline = tablePipeline()
+        let parser = try XCTUnwrap(pipeline.inlineParsers.parsers.first { $0 is Markdown.PipeTableParser } as? Markdown.PipeTableParser)
+        parser.requireHeaderSeparator = false
+        let document = try Markdown.parse("a|b\n:|--", pipeline)
+        let table = try XCTUnwrap(document[0] as? Markdown.Table)
+        XCTAssertTrue(table.columnDefinitions.isEmpty)
+        let cell = (table[1] as! Markdown.TableRow)[0] as! Markdown.TableCell
+        let literal = try XCTUnwrap((cell[0] as! Markdown.ParagraphBlock).inline?.firstChild as? Markdown.LiteralInline)
+        XCTAssertEqual(literal.content.description, ":")
+        XCTAssertEqual(literal.span.start, 0)
+        XCTAssertEqual(literal.span.end, -1)
+        XCTAssertTrue(literal.span.isEmpty)
+    }
+
     func testLiteralTablesRespectCustomInlineParsersAndGlobalParsers() throws {
         let input = "a|b\n:--|--:\nc|d"
         for character in (["a", "|", ":", "-"] as [Markdown.Char]) {

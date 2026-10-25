@@ -277,6 +277,7 @@ extension Markdown {
                   !text.isEmpty, !text.text[text.end].isNewLine else { return false }
             var rows: [[Slice]] = []
             var unfinishedHeader = false
+            var headerHasColon = false
             var lineStart = text.start
             while lineStart <= text.end {
                 var lineEnd = lineStart
@@ -294,6 +295,7 @@ extension Markdown {
                     } else {
                         guard rows.count == 1, c == ":", let candidates = state.parsers.parsersForOpeningCharacter(c),
                               candidates.count == 1, candidates[0] === self else { return false }
+                        headerHasColon = true
                     }
                     opening = state.parsers.indexOfOpeningCharacter(text.text, opening + 1, lineEnd - 1)
                 }
@@ -333,7 +335,8 @@ extension Markdown {
                 }
                 if valid && total > 0 { definitions = parsed }
             }
-            guard !requireHeaderSeparator || definitions != nil else { return false }
+            // Keep legacy colon spans when an invalid separator row remains as table data.
+            guard definitions != nil || (!requireHeaderSeparator && !headerHasColon) else { return false }
             let table = Table(nil)
             if let attributes = state.block?.tryGetAttributes() { attributes.copyTo(table.getAttributes()) }
             if let definitions { table.columnDefinitions = definitions }
