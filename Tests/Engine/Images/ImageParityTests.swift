@@ -572,6 +572,42 @@ final class ImageParityTests: XCTestCase {
         }
     }
 
+    /// A big-endian EXIF APP1 segment: IFD0 with Model "TestPhone" and an Exif IFD with ColorSpace = `colorSpace`.
+    private func exifSegment(colorSpace: Int) -> [UInt8] {
+        var tiff: [UInt8] = [0x4D, 0x4D, 0, 42, 0, 0, 0, 8]
+        tiff += [0, 2] + [0x01, 0x10, 0, 2, 0, 0, 0, 10, 0, 0, 0, 56] + [0x87, 0x69, 0, 4, 0, 0, 0, 1, 0, 0, 0, 38] + [0, 0, 0, 0]
+        tiff += [0, 1] + [0xA0, 0x01, 0, 3, 0, 0, 0, 1, UInt8(colorSpace >> 8), UInt8(colorSpace & 255), 0, 0] + [0, 0, 0, 0]
+        let payload = Array("Exif\0\0".utf8) + tiff + Array("TestPhone\0".utf8)
+        return [0xFF, 0xE1, UInt8((payload.count + 2) >> 8), UInt8((payload.count + 2) & 255)] + payload
+    }
+
+    func testGrayAndCmykExifNeverClaimsSrgb() throws {
+        let grayProfile = try XCTUnwrap(CGColorSpace(iccData: try Data(contentsOf: URL(fileURLWithPath: "/System/Library/ColorSync/Profiles/Generic Gray Profile.icc")) as CFData))
+        let cmykProfile = try XCTUnwrap(CGColorSpace(name: CGColorSpace.genericCMYK))
+        let gray = ImagePixels.make((0..<23 * 9).map { UInt8($0 * 11 & 255) }, 23, 9, components: 1, space: grayProfile, alpha: false)
+        let cmyk = ImagePixels.make((0..<23 * 9 * 4).map { UInt8($0 * 7 & 255) }, 23, 9, components: 4, space: cmykProfile, alpha: false)
+        for (image, targets) in [(gray, ["jpg", "psd", "jxl"]), (cmyk, ["jpg", "psd", "webp"])] {
+            // A camera-style source: a real profile and EXIF ColorSpace = uncalibrated, after the JFIF/Adobe header.
+            let encoded = [UInt8](try JpegEncoder.encode(ImageFrame(image: image)))
+            let header = 4 + (Int(encoded[4]) << 8 | Int(encoded[5]))
+            let source = try read(Data(encoded.prefix(header) + exifSegment(colorSpace: 0xFFFF) + encoded.dropFirst(header)))
+            XCTAssertEqual(source.image.colorSpace?.model, image.colorSpace?.model)
+            let folder = GraphicsTestKit.folder()
+            defer { try? FileManager.default.removeItem(atPath: folder) }
+            for format in targets {
+                let path = FilePath.combine(folder, "exif.\(format)")
+                try ImageEncoder.save([try ImageEncoder.applyOptions(source, ImageOptions(), targetFormat: format)], to: path, format: format)
+                let file = try Data(contentsOf: URL(fileURLWithPath: path))
+                let blob = format == "psd" ? resources(file).blocks.first { $0.id == 0x0422 }.map { Array($0.bytes.dropFirst(12)) } : exifBlob([UInt8](file))
+                let entries = exifEntries(try XCTUnwrap(blob, format))
+                XCTAssertNotNil(entries[0x0110], format)
+                XCTAssertEqual(entries[0xA002]?.value, 23, format)
+                // ImageIO marks only sRGB pictures; WebP holds the converted sRGB samples of the CMYK source.
+                XCTAssertEqual(entries[0xA001]?.value, format == "webp" ? 1 : nil, "\(format) \(String(describing: image.colorSpace?.model))")
+            }
+        }
+    }
+
     func testExifPixelDimensionsArePatchedInPlace() {
         // Little-endian SHORT dimensions become LONGs in place; a cut-short directory is left as it is.
         let little: [UInt8] = [0x49, 0x49, 42, 0, 8, 0, 0, 0, 1, 0, 0x69, 0x87, 4, 0, 1, 0, 0, 0, 26, 0, 0, 0, 0, 0, 0, 0,

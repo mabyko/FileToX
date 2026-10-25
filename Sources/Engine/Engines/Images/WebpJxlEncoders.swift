@@ -291,9 +291,12 @@ enum CodecPixels {
         // Metadata without EXIF/TIFF tags (a PNG's, for one) has no EXIF profile in ImageMagick; ImageIO would still write one.
         let tags = (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? []
         guard tags.contains(where: { (CGImageMetadataTagCopyNamespace($0) as String?).map(exifNamespaces.contains) == true }) else { return nil }
-        // ImageIO's ColorSpace tag follows the pixel's space: sRGB (1) only for sRGB pictures.
-        let space = image.colorSpace?.model == .rgb ? image.colorSpace! : CGColorSpace(name: CGColorSpace.sRGB)!
-        let pixel = ImagePixels.make([0, 0, 0], 1, 1, components: 3, space: space, alpha: false)
+        // ImageIO's ColorSpace tag follows the pixel's space, whatever the source said: sRGB (1) for sRGB pictures, none
+        // for others, so gray and CMYK pictures are serialized in their own space.
+        let own = image.colorSpace?.model == .indexed ? image.colorSpace?.baseColorSpace : image.colorSpace
+        let space = own.flatMap { [CGColorSpaceModel.rgb, .monochrome, .cmyk].contains($0.model) ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        let pixel = ImagePixels.make([UInt8](repeating: 0, count: space.numberOfComponents), 1, 1, components: space.numberOfComponents,
+                                     space: space, alpha: false)
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImageAndMetadata(destination, pixel, ImageEncoder.encoderMetadata(metadata, nil), nil)
