@@ -6,6 +6,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import XCTest
+import zlib
 @testable import FileToXEngineKit
 
 final class RasterFormatTests: XCTestCase {
@@ -332,6 +333,115 @@ extension RasterFormatTests {
                 XCTAssertEqual(ImagePixels.straight(decoded).samples, ImagePixels.straight(reference).samples)
                 if components == 3 { XCTAssertEqual(ImagePixels.straight(decoded).samples, samples) }
             }
+        }
+    }
+
+    private static let palette: [[UInt8]] = [[200, 30, 30], [30, 200, 30], [30, 30, 200], [240, 240, 240]]
+    private func paletteIndex(_ x: Int, _ y: Int) -> Int { (x + 2 * y) % 4 }
+
+    /// A palette PNG (colour type 3) with four colours, optionally an iCCP profile and tRNS alpha.
+    private func palettePng(width: Int, height: Int = 3, transparency: [UInt8]? = nil, profile: Data? = nil) throws -> Data {
+        func chunk(_ type: String, _ payload: Data) -> Data {
+            let bytes = Data(type.utf8) + payload
+            let crc = UInt32(bytes.withUnsafeBytes { crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) })
+            return withUnsafeBytes(of: UInt32(payload.count).bigEndian) { Data($0) } + bytes + withUnsafeBytes(of: crc.bigEndian) { Data($0) }
+        }
+        var raw = Data()
+        for y in 0..<height { raw.append(0); for x in 0..<width { raw.append(UInt8(paletteIndex(x, y))) } }
+        var header = withUnsafeBytes(of: UInt32(width).bigEndian) { Data($0) } + withUnsafeBytes(of: UInt32(height).bigEndian) { Data($0) }
+        header += [8, 3, 0, 0, 0]
+        var png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) + chunk("IHDR", header)
+        if let profile { png += chunk("iCCP", Data("icc".utf8) + [0, 0] + (try Deflate.deflate(profile, windowBits: 15))) }
+        png += chunk("PLTE", Data(Self.palette.joined()))
+        if let transparency { png += chunk("tRNS", Data(transparency)) }
+        return png + chunk("IDAT", try Deflate.deflate(raw, windowBits: 15)) + chunk("IEND", Data())
+    }
+
+    /// Straight RGBA rows top to bottom, read from the BMP bytes themselves (24-bit, or 32-bit with BGRA masks).
+    private func bmpRGBA(_ bmp: Data) throws -> (width: Int, height: Int, bitsPerPixel: Int, rgba: [UInt8]) {
+        XCTAssertTrue(bmp.starts(with: [0x42, 0x4D]))
+        let offset = Int(BinaryPrimitives.readUInt32LittleEndian(bmp, 10)), width = Int(BinaryPrimitives.readInt32LittleEndian(bmp, 18))
+        let height = Int(BinaryPrimitives.readInt32LittleEndian(bmp, 22)), bits = Int(BinaryPrimitives.readUInt16LittleEndian(bmp, 28))
+        let channels = bits / 8, stride = (width * bits + 31) / 32 * 4
+        if bits == 32 {
+            XCTAssertEqual((0..<4).map { BinaryPrimitives.readUInt32LittleEndian(bmp, 54 + 4 * $0) }, [0xFF0000, 0xFF00, 0xFF, 0xFF00_0000])
+        }
+        XCTAssertEqual(offset + stride * abs(height), bmp.count)
+        var rgba: [UInt8] = []
+        for y in 0..<abs(height) {
+            let row = offset + (height < 0 ? y : abs(height) - 1 - y) * stride
+            for x in 0..<width {
+                let p = row + x * channels
+                rgba += [bmp[p + 2], bmp[p + 1], bmp[p], channels == 4 ? bmp[p + 3] : 255]
+            }
+        }
+        return (width, abs(height), bits, rgba)
+    }
+
+    func testPalettePngsBecomeReadableBmpsWithTheirColoursAndAlpha() throws {
+        let adobe = try Data(contentsOf: URL(fileURLWithPath: "/System/Library/ColorSync/Profiles/AdobeRGB1998.icc"))
+        let alphas: [UInt8] = [255, 128, 0, 255]
+        for width in [1, 2, 3, 4, 5, 6, 7, 9, 41] {
+            for kind in ["opaque", "adobe", "transparent"] {
+                let source = FilePath.combine(dir, "\(kind)-\(width).png"), target = FilePath.combine(dir, "\(kind)-\(width).bmp")
+                try palettePng(width: width, transparency: kind == "transparent" ? alphas : nil, profile: kind == "adobe" ? adobe : nil)
+                    .write(to: URL(fileURLWithPath: source))
+                let frame = try ImageReader.read(source, format: "png", preset: Preset())[0]
+                // ImageIO keeps opaque palettes indexed and expands tRNS palettes to RGBA.
+                XCTAssertEqual(frame.image.colorSpace?.model == .indexed, kind != "transparent", "\(kind) \(width)")
+                try ImageEncoder.save([frame], to: target, format: "bmp")
+                let written = try Data(contentsOf: URL(fileURLWithPath: target))
+                guard ImageEncoder.isBmp(written) else { XCTFail("\(kind) \(width): no BMP header"); continue }
+                let bmp = try bmpRGBA(written)
+                XCTAssertEqual([bmp.width, bmp.height, bmp.bitsPerPixel], [width, 3, kind == "transparent" ? 32 : 24])
+                if bmp.bitsPerPixel == 24 {
+                    let stride = (width * 3 + 3) / 4 * 4
+                    for row in 0..<3 { XCTAssertTrue(written[54 + row * stride + width * 3..<54 + (row + 1) * stride].allSatisfy { $0 == 0 }) }
+                }
+                // Expected colours: the palette itself, or for Adobe RGB what ImageIO's BMP writer makes of the same colours
+                // as an Adobe RGB truecolour picture.
+                let indexes = (0..<3).flatMap { y in (0..<width).map { paletteIndex($0, y) } }
+                var expected = indexes.flatMap { Self.palette[$0] + [kind == "transparent" ? alphas[$0] : 255] }
+                if kind == "adobe" {
+                    let samples = indexes.flatMap { Self.palette[$0] }
+                    let truecolour = try XCTUnwrap(CGImage(width: width, height: 3, bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: width * 3,
+                                                           space: try XCTUnwrap(CGColorSpace(iccData: adobe as CFData)), bitmapInfo: CGBitmapInfo(rawValue: 0),
+                                                           provider: try XCTUnwrap(CGDataProvider(data: Data(samples) as CFData)), decode: nil,
+                                                           shouldInterpolate: false, intent: .defaultIntent))
+                    let data = NSMutableData()
+                    let destination = try XCTUnwrap(CGImageDestinationCreateWithData(data, "com.microsoft.bmp" as CFString, 1, nil))
+                    CGImageDestinationAddImage(destination, truecolour, nil)
+                    XCTAssertTrue(CGImageDestinationFinalize(destination))
+                    expected = try bmpRGBA(data as Data).rgba
+                    XCTAssertNotEqual(expected, indexes.flatMap { Self.palette[$0] + [255] }, "Adobe RGB colours are converted")
+                }
+                for i in 0..<indexes.count where expected[i * 4 + 3] > 0 {
+                    XCTAssertEqual(Array(bmp.rgba[i * 4..<i * 4 + 4]), Array(expected[i * 4..<i * 4 + 4]), "\(kind) \(width) pixel \(i)")
+                }
+                XCTAssertEqual(stride(from: 3, to: bmp.rgba.count, by: 4).map { bmp.rgba[$0] }, stride(from: 3, to: expected.count, by: 4).map { expected[$0] })
+            }
+        }
+    }
+
+    func testBmpWithoutAHeaderIsNeverAccepted() throws {
+        // What ImageIO writes for an indexed picture: bare BGR pixels, no header.
+        let indexed = try XCTUnwrap(CGColorSpace(indexedBaseSpace: CGColorSpace(name: CGColorSpace.sRGB)!, last: 3, colorTable: Self.palette.joined().map { $0 }))
+        let picture = try XCTUnwrap(CGImage(width: 6, height: 3, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: 6, space: indexed,
+                                            bitmapInfo: CGBitmapInfo(rawValue: 0), provider: try XCTUnwrap(CGDataProvider(data: Data((0..<18).map { UInt8($0 % 4) }) as CFData)),
+                                            decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        let data = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(data, "com.microsoft.bmp" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, picture, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination), "ImageIO reports success")
+        XCTAssertFalse(ImageEncoder.isBmp(data as Data))
+        let valid = poisonedBmp(width: 5, height: 3)
+        XCTAssertTrue(ImageEncoder.isBmp(valid))
+        var wrongLength = valid, pixelsMissing = valid, insideHeader = valid
+        BinaryPrimitives.writeUInt32LittleEndian(&wrongLength, 2, UInt32(valid.count + 1))
+        BinaryPrimitives.writeUInt32LittleEndian(&pixelsMissing, 10, UInt32(valid.count))
+        BinaryPrimitives.writeUInt32LittleEndian(&insideHeader, 10, 25)
+        for bmp in [wrongLength, pixelsMissing, insideHeader, Data(valid.prefix(25)), Data("BA".utf8) + valid.dropFirst(2)] {
+            XCTAssertFalse(ImageEncoder.isBmp(bmp))
         }
     }
 }

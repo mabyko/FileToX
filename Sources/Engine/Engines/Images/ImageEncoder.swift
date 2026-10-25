@@ -235,8 +235,10 @@ enum ImageEncoder {
     static func save(_ frames: [ImageFrame], to path: String, format: String) throws {
         var frames = frames
         if !["jpg", "tiff", "ico"].contains(format) {
-            for i in frames.indices where frames[i].image.colorSpace?.model == .cmyk {
-                // RGB-only writers must not attach a CMYK ICC profile to converted RGB samples.
+            for i in frames.indices where frames[i].image.colorSpace?.model == .cmyk || (format == "bmp" && frames[i].image.colorSpace?.model == .indexed) {
+                // RGB-only writers must not attach a CMYK ICC profile to converted RGB samples. ImageIO writes an indexed
+                // picture to BMP as bare pixels without a header; drawn as sRGB, its colours match the BMP writer's own
+                // conversion of RGB in the palette's colour space.
                 frames[i].image = ImagePixels.image(ImagePixels.bitmap(frames[i].image))
             }
         }
@@ -314,8 +316,18 @@ enum ImageEncoder {
             encoded = try Jpeg2000Encoder.replacingCodestream(in: encoded, image: frame.image, quality: quality)
         }
         if format == "png", let frame = frames.first { encoded = try preservingJpegMetadata(encoded, frame) }
-        if format == "bmp" { encoded = zeroingBmpPadding(encoded) }
+        if format == "bmp" {
+            // ImageIO reports success for pictures it can't write as BMP; never hand on a file without a BMP header.
+            guard isBmp(encoded) else { throw ConversionError("Could not write \(FilePath.fileName(path)) as BMP.") }
+            encoded = zeroingBmpPadding(encoded)
+        }
         try FileManager.default.writeFile(path, encoded)
+    }
+
+    /// A BMP header at all: the signature, the file's own length and pixel data after the smallest header.
+    static func isBmp(_ data: Data) -> Bool {
+        data.count >= 26 && data.starts(with: [0x42, 0x4D]) && Int(BinaryPrimitives.readUInt32LittleEndian(data, 2)) == data.count
+            && (26..<data.count).contains(Int(BinaryPrimitives.readUInt32LittleEndian(data, 10)))
     }
 
     /// ImageIO leaves the row padding of an uncompressed 24-bit BMP uninitialized (stray memory, different every run).
