@@ -759,6 +759,32 @@ extension VectorTests {
                        try verticalPaths("<text x='95' y='15' writing-mode='tb'>B</text>"))
     }
 
+    func testEmptyFractionalBaselineSpanDoesNotSplitKerning() throws {
+        for mode in ["tb", "horizontal-tb"] {
+            let prefix = "<text x='60' y='30' font-family='Helvetica' font-size='40' writing-mode='\(mode)' baseline-shift='0.1'>"
+            XCTAssertEqual(try verticalPaths(prefix + "AV</text>"),
+                           try verticalPaths(prefix + "A<tspan baseline-shift='0.2'/>V</text>"))
+        }
+    }
+
+    func testVerticalLtrBaseDirectionDoesNotFollowTheFirstStrongCharacter() throws {
+        for direction in ["", " direction='ltr'"] {
+            let prefix = "<text x='60' y='30' font-family='Helvetica' font-size='30' writing-mode='tb'\(direction)>"
+            XCTAssertEqual(try verticalPaths(prefix + "אב ABC</text>"),
+                           try verticalPaths(prefix + "&#x200E;אב ABC</text>"))
+        }
+    }
+
+    func testVerticalBidiControlsAcrossPaintRunsStayWithTheRenderer() throws {
+        for (open, close) in [("&#x202E;", "&#x202C;"), ("&#x2067;", "&#x2069;")] {
+            let body = "<text x='60' y='30' writing-mode='tb'>\(open)AB<tspan fill='red'>CD</tspan>EF\(close)</text>"
+            let root = try XDocument.load(data: SvgNormalizer.normalize(verticalSource(body), baseDirectory: dir)).root
+            XCTAssertEqual(root.descendants().filter { $0.name.localName == "text" }.count, 1)
+            XCTAssertTrue(root.descendants().filter { $0.name.localName == "path" }.isEmpty)
+        }
+        XCTAssertFalse(try verticalPaths("<text x='60' y='30' writing-mode='tb' text-orientation='upright'>&#x202E;AB<tspan fill='red'>CD</tspan>EF&#x202C;</text>").isEmpty)
+    }
+
     func testUprightVerticalCursiveTextUsesIsolatedGraphemes() throws {
         let letters = "سلام"
         let source = "<text x='60' y='15' writing-mode='tb' text-orientation='upright'>\(letters)</text>"

@@ -470,7 +470,7 @@ enum SvgNormalizer {
                 chunkRuns += 1
                 if run.style.verticalOrientation != "upright" {
                     bidirectional = bidirectional || run.style.values["direction"]?.lowercased() == "rtl"
-                        || SvgNormalizer.rightToLeftCharacters.firstMatch(in: run.text, range: NSRange(location: 0, length: (run.text as NSString).length)) != nil
+                        || SvgNormalizer.bidirectionalCharacters.firstMatch(in: run.text, range: NSRange(location: 0, length: (run.text as NSString).length)) != nil
                 }
                 if chunkRuns > 1 && bidirectional { return nil }
             }
@@ -500,7 +500,9 @@ enum SvgNormalizer {
             case let value?: shift = SvgNormalizer.length(value, fontSize: size, percentOf: size) ?? 0
             case nil: break
             }
+            let inheritedShift = baselineShift
             baselineShift += shift
+            defer { baselineShift = inheritedShift }
             for child in node.nodes {
                 switch child {
                 case .element(let element) where ["tspan", "a", "textPath"].contains(element.name.localName):
@@ -511,7 +513,6 @@ enum SvgNormalizer {
                     break
                 }
             }
-            baselineShift -= shift
         }
 
         /// Adds characters with SVG's white-space handling; characters with their own x/y/dx/dy start runs of their own.
@@ -644,7 +645,7 @@ enum SvgNormalizer {
     }
 
     private static let uprightCharacters = try! NSRegularExpression(pattern: "^[\\p{vo=U}\\p{vo=Tu}\\p{vo=Tr}]")
-    private static let rightToLeftCharacters = try! NSRegularExpression(pattern: "[\\p{bc=R}\\p{bc=AL}]")
+    private static let bidirectionalCharacters = try! NSRegularExpression(pattern: "[\\p{bc=R}\\p{bc=AL}\\p{Bidi_Control}]")
 
     private static func line(_ text: String, _ font: CTFont, _ style: TextStyle, vertical: Bool) -> CTLine {
         var attributes: [NSAttributedString.Key: Any] = [.init(kCTFontAttributeName as String): font]
@@ -654,8 +655,13 @@ enum SvgNormalizer {
         }
         guard vertical else { return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes)) }
         let attributed = NSMutableAttributedString(string: text, attributes: attributes)
-        if style.verticalOrientation != "upright" && style.values["direction"]?.lowercased() == "rtl" {
-            attributed.addAttribute(.init(kCTWritingDirectionAttributeName as String), value: [NSWritingDirection.rightToLeft.rawValue], range: NSRange(location: 0, length: (text as NSString).length))
+        if style.verticalOrientation != "upright" {
+            var direction: CTWritingDirection = style.values["direction"]?.lowercased() == "rtl" ? .rightToLeft : .leftToRight
+            let paragraph = withUnsafePointer(to: &direction) { value in
+                var setting = CTParagraphStyleSetting(spec: .baseWritingDirection, valueSize: MemoryLayout<CTWritingDirection>.size, value: value)
+                return CTParagraphStyleCreate(&setting, 1)
+            }
+            attributed.addAttribute(.init(kCTParagraphStyleAttributeName as String), value: paragraph, range: NSRange(location: 0, length: (text as NSString).length))
         }
         let orientation = style.verticalOrientation
         if orientation == "upright" {
