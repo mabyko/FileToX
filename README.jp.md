@@ -69,7 +69,7 @@ swift build -c release --product FileToXEngine
 python3 Tools/fetch-optional-engines.py --help
 ```
 
-DebugのバンドルIDは`forked.filetox.local.dev`、Releaseは`forked.filetox.local`です。個人設定はGitの対象外となる`Config/Local.xcconfig`に保存します。Debug・Releaseの既定値はローカル用のad-hoc署名です。arm64 Releaseは既存チームの開発証明書による実際のXcodeビルド、deep/strict署名検証、およびリポジトリと.NET SDKへのアクセスを拒否した再配置実行22項目を通過しました。Developer ID署名・公証は未検証です。検証環境はM2 Max/macOS 27で、M1実機やmacOS 15での実行結果ではありません。範囲と残る差異は[最新の検証記録](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)に記載しています。
+DebugのバンドルIDは`forked.filetox.local.dev`、Releaseは`forked.filetox.local`です。個人設定はGitの対象外となる`Config/Local.xcconfig`に保存します。Debug・Releaseの既定値はローカル用のad-hoc署名です。arm64 Releaseは既存チームの開発証明書による実際のXcodeビルド、deep/strict署名検証、およびリポジトリと.NET SDKへのアクセスを拒否した再配置実行22項目を通過しました。Developer ID署名・公証は未検証です。検証環境はM2 Max/macOS 27で、M1実機やmacOS 15での実行結果ではありません。範囲と残る差異は[最新の検証記録](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)に記載しています。
 
 ## 検証
 
@@ -93,13 +93,13 @@ python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optiona
 
 **過去の比較記録：** 全849件の変換比較は578 PASS / 263 WARN / 8 FAILでした。その後、Calibre TCR圧縮による内容破損を回避し、RGB/グレースケールJPEGの読み込みにlibjpeg-turboを適用しました。全体比較の件数はこの変更前の結果です。当時のテスト・C/C++候補比較・残る制限は[後続検証記録](docs/design/engine-differential-triage.md#native-library-follow-up-2026-10-23)、ユーザーデータ・隔離・署名の検証は[統合記録](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)を参照してください。安全なTCR出力には、シンボリックリンクを解決した`ebook-convert`と同じ場所に`calibre-debug`がある完全なCalibre環境が必要です。別途Pythonをインストールする必要はありません。
 
-2026-10-25のarm64エンジンで**全849件**を実行しました。786件完了・基準と同じ63件失敗で、状態・エラーキー・出力数の変更はありません。WOFF2の5出力は変換を繰り返さず検査器を修正して再検査し、最終検査エラーは0件です。従来ポリシーでのC#比較は**580 PASS / 264 WARN / 5 FAIL**、TCR内容・PDF描画検査を強化した別ポリシーでは**585 / 255 / 9**です。基準の画像参照欠落4件やCalibreの自動表紙差異を免除していません。WARNは見た目やレイアウトの同等性を証明しません。コマンド、画像品質、署名、残る制限は[最新の検証記録](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)を参照してください。以前のIntelクロスビルドの証拠は現在のサポート・検証要件ではありません.
+2026-10-25のarm64エンジンで**全849件**を実行しました。786件完了・基準と同じ63件失敗で、状態・エラーキー・出力数の変更はありません。WOFF2の5出力は変換を繰り返さず検査器を修正して再検査し、最終検査エラーは0件です。従来ポリシーでのC#比較は**580 PASS / 264 WARN / 5 FAIL**、TCR内容・PDF描画検査を強化した別ポリシーでは**585 / 255 / 9**です。基準の画像参照欠落4件やCalibreの自動表紙差異を免除していません。WARNは見た目やレイアウトの同等性を証明しません。コマンド、画像品質、署名、残る制限は[以前のarm64検証記録](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)を参照してください。以前のIntelクロスビルドの証拠は現在のサポート・検証要件ではありません.
 
 **設定 → 監視フォルダ**で入力フォルダとプリセットを選び、ルールを有効にして保存します。**監視中**になってからファイルを追加してください。起動時に存在するファイルは変更せず、アプリの実行中に新規・変更ファイルを処理します。出力先の既定値は`converted`で、原本は保持します。選択すると、変換に成功し変更されていない原本を`originals`へ移動します。パッケージ内部と一時ダウンロードフォルダは除外します。3秒の安定待ちはヒューリスティックです。長い書き込み停止がある場合は、完成したファイルをatomic renameで渡してください。スキャンは10,000項目、ジョブは入力128件までです。
 
 すべての形式の組み合わせ・コーデックを検証したわけではありません。このマシンにはGhostscriptがなく、FFmpegにも一部のエンコーダーがありません。アプリ内でのエンジンダウンロードはまだ接続していません。ログイン項目と通知は実装済みですが、実際のログアウト・ログイン後の自動起動と通知配信は未検証です。外部exFAT・SMBボリューム、配布用公証、TCCの再起動時の動作も未検証です。上記の比較件数は以前のスナップショットの結果です。
 
-追加統合ソース`34bc0ae`で、SDKアクセスを遮断したXcode clean build・エンジン636件（57 skip）、別のclean環境のアプリ74件、開発証明書署名・再配置22件の検査に合格しました。Mach-O 5個はarm64のみで、.NET・Homebrewの動的依存はありません。新しい849件は786完了・既存63失敗、harness/inspectionエラー0です。C#比較のPASS/WARN/FAILは従来方針**581/263/5**、強化方針**586/254/9**で、厳密な失敗は免除していません。順次5回の最良値はPDF→TXT **0.630秒**（目標0.84秒達成）、Markdown→TXT **0.667秒**（目標0.60秒未達）です。再現コマンドと制限は[追加検証記録](docs/design/engine-differential-triage.md#integrated-watch-icc-and-native-cancellation-follow-up-2026-10-25)を参照してください。
+現在の検証ソース`5f9486a`は、SDKアクセスを遮断したXcode clean build・エンジン644件（57 skip）、別のclean環境のアプリ74件、開発証明書署名・再配置22件の検査に合格しました。Mach-O 5個はarm64のみで、.NET・Homebrewの動的依存はありません。CMYK JPEGの反転、PSD/PSBのCMYK・ICC保持、BMPの物理解像度を修正し、PSDの長さ超過は保存前にエラーにします。画像の厳密一致は**103→112/135件**（TGA検査だけを修正した別集計では113件）で、既存の一致が失われたケースはありません。新しい849件は**786完了・既存63失敗**、検査エラー0、V2でのC#比較は**586 PASS / 255 WARN / 8 FAIL**です。失敗は免除していません。PDF検査器V2のサンプリング修正と旧V1の数値は分けて記録しています。PDF・Markdownの速度は再測定せず、Markdown TXTの目標未達は残ります。[最新の修正・検証・制限](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)を参照してください。
 
 ## ソースと設計
 

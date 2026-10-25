@@ -56,7 +56,11 @@ Debug·Release의 기본 서명은 로컬 ad-hoc이며 hardened runtime을 켜�
 
 이전 [최종 통합 검증](engine-differential-triage.md#final-native-quality-integration-2026-10-24)에서는 기존 팀의 **개발 인증서로 실제 Xcode Release 빌드**, 내부 코드의 같은 Team ID, library-validation 예외 없는 helper, deep/strict 서명 검사와 재배치한 앱의 22개 검사를 확인했다. 이는 Developer ID 배포 서명·공증 검증이 아니다. 당시 x86_64 Release 교차 컴파일·링크는 통과했고 Intel 실행은 `Bad CPU type in executable`로 불가능했다. Rosetta를 설치하지 않았으며 이 과거 기록이 현재 Intel/Rosetta 검증 의무를 만들지는 않는다.
 
-실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [최신 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다. 배포 전에는 다음을 확인한다.
+실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [이전 arm64 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
+
+최신 소스 `5f9486a`에서도 SDK 접근 차단 clean build·엔진 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 Release와 재배치 22개 검사가 통과했다. 번들의 Mach-O 5개는 arm64이며 .NET 파일·Homebrew 동적 의존성이 없다. 앱의 파일 크기 합계는 69,561,342바이트다. [최신 검증 기록](engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)에 명령과 실행 파일 해시를 보존한다. Developer ID·공증·물리 M1/macOS 15 검증은 완료하지 않았다.
+
+배포 전에는 다음을 확인한다.
 
 1. macOS 15 이상 Apple Silicon에서 앱·helper·테스트 및 native linkage가 arm64인지 확인한다. universal vendor 원본의 보존과 앱 링크 아키텍처를 구분한다.
 2. Swift/Xcode 빌드·관련 테스트, 번들 rhwp·7-Zip과 이미지·PDF·문서 등 대표 변환, 진행·취소·원본 보존·충돌·다중 출력·부분 실패를 검증한다.

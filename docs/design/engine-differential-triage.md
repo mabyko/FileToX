@@ -1796,3 +1796,111 @@ Local evidence is in `build/resume/remaining-collab-20261025/`: `FINAL.md`, `fin
 `replay-validation/`, `image-validation/`, and `performance/`. These directories hold exact commands,
 environments, output hashes and failure IDs. Source review/finding-to-test records are retained in
 `REPORT/watch-integration-20261025/` and the isolated implementation worktrees.
+
+## CMYK, BMP and inspection corrections (2026-10-25)
+
+The validated source is `5f9486af1635a788854f9e7e82f4cd873769b08a`. This phase fixes concrete image defects;
+it does not implement managed engine downloads or claim that all remaining C# differences are regressions.
+The earlier records above are preserved. No C# reference host was rerun, no thresholds were relaxed, and no
+strict failure was waived. All execution was on an M2 Max with macOS 27.0.1, not physical M1/macOS 15 hardware.
+
+### Production fixes and review
+
+- Native JPEG decoding now inverts CMYK/YCCK samples even without an Adobe marker, matching ImageIO's decode
+  array and the retained ImageMagick decoder. The earlier classification of unmarked inversion as a reference
+  error was incorrect. Higher precision and unsupported native input retain ImageIO fallback.
+- PSD/PSB retain CMYK inks and their matching source ICC instead of converting them to RGB. A five-channel
+  CMYK-plus-alpha image can exceed PSD's 32-bit layer-section length even within its dimension limit. The writer
+  now rejects an oversized section with a PSB recommendation before publication; PSB retains 64-bit lengths.
+  Independent R2 review accepted the guard, boundary tests and eight byte-identical ordinary-output controls.
+  The guard runs after layer encoding; multi-GiB memory use and end-to-end rejection were not exercised.
+- BMP reading preserves validated Windows DIB pixels-per-meter values. The corpus's 3780 ppm is 96.012 DPI,
+  not ImageIO's rounded 96. BMP→PDF now matches C# at **71.991 × 47.994 pt**, with exact V2 raster pixels.
+  BMP→RST text and its **149 × 99** JPEG sidecar are byte-exact to C#, replacing the former 150 × 100 sidecar.
+  BMP→PNG/PSD/PSB and the BMP-based GIF control change density metadata while keeping pixels identical.
+
+The imported production commits are `5f5369f` (BMP), `f6c1837` (JPEG), `abcd45f` (PSD/PSB) and `5f9486a`
+(PSD length guard). `86cc0e5` adds both new test files to Xcode and corrects the affected decoder documentation.
+All commits are OpenPGP-signed with DCO. Independent reviews found no remaining actionable issue in their
+bounded scopes; they do not establish arbitrary-file correctness.
+
+### Inspector corrections are separate from production gains
+
+`ded3424` explicitly scales PDF rendering to 144 DPI, clips to each page's media box, and checks rotation-aware
+geometry. The former drawing transform only scaled down, leaving a 72-DPI page centered on a nominal 144-DPI
+canvas. Reports now record **pdfRasterVersion 2**. The focused harness passes **28 tests**, including painted
+area, off-page clipping and nonsquare rotation regressions; independent R2 review accepted the changes.
+
+Reinspecting the preserved previous engine with V2 changes its C# result from historical **586/254/9** to
+**586/255/8** (PASS/WARN/FAIL), without any conversion. Its old BMP PDF already meets V2 thresholds at
+57.736599 dB / 0.9999816924; the actual BMP fix raises this to exact pixels (99/1). Therefore the reduction
+of one aggregate FAIL is an inspection correction, not a production improvement. PSNR/SSIM/text thresholds
+remain unchanged. PDF annotations are still not rendered.
+
+The frozen supplemental Q8 inspector also misreads a 34-byte TGA image-ID comment as pixels. Literal-pixel
+regressions cover raw/RLE TGA and ID lengths 0/34/255. The actual 3567-byte TGA payload and canonical ImageIO
+pixels are identical to C#. A separately reported corrected score must not be counted as a changed output.
+
+### Integrated conversion results
+
+All **135 image matrix jobs**, four stripping jobs and two CMYKA controls completed. Another 22 bounded controls
+produce 21 successes and the expected 16,707,346-byte JPEG ICC capacity failure, with no output published.
+That is **163 jobs, 162 successes, one expected failure**. Legacy Q8 strict matches improve **103→112/135**;
+visible matches improve **105→112/135**. No exact match is lost. Exactly ten files change; the other 125 are
+byte-identical to the previous engine, and all 135 match the accepted worker. ICO retains **54/54 frames** and
+JP2 quality **12/12 cases**. The independent **19×13 ICC resize oracle is now available and matches exactly**,
+superseding the earlier evidence gap without modifying the old report.
+
+The separate corrected-TGA inspection gives **113/135 strict and visible matches**, leaving 22 actual
+disagreements. The original 23 legacy differences remain recorded: five C# ink-luma grayscale errors, two C#
+CMYK→JXL errors, ten ICC-managed cases, five codec differences and the TGA inspector defect. Correct source
+interpretation is retained instead of reproducing the reference's ink-channel errors. The corrected unmarked
+gray output is exact to rendered-light luma even though its C# PSNR drops from 10.2821 to 9.5725 dB.
+
+One fresh **849-case** replay completes **786 jobs with the same 63 failed conversions**, zero harness or
+inspection errors, no unexpected state/error-key/output-count/name changes and no staging leftovers.
+Comparison PASS is differential parity, not successful conversion:
+
+- Legacy vs C#: **581 PASS / 263 WARN / 5 FAIL**; vs immediate previous `e10e`: **760/88/1**.
+- V2 vs C#: **586/255/8**; vs `e10e`: **760/87/2**.
+- Preserved `e10e` vs C# under the same V2 policy: **586/255/8**, without rerunning the old host.
+
+All eight V2 C# FAILs remain explicit: four broken reference-image links, the existing two corrected TCR
+payloads, and generated-cover differences in SNB→PDF and TCR→TXTz. Both immediate-engine FAILs are those
+cover differences. SNB object analysis isolates the change to its generated JPEG cover; page 2, Form content
+and CTM are exact. Artwork is not normalized. All seven TCR outputs are byte-identical to `e10e`.
+BMP→RST changes WARN→PASS against C#; RB→ODT changes PASS→WARN due to another generated-cover variation.
+
+### Build, packaging and remaining limits
+
+- SDK-denied Swift: **644 engine tests, 14 skips, zero failures**, plus **13 Core tests**. The one process-tree
+  test requiring `/bin/ps` passes separately with an empty HOME and restricted PATH outside the extra profile.
+- SDK-denied arm64 Xcode clean build and **644 engine tests, 57 skips, zero failures**; **74 app tests** in
+  the separate clean environment; actual development-certificate Release and deep/strict signature verification.
+- All **five packaged Mach-O files are arm64**, with no .NET files or Homebrew dynamic dependencies.
+  The app has **69,561,342 file bytes** and passes **22 relocated checks** with repository and SDK access denied.
+  Development-certificate signing is not Developer ID signing or notarization.
+- SwiftPM comparison host SHA-256: `158a40ecc3367b20098242d51ed0ebaf49883b109ab04ff7b8ea1f3244c33ffc`.
+  Packaged helper SHA-256: `1591d5d34e45e02bf16eaec4b1f3ca5e9ec684c36b9b73a8934d2e1512ccb38d`.
+  All **13 runtime files and 971 captured sources** remain unchanged throughout verification. User data,
+  SDK/NuGet folders, installed reference apps, corpora and prior captures/reports are preserved.
+
+The retained AVIF metadata fixture remains **0.9674 dB below C# source-relative RGBA PSNR** with the current
+ImageIO encoder. GIF/JXL encoder differences and PSD/PSB IPTC resource forwarding remain unresolved; the latter
+is preexisting. Tagged lossy output still has codec loss even when the source ICC is applied correctly.
+General SVG vertical shaping/filters, arbitrary non-JPEG/PNG ICC provenance and unsupported binary semantics
+remain outside proven parity. This replay has 49 unsupported-binary warnings vs `e10e`, 51 vs C#; byte equality
+does not establish visual parity. The generic CoreGraphics warning remains unattributed with no observed output
+effect. No text-performance code changed or timing was rerun; the earlier Markdown TXT 0.667 s result still
+misses its 0.60 s target.
+
+Managed engine installation remains unimplemented. Optional FFmpeg/Ghostscript/Pandoc/LibreOffice/Calibre and
+bundled rhwp/7-Zip remain dependencies alongside Swift, macOS frameworks and the retained native libraries.
+Physical M1/macOS 15, a separate SDK-free OS, GUI/TCC/SMB/exFAT, real login/notification lifecycle and notarization
+remain unverified. No deployment, push or installed-app replacement occurred.
+
+Exact commands, environments, hashes, per-case results and remaining IDs are retained under
+`build/resume/quality-corrections-20261025/`: `FINAL.md`, `final-validation-summary.json`, `parent-validation.json`,
+Swift/Xcode result files, Release audit/relocation proof, `image-validation/` and `replay-validation/`.
+Pre-review builds were deliberately cancelled when the PSD length issue was found; their partial logs remain
+under `pre-review-builds/` and are not counted as completed checks. The complete reruns above use `5f9486a`.

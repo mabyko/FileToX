@@ -14,7 +14,9 @@ PDFium·Skia의 업스트림 버전·원본 해시·고지는 보존한다. 현�
 
 후속 변경으로 감시 폴더 실행·설정 UI를 연결하고, JPEG·PNG의 ICC 추적과 BMP 안전 처리를 보완했다. PDF의 단일 텍스트 상태 검증과 Markdown 조회 캐시 최적화도 통합했다. 임의 색 공간·폼 기본 색 공간 등 확인할 수 없는 PDF는 기존 PDFKit 속성 경로를 유지한다. SVG 상대 font shorthand 변경은 비교 품질이 낮아진 표본 때문에 통합하지 않았다. 후속 소스 `34bc0ae`의 SDK 접근 차단 clean build·테스트·개발 인증서 Release와 재배치 실행, 실제 849개·이미지 검증·순차 성능 측정을 완료했다. PDF TXT 최선 0.630초로 목표를 충족했고 Markdown TXT는 0.667초로 미달이다. 엄격 비교의 기존 실패는 그대로 남겼으며 [후속 검증 기록](engine-differential-triage.md#integrated-watch-icc-and-native-cancellation-follow-up-2026-10-25)에 결과·한계를 구분했다. 아래 `70fff7d` 수치는 앞선 단계의 기록이다. 현재 감시·취소·색상 처리 경계는 [아키텍처](../architecture.md)를 따른다. 앱 내 관리형 엔진 다운로드는 여전히 미구현이며, 전환 전 Mac host에도 설치 요청 API가 없었다.
 
-실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [최신 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
+최신 소스 `5f9486a`에서 표식 없는 CMYK JPEG 반전, PSD/PSB의 CMYK·ICC 보존과 32비트 길이 제한, BMP의 소수점 해상도를 수정했다. SDK 접근 차단 빌드·테스트·서명·재배치와 이미지 135건·전체 849건 재검증을 완료했다. 이미지 엄격 일치는 112/135건, 별도 TGA 검사 수정 수치는 113건이다. PDF 검사기 V2는 144 DPI·media-box 클리핑·회전 판정을 바로잡았으므로 과거 V1 결과와 분리한다. [최신 품질 수정 기록](engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)에 실제 개선과 남은 차이를 구분했다.
+
+실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [이전 arm64 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
 
 ## 과거 전환 계획과 단계별 결정 (2026-10-23)
 

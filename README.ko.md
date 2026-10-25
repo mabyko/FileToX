@@ -73,7 +73,7 @@ swift build -c release --product FileToXEngine
 python3 Tools/fetch-optional-engines.py --help
 ```
 
-개발 식별자는 `forked.filetox.local.dev`, Release는 `forked.filetox.local`이다. 개인 설정은 Git에서 제외하는 `Config/Local.xcconfig`에 둔다. Debug·Release의 기본 서명은 로컬 ad-hoc용이다. arm64 Release는 기존 팀 개발 인증서의 실제 Xcode 빌드·deep/strict 서명 검사와 저장소·.NET SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. Developer ID 서명·공증은 미검증이다. 검증 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행 결과는 아니다. 범위와 남은 차이는 [최신 검증 기록](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
+개발 식별자는 `forked.filetox.local.dev`, Release는 `forked.filetox.local`이다. 개인 설정은 Git에서 제외하는 `Config/Local.xcconfig`에 둔다. Debug·Release의 기본 서명은 로컬 ad-hoc용이다. arm64 Release는 기존 팀 개발 인증서의 실제 Xcode 빌드·deep/strict 서명 검사와 저장소·.NET SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. Developer ID 서명·공증은 미검증이다. 검증 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행 결과는 아니다. 범위와 남은 차이는 [최신 검증 기록](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)을 따른다.
 
 ## 검증
 
@@ -97,13 +97,13 @@ python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optiona
 
 **과거 비교 기록:** 전체 변환 849건은 578 PASS / 263 WARN / 8 FAIL이었다. 이후 Calibre TCR 압축 손상을 우회하고 RGB/회색조 JPEG 읽기에 libjpeg-turbo를 적용했다. 위 전체 비교 수치는 이 후속 변경 전 결과다. 당시 테스트·C/C++ 대안 비교·남은 한계는 [후속 검증 기록](docs/design/engine-differential-triage.md#native-library-follow-up-2026-10-23), 기존 사용자 데이터·격리·서명 검증은 [통합 기록](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)을 따른다. 안전한 TCR 쓰기는 심볼릭 링크를 해석한 `ebook-convert` 옆에 `calibre-debug`가 있는 완전한 Calibre 설치본이 필요하며, 별도 Python 설치는 필요 없다.
 
-2026-10-25 arm64 엔진으로 **849건 전체**를 실행했다. 786건 완료·기준선과 같은 63건 실패이며 작업 상태·오류 키·출력 수 변경은 없었다. WOFF2 5개 결과는 변환을 반복하지 않고 검사기만 수정해 재검사했으며 최종 검사 오류는 0건이다. 기존 정책의 C# 비교는 **580 PASS / 264 WARN / 5 FAIL**, TCR 내용·PDF 래스터 검사를 강화한 별도 정책은 **585 / 255 / 9**다. 기준선 그림 참조 누락 4건과 Calibre 자동 표지 차이 등을 면제하지 않았다. WARN은 시각적·레이아웃 동등성을 입증하지 않는다. 명령·이미지 품질·서명·남은 한계는 [최신 검증 기록](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다. 이전 Intel 교차 빌드 증거는 현재 지원·검증 의무를 뜻하지 않는다.
+2026-10-25 arm64 엔진으로 **849건 전체**를 실행했다. 786건 완료·기준선과 같은 63건 실패이며 작업 상태·오류 키·출력 수 변경은 없었다. WOFF2 5개 결과는 변환을 반복하지 않고 검사기만 수정해 재검사했으며 최종 검사 오류는 0건이다. 기존 정책의 C# 비교는 **580 PASS / 264 WARN / 5 FAIL**, TCR 내용·PDF 래스터 검사를 강화한 별도 정책은 **585 / 255 / 9**다. 기준선 그림 참조 누락 4건과 Calibre 자동 표지 차이 등을 면제하지 않았다. WARN은 시각적·레이아웃 동등성을 입증하지 않는다. 명령·이미지 품질·서명·남은 한계는 [이전 arm64 검증 기록](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다. 이전 Intel 교차 빌드 증거는 현재 지원·검증 의무를 뜻하지 않는다.
 
 **설정 → 자동 변환 폴더**에서 입력 폴더와 프리셋을 지정하고 규칙을 켠 뒤 저장한다. **감시 중** 상태가 된 뒤 파일을 넣는다. 시작할 때 이미 있던 파일은 그대로 두고, 앱이 실행 중일 때 새 파일과 변경된 파일을 처리한다. 기본 출력은 `converted`이며 원본은 유지한다. 선택하면 변환에 성공하고 변경되지 않은 원본을 `originals`로 이동한다. 패키지 내부와 임시 다운로드 폴더는 제외한다. 3초 안정화 대기는 휴리스틱이므로 쓰기 중 오래 멈출 수 있는 프로그램은 완료한 파일을 원자적 rename으로 전달해야 한다. 스캔은 10,000개 항목, 작업은 입력 128개로 제한한다.
 
 모든 형식 조합·코덱을 검사하지 않았다. Ghostscript는 이 머신에 없고, 현재 FFmpeg에는 일부 인코더가 없다. 앱 안에서 엔진 다운로드는 아직 연결하지 않았다. 실제 로그아웃·로그인 후 자동 실행과 알림 전달은 검증하지 않았다. 외장 exFAT·SMB, 배포 공증·TCC 재실행 검증도 남아 있다. 위 비교 수치는 이전 스냅샷의 결과다.
 
-후속 소스 `34bc0ae`에서 SDK 접근 차단 Xcode clean build·엔진 636개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 서명·재배치 22개 검사를 통과했다. Mach-O 5개는 모두 arm64이며 .NET·Homebrew 동적 의존성이 없다. 새 849건은 786완료·기존 63실패, harness/inspection 오류 0이다. C# 대비 PASS/WARN/FAIL은 기존 정책 **581/263/5**, 강화 정책 **586/254/9**이며 엄격 실패는 면제하지 않았다. 순차 5회 최선 PDF→TXT는 **0.630초**로 0.84초 목표를 충족했고, Markdown→TXT는 **0.667초**로 0.60초 목표 미달이다. 재현 명령·동등성 검사·남은 한계는 [후속 검증 기록](docs/design/engine-differential-triage.md#integrated-watch-icc-and-native-cancellation-follow-up-2026-10-25)에 있다.
+현재 검증 소스 `5f9486a`에서 SDK 접근 차단 Xcode clean build·엔진 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 서명·재배치 22개 검사를 통과했다. Mach-O 5개는 arm64이며 .NET·Homebrew 동적 의존성이 없다. CMYK JPEG 반전, PSD/PSB의 CMYK·ICC 보존, BMP 물리 해상도를 수정했고 PSD 길이 초과는 저장 전에 실패시킨다. 이미지 엄격 일치는 **103→112/135건**(TGA 검사 오류만 바로잡은 별도 수치는 113건)이며 기존 일치 결과의 회귀는 없다. 새 849건은 **786완료·기존 63실패**, 검사 오류 0이고 V2 C# 비교는 **586 PASS / 255 WARN / 8 FAIL**이다. 실패를 면제하지 않았으며 PDF 검사기 V2의 표본 추출이 달라 과거 V1 수치와 분리했다. 이전 PDF·Markdown 성능은 재측정하지 않았고 Markdown TXT 목표 미달은 남아 있다. [최신 수정·검증·남은 한계](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)에 근거를 기록했다.
 
 ## 소스와 설계
 

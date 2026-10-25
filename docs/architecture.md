@@ -63,9 +63,9 @@ JPEG·PNG 입력의 실제 ICC를 추적하고, 화소의 색 공간이 달라�
 
 이전 최종 통합 기록은 개발 인증서로 서명한 Release 빌드, SDK 접근을 막은 빌드·테스트와 재배치한 앱의 22개 검사를 통과했다. [기록](design/engine-differential-triage.md#final-native-quality-integration-2026-10-24)의 849건 비교는 581 PASS / 264 WARN / 4 FAIL이며 WARN은 시각적 동등성의 증거가 아니다. 과거 x86_64 교차 컴파일·링크 성공과 Intel/Rosetta 실행 불가는 당시 증거로만 보존한다.
 
-실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [최신 검증 기록](design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
+실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [이전 arm64 검증 기록](design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
 
-후속 소스 `34bc0ae`는 SDK 접근 차단 clean build·엔진 테스트 636개(57개 skip), 별도 clean 환경 앱 테스트 74개, 개발 인증서 Release·서명·재배치 22개 검사를 통과했다. 새 849건은 786완료·기존 63실패, 검사 오류 0이며 강화 C# 비교는 586 PASS / 254 WARN / 9 FAIL이다. 실패는 면제하지 않았다. 순차 최선 PDF TXT 0.630초는 목표를 충족하고 Markdown TXT 0.667초는 목표 미달이다. 실제 검증 범위와 남은 차이는 [후속 검증 기록](design/engine-differential-triage.md#integrated-watch-icc-and-native-cancellation-follow-up-2026-10-25)을 따른다.
+현재 검증 소스 `5f9486a`는 SDK 접근 차단 clean build·엔진 테스트 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 Release·서명·재배치 22개 검사를 통과했다. CMYK JPEG 반전·PSD/PSB의 CMYK/ICC·BMP 해상도와 검사기를 보완했다. 새 849건은 786완료·기존 63실패, 검사 오류 0이며 V2 C# 비교는 586 PASS / 255 WARN / 8 FAIL이다. 이전 V1 수치와 구분하며 실패는 면제하지 않았다. 이미지 엄격 일치는 103→112/135건이고 TGA 검사 오류만 수정한 별도 수치는 113건이다. 이전 순차 PDF TXT 0.630초·Markdown TXT 0.667초는 재측정하지 않았다. [최신 수정·검증·남은 한계](design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)를 따른다.
 
 ## 전환 전 .NET 설계·검증 기록 (2026-10-11)
 
