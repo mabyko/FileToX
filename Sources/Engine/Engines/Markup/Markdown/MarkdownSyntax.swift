@@ -171,6 +171,8 @@ extension Markdown {
 
     class ContainerBlock: Block {
         private(set) var children: [Block] = []
+        /// Counts changes of `children`, so the block processor can tell its last child is still the same.
+        private(set) var mutations = 0
 
         var count: Int { children.count }
         var lastChild: Block? { children.last }
@@ -180,12 +182,14 @@ extension Markdown {
                 children[index].parent = nil
                 newValue.parent = self
                 children[index] = newValue
+                mutations &+= 1
             }
         }
 
         func add(_ block: Block) {
             precondition(block.parent == nil, "Cannot add this block as it as already attached to another container")
             children.append(block)
+            mutations &+= 1
             block.parent = self
             updateSpanEnd(block.span.end)
         }
@@ -193,6 +197,7 @@ extension Markdown {
         func insert(_ block: Block, at index: Int) {
             precondition(block.parent == nil, "Cannot add this block as it as already attached to another container")
             children.insert(block, at: index)
+            mutations &+= 1
             block.parent = self
         }
 
@@ -209,11 +214,13 @@ extension Markdown {
         func removeAt(_ index: Int) {
             children[index].parent = nil
             children.remove(at: index)
+            mutations &+= 1
         }
 
         func clear() {
             for child in children { child.parent = nil }
             children.removeAll()
+            mutations &+= 1
         }
 
         func transferChildrenTo(_ destination: ContainerBlock) {
@@ -221,6 +228,7 @@ extension Markdown {
             let moving = children
             for child in moving { child.parent = nil }
             children.removeAll()
+            mutations &+= 1
             for child in moving { destination.add(child) }
         }
     }

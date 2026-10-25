@@ -22,7 +22,9 @@ extension Markdown {
 
     final class InlineParserList {
         let parsers: [InlineParser]
-        private var byCharacter: [Char: [InlineParser]] = [:]
+        private let candidates: [[InlineParser]]
+        /// Per character: 1 + the index of its parsers in `candidates`, 0 for none (a lookup at every inline).
+        private let candidateIndex: [UInt8]
         let globalParsers: [InlineParser]?
         let postInlineProcessors: [PostInlineProcessor]
         // 0: literal, 1: parser, 2: autolink only (ordinary words can stay in the literal scan).
@@ -30,6 +32,7 @@ extension Markdown {
 
         init(_ parsers: [InlineParser]) {
             self.parsers = parsers
+            var byCharacter: [Char: [InlineParser]] = [:]
             var global: [InlineParser] = []
             for (i, parser) in parsers.enumerated() {
                 parser.initialize()
@@ -47,9 +50,13 @@ extension Markdown {
                 openingCharacters[c.int] = global.isEmpty && candidates.count == 1 && candidates[0] is AutoLinkParser ? 2 : 1
             }
             self.openingCharacters = openingCharacters
+            (candidates, candidateIndex) = Markdown.characterTable(byCharacter)
         }
 
-        func parsersForOpeningCharacter(_ c: Char) -> [InlineParser]? { byCharacter[c] }
+        func parsersForOpeningCharacter(_ c: Char) -> [InlineParser]? {
+            let index = candidateIndex[c.int]
+            return index == 0 ? nil : candidates[Int(index) - 1]
+        }
 
         /// The first possible parser opening in `start...end`, or -1.
         func indexOfOpeningCharacter(_ text: [Char], _ start: Int, _ end: Int) -> Int {

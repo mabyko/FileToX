@@ -102,6 +102,41 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(Array(try Markdown.toPlainText(markdown, .advancedWithYaml).utf8), Array("café\ncafe\u{301}\nCAFE\ncafé CAFE\n".utf8))
     }
 
+    func testMediaLinksMatchExtensionsCaseInsensitivelyLikeFoundation() throws {
+        // ASCII in any case; "ſ" and "ﬂ" fold to "s" and "fl" in Foundation's case-insensitive comparison.
+        let markdown = "![a](clip.MP4) ![b](song.Mp3) ![c](movie.aſf) ![d](clip.ﬂv) ![e](picture.png) ![f](https://example.com/talk.WebM?x=1)"
+        let video = { (type: String, src: String) in "<video width=\"500\" height=\"281\" controls=\"\"><source type=\"\(type)\" src=\"\(src)\"></source></video>" }
+        let expected = video("video/mp4", "clip.MP4") + " <audio width=\"500\" controls=\"\"><source type=\"audio/mpeg\" src=\"song.Mp3\"></source></audio> "
+            + video("video/x-ms-asf", "movie.aſf") + " " + video("video/x-flv", "clip.ﬂv") + " <img src=\"picture.png\" alt=\"e\" /> "
+            + video("video/webm", "https://example.com/talk.WebM?x=1")
+        XCTAssertEqual(try Markdown.toHtml(markdown, .advancedWithYaml), "<p>" + expected + "</p>\n")
+    }
+
+    func testHeadingIdentifiersOfAsciiAndDecomposedText() throws {
+        let html = try Markdown.toHtml("# Hello, World 2!\n\n# Ärger über Café\n\n# hello world 2\n\n# 2026 Plan_v2.final\n", .advancedWithYaml)
+        XCTAssertEqual(html, "<h1 id=\"hello-world-2\">Hello, World 2!</h1>\n<h1 id=\"arger-uber-cafe\">Ärger über Café</h1>\n"
+            + "<h1 id=\"hello-world-2-1\">hello world 2</h1>\n<h1 id=\"plan_v2.final\">2026 Plan_v2.final</h1>\n")
+    }
+
+    func testParserListsFindEachOpeningCharactersParsersInPipelineOrder() {
+        func byCharacter(_ parsers: [AnyObject], _ characters: (AnyObject) -> [Markdown.Char]?) -> [Markdown.Char: [ObjectIdentifier]] {
+            var result: [Markdown.Char: [ObjectIdentifier]] = [:]
+            for parser in parsers { for c in characters(parser) ?? [] { result[c, default: []].append(ObjectIdentifier(parser)) } }
+            return result
+        }
+        var mismatches: [String] = []
+        for pipeline in [Markdown.Pipeline.commonMark, .advanced, .advancedWithYaml] {
+            let blocks = byCharacter(pipeline.blockParsers.parsers) { ($0 as! Markdown.BlockParser).openingCharacters }
+            let inlines = byCharacter(pipeline.inlineParsers.parsers) { ($0 as! Markdown.InlineParser).openingCharacters }
+            for value in 0...0xFFFF {
+                let c = Markdown.Char(UInt16(value))
+                if (pipeline.blockParsers.parsersForOpeningCharacter(c)?.map(ObjectIdentifier.init) ?? []) != (blocks[c] ?? []) { mismatches.append("block \(value)") }
+                if (pipeline.inlineParsers.parsersForOpeningCharacter(c)?.map(ObjectIdentifier.init) ?? []) != (inlines[c] ?? []) { mismatches.append("inline \(value)") }
+            }
+        }
+        XCTAssertEqual(mismatches, [])
+    }
+
     func testBlockParserContextRefreshesAfterFailedParserMutatesChildren() {
         final class ProbeParser: Markdown.BlockParser {
             let probe: (Markdown.BlockProcessor) -> Void

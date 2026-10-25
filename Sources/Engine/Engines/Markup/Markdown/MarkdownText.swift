@@ -65,8 +65,10 @@ extension Markdown {
 
         /// The Unicode general category like .NET's `CharUnicodeInfo.GetUnicodeCategory(char)`.
         var category: Unicode.GeneralCategory {
-            Unicode.Scalar(UInt32(value))?.properties.generalCategory ?? .surrogate
+            value < 0x80 ? Char.asciiCategories[Int(value)] : Unicode.Scalar(UInt32(value))?.properties.generalCategory ?? .surrogate
         }
+
+        private static let asciiCategories = (0..<0x80).map { Unicode.Scalar(UInt8($0)).properties.generalCategory }
 
         /// `char.IsLetterOrDigit`.
         var isLetterOrDigit: Bool {
@@ -107,6 +109,18 @@ extension Markdown {
     }
 
     // MARK: Conversions
+
+    /// The values of a character-keyed dictionary in a table indexed by the character: (values, 1 + value index or 0).
+    static func characterTable<Value>(_ dictionary: [Char: Value]) -> ([Value], [UInt8]) {
+        precondition(dictionary.count < 256, "A character table holds up to 255 entries")
+        var values: [Value] = []
+        var index = [UInt8](repeating: 0, count: 0x10000)
+        for (c, value) in dictionary {
+            values.append(value)
+            index[c.int] = UInt8(values.count)
+        }
+        return (values, index)
+    }
 
     static func chars(_ text: String) -> [Char] { text.utf16.map(Char.init) }
     static func chars(_ text: Substring) -> [Char] { text.utf16.map(Char.init) }

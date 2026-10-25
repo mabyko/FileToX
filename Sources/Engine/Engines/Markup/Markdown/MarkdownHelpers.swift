@@ -787,11 +787,13 @@ extension Markdown {
             var buffer: [Char] = []
             var hasLetter = keepOpeningDigits && !original.isEmpty && original[0].isLetterOrDigit
             var previousIsSpace = false
-            let text = allowOnlyAscii ? Markdown.chars(headingText.decomposedStringWithCanonicalMapping) : original
+            // ASCII has no canonical decompositions (nor letters to spell out below).
+            let decompose = allowOnlyAscii && !headingText.utf8.allSatisfy { $0 < 0x80 }
+            let text = decompose ? Markdown.chars(headingText.decomposedStringWithCanonicalMapping) : original
             for var c in text {
                 if allowOnlyAscii && c.category == .nonspacingMark { continue }
                 var normalized: [Char] = []
-                if allowOnlyAscii, let special = scandinavianOrGerman[c] {
+                if allowOnlyAscii, c.value >= 0x80, let special = scandinavianOrGerman[c] {
                     normalized = Markdown.chars(special)
                 } else if allowOnlyAscii, let ascii = Markdown.convertToAscii(c) {
                     normalized = Markdown.chars(ascii)

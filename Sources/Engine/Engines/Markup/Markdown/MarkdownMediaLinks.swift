@@ -28,6 +28,7 @@ extension Markdown {
             (".ram", "audio/x-pn-realaudio"), (".rmp", "audio/x-pn-realaudio-plugin"), (".au", "audio/basic"),
             (".wav", "audio/x-wav"),
         ]
+        private static let mimeTypes = Dictionary(extensionToMimeType, uniquingKeysWith: { first, _ in first })
 
         /// Known hosts in Markdig's order: host prefix, iframe URL from the URI, full screen allowed, class.
         private static let hosts: [(String, (WebUri) -> String?, Bool, String)] = [
@@ -62,8 +63,11 @@ extension Markdown {
 
         private static func tryGuessAudioVideoFile(_ uri: WebUri, _ renderer: HtmlRenderer, _ link: LinkInline) -> Bool {
             let path = uri.isAbsolute ? uri.unescapedPath : uri.original
-            guard let dot = path.lastIndex(of: "."),
-                  let mimeType = extensionToMimeType.first(where: { $0.0.caseInsensitiveCompare(String(path[dot...])) == .orderedSame })?.1 else { return false }
+            guard let dot = path.lastIndex(of: ".") else { return false }
+            let suffix = String(path[dot...])
+            // ASCII compares case-insensitively as lowercase; other text keeps Foundation's comparison (its case folding).
+            guard let mimeType = suffix.utf8.allSatisfy({ $0 < 0x80 }) ? mimeTypes[suffix.lowercased()]
+                    : extensionToMimeType.first(where: { $0.0.caseInsensitiveCompare(suffix) == .orderedSame })?.1 else { return false }
             let attributes = attributes(of: link)
             let isAudio = mimeType.hasPrefix("audio")
             let tag = isAudio ? "audio" : "video"

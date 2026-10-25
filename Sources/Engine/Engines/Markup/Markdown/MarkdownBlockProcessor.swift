@@ -34,11 +34,14 @@ extension Markdown {
     /// Block parsers by opening character, in pipeline order (`BlockParserList`).
     final class BlockParserList {
         let parsers: [BlockParser]
-        private var byCharacter: [Char: [BlockParser]] = [:]
+        private let candidates: [[BlockParser]]
+        /// Per character: 1 + the index of its parsers in `candidates`, 0 for none (a lookup on every line).
+        private let candidateIndex: [UInt8]
         let globalParsers: [BlockParser]?
 
         init(_ parsers: [BlockParser]) {
             self.parsers = parsers
+            var byCharacter: [Char: [BlockParser]] = [:]
             var global: [BlockParser] = []
             for parser in parsers {
                 parser.initialize()
@@ -49,9 +52,13 @@ extension Markdown {
                 }
             }
             globalParsers = global.isEmpty ? nil : global
+            (candidates, candidateIndex) = Markdown.characterTable(byCharacter)
         }
 
-        func parsersForOpeningCharacter(_ c: Char) -> [BlockParser]? { byCharacter[c] }
+        func parsersForOpeningCharacter(_ c: Char) -> [BlockParser]? {
+            let index = candidateIndex[c.int]
+            return index == 0 ? nil : candidates[Int(index) - 1]
+        }
     }
 
     /// The state of block parsing: the current line, column and the stack of open blocks (`BlockProcessor`).
@@ -65,6 +72,10 @@ extension Markdown {
         private(set) var currentBlock: Block?
         private(set) var lastBlock: Block?
         private var openedBlocks: [Block] = []
+        /// Counts changes of `openedBlocks`; with the container's `mutations` it tells when the current blocks are known.
+        private var openedChanges = 0
+        private var updatedChanges = -1
+        private var updatedMutations = -1
         private var currentStackIndex = 0
         private var originalLineStart = 0
         private var continueProcessingLine = false
@@ -211,6 +222,7 @@ extension Markdown {
         func open(_ block: Block) {
             precondition(block.isOpen, "The block must be opened")
             openedBlocks.append(block)
+            openedChanges &+= 1
         }
 
         /// Closes `block` and every block opened after it.
@@ -234,6 +246,7 @@ extension Markdown {
                 if openedBlocks[i] === block {
                     block.parent?.remove(block)
                     openedBlocks.remove(at: i)
+                    openedChanges &+= 1
                     return true
                 }
                 i -= 1
@@ -275,6 +288,7 @@ extension Markdown {
                 }
             }
             openedBlocks.remove(at: index)
+            openedChanges &+= 1
         }
 
         func closeAll(_ force: Bool) {
@@ -293,8 +307,10 @@ extension Markdown {
         }
 
         private func updateLastBlockAndContainer(_ stackIndex: Int = -1) {
+            currentStackIndex = stackIndex < 0 ? openedBlocks.count - 1 : stackIndex
+            // Same open blocks and the same children of the container found for them: the same three blocks.
+            if openedChanges == updatedChanges, let container = currentContainer, container.mutations == updatedMutations { return }
             let blocks = openedBlocks
-            currentStackIndex = stackIndex < 0 ? blocks.count - 1 : stackIndex
             let current = blocks.last
             for block in blocks.reversed() {
                 if let container = block as? ContainerBlock {
@@ -302,11 +318,13 @@ extension Markdown {
                     let last = container.lastChild
                     if lastBlock !== last { lastBlock = last }
                     if currentBlock !== current { currentBlock = current }
+                    (updatedChanges, updatedMutations) = (openedChanges, container.mutations)
                     return
                 }
             }
             currentBlock = current
             lastBlock = nil
+            updatedChanges = -1
         }
 
         private func tryContinueBlocks() {
@@ -422,6 +440,7 @@ extension Markdown {
                 }
                 block.isOpen = result.isContinue
                 openedBlocks.append(block)
+                openedChanges &+= 1
                 if block is LeafBlock {
                     continueProcessingLine = false
                     return
