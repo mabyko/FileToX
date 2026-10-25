@@ -6,6 +6,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
+    ARCHS: arm64
     MARKETING_VERSION: 0.0.1
     CURRENT_PROJECT_VERSION: 2
     DEVELOPMENT_LANGUAGE: en
@@ -34,7 +35,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID)
         PRODUCT_NAME: $(APP_DISPLAY_NAME)
         PRODUCT_MODULE_NAME: FileToX
-        ARCHS: $(NATIVE_ARCH_ACTUAL)
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
         ENABLE_APP_SANDBOX: NO
@@ -88,7 +88,6 @@ targets:
         PRODUCT_NAME: FileToXEngine
         PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).enginehost
         SWIFT_VERSION: "5.0"
-        ARCHS: $(NATIVE_ARCH_ACTUAL)
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
         ENABLE_APP_SANDBOX: NO
@@ -145,7 +144,6 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_IDENTITY: "-"
         SWIFT_VERSION: "5.0"
-        ARCHS: $(NATIVE_ARCH_ACTUAL)
   FileToXTests:
     type: bundle.unit-test
     platform: macOS

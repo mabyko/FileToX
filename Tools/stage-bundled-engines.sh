@@ -5,10 +5,9 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-case "${ARCHS:-$(uname -m)}" in
+case "${ARCHS:-arm64}" in
     arm64) rid=osx-arm64 ;;
-    x86_64) rid=osx-x64 ;;
-    *) echo "Build one architecture at a time (ARCHS=arm64 or ARCHS=x86_64)." >&2; exit 1 ;;
+    *) echo "FileToX supports Apple Silicon M1 and newer only (ARCHS=arm64)." >&2; exit 1 ;;
 esac
 : "${TARGET_BUILD_DIR:?run from Xcode}" "${EXECUTABLE_FOLDER_PATH:?run from Xcode}"
 
