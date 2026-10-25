@@ -87,7 +87,7 @@ enum PsdCodec {
         let unit = large ? 4 : 2
         while layerInfo.data.count % unit != 0 { layerInfo.bytes([0]) }
 
-        let sectionLength = (large ? 8 : 4) + layerInfo.data.count + 4
+        let sectionLength = try layerSectionLength(layerInfo.data.count, large: large)
         large ? out.u64(sectionLength) : out.u32(sectionLength)
         large ? out.u64(layerInfo.data.count) : out.u32(layerInfo.data.count)
         out.bytes(layerInfo.data)
@@ -97,6 +97,16 @@ enum PsdCodec {
         // Adding a white matte here changes the displayed pixels (also in ImageIO/Quick Look).
         out.bytes(rle(planes, width: width, height: height, large: large, withCompression: true))
         try FileManager.default.writeFile(path, Data(out.data))
+    }
+
+    /// Length of the layer and mask information section around `layerInfo` bytes. PSD stores it, and every length inside
+    /// it, in 32 bits; a longer section would be cut short, so only PSB's 64-bit lengths may hold it.
+    static func layerSectionLength(_ layerInfo: Int, large: Bool) throws -> Int {
+        let length = (large ? 8 : 4) + layerInfo + 4
+        guard large || length <= Int(UInt32.max) else {
+            throw ConversionError("The picture's layer data is \(length) bytes; PSD files hold at most \(UInt32.max). Convert to PSB instead.")
+        }
+        return length
     }
 
     private static func resolutionInfo(_ dpi: (x: Double, y: Double)) -> [UInt8] {

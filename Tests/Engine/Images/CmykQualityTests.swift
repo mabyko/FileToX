@@ -71,6 +71,48 @@ final class CmykQualityTests: XCTestCase {
         }
     }
 
+    func testPsdLayerSectionPast32BitsNeedsPsb() throws {
+        let maximum = Int(UInt32.max)
+        // The section adds its own length (PSD 4, PSB 8 bytes) and the 4-byte global mask length to the layer info.
+        XCTAssertEqual(try PsdCodec.layerSectionLength(maximum - 8, large: false), maximum)
+        XCTAssertThrowsError(try PsdCodec.layerSectionLength(maximum - 7, large: false)) { error in
+            XCTAssertEqual((error as? ConversionError)?.message.hasSuffix("Convert to PSB instead."), true)
+        }
+        XCTAssertEqual(try PsdCodec.layerSectionLength(maximum - 7, large: true), maximum + 5)
+        // CMYKA at PSD's 30000 × 30000 limit, incompressible: five RLE channels make 4,535,550,088 bytes of layer info.
+        XCTAssertThrowsError(try PsdCodec.layerSectionLength(4_535_550_088, large: false))
+        XCTAssertEqual(try PsdCodec.layerSectionLength(4_535_550_088, large: true), 4_535_550_100)
+    }
+
+    func testCmykaPsdAndPsbRoundTripThroughTheirSectionLengths() throws {
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        // Opaque paper and black, half-transparent cyan, a quarter-opaque mix: straight CMYK + alpha.
+        let samples: [UInt8] = [0, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0, 0, 0, 128, 30, 80, 120, 90, 64]
+        let frame = ImageFrame(image: ImagePixels.make(samples, 4, 1, components: 5, space: CGColorSpaceCreateDeviceCMYK(), alpha: true, premultiplied: false))
+        for format in ["psd", "psb"] {
+            let large = format == "psb", path = FilePath.combine(folder, "cmyka.\(format)")
+            try ImageEncoder.save([frame], to: path, format: format)
+            let data = [UInt8](try Data(contentsOf: URL(fileURLWithPath: path)))
+            func number(_ at: Int, _ size: Int) -> Int { data[at..<at + size].reduce(0) { $0 << 8 | Int($1) } }
+            XCTAssertEqual(number(12, 2), 5, "CMYK and alpha channels")
+            XCTAssertEqual(number(24, 2), 4, "CMYK colour mode")
+            // Colour mode data and resources, then the layer section: its stored lengths lead exactly to the composite.
+            var offset = 26
+            offset += 4 + number(offset, 4)
+            offset += 4 + number(offset, 4)
+            let size = large ? 8 : 4, section = number(offset, size)
+            XCTAssertEqual(section, try PsdCodec.layerSectionLength(number(offset + size, size), large: large))
+            offset += size + section
+            XCTAssertEqual(number(offset, 2), 1, "RLE composite")
+            let counts = large ? 4 : 2, packed = (0..<5).reduce(0) { $0 + number(offset + 2 + $1 * counts, counts) }
+            XCTAssertEqual(offset + 2 + 5 * counts + packed, data.count)
+            let decoded = try read(Data(data), format: format)
+            XCTAssertEqual(decoded.image.colorSpace?.model, .cmyk)
+            XCTAssertEqual(ImagePixels.straight(decoded.image).samples, samples)
+        }
+    }
+
     /// ImageIO-written 32×8 CMYK JPEG (quality 1.0) without its APP0, APP1, APP13 and Adobe APP14 markers: 8×8 blocks
     /// of no ink, K, C and C30 M80 Y120 K90, stored as 255 − ink.
     private static let unmarkedBlocks = "/9j/wAAUCAAIACAEAREAAhEBAxEBBBEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9sAQwABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB/9sAQwEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB/90ABAAE/9oADgQBAAIRAxEEEQA/AP7+K/7+D/v4P+/gKAP/AABz/AHoA/8Af4P9wiv+X8/4Pz/kvP/Z"
