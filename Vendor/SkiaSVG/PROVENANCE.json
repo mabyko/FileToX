@@ -3,8 +3,7 @@
   "rustSkia": "0.153.3",
   "releaseKey": "b7f043e0b1e2a850e702",
   "archives": {
-    "aarch64": "fd6e2fb21947724e91a0d41880b9560bfa92907656c73e85e190ae91b75af5d7",
-    "x86_64": "b5fdd83c442d0cf038ba4c91fc948f97885fab43bd52915a2cb6b8c8c7a204fb"
+    "aarch64": "fd6e2fb21947724e91a0d41880b9560bfa92907656c73e85e190ae91b75af5d7"
   },
   "compiler": "Apple clang 21.0.0 clang-2100.3.34.2",
   "flags": [
@@ -134,14 +133,22 @@
   },
   "output": {
     "file": "lib/libFileToXSvg.a",
-    "sha256": "99be2f3b5291a8944c4fd8d2c64cde544c2ad3f53db558c1287887b8b7111875",
-    "bytes": 37790536,
+    "sha256": "3f5579445b952c6915fbacd367661bcbaad405cc817b8da77410ddf21d03d4d8",
+    "bytes": 17849304,
     "architectures": [
-      "arm64",
-      "x86_64"
+      "arm64"
     ],
     "exports": [
       "_ftx_svg_render"
-    ]
+    ],
+    "derivation": {
+      "operation": "lipo -thin arm64",
+      "sourceSha256": "99be2f3b5291a8944c4fd8d2c64cde544c2ad3f53db558c1287887b8b7111875",
+      "sourceBytes": 37790536,
+      "sourceArchitectures": [
+        "arm64",
+        "x86_64"
+      ]
+    }
   }
 }
