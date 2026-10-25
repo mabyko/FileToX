@@ -62,6 +62,7 @@ enum ImageReader {
         if format == "png" {
             profiles = ImageEncoder.pngProfiles(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)).map { ($0.profiles, $0.declared) }
         }
+        let bitmapDpi = format == "bmp" ? bmpDpi(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)) : nil
         let animation = (fileProperties[kCGImagePropertyGIFDictionary] ?? fileProperties[kCGImagePropertyWebPDictionary]) as? [CFString: Any]
         let loops = (animation?[kCGImagePropertyGIFLoopCount] ?? animation?[kCGImagePropertyWebPLoopCount]) as? NSNumber
 
@@ -82,7 +83,11 @@ enum ImageReader {
                 throw ConversionError("Could not decode \(FilePath.fileName(path)).")
             }
             if let jpeg { image = try decodeJpeg(jpeg, fallback: image) }
-            let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
+            var properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
+            if let bitmapDpi {
+                properties[kCGImagePropertyDPIWidth] = bitmapDpi.x
+                properties[kCGImagePropertyDPIHeight] = bitmapDpi.y
+            }
             var frame = ImageFrame(image: image, delay: delay(properties), dpi: storedDpi(properties, format: format))
             if let profiles, let icc = CodecPixels.sourceProfile(profiles.profiles, decoded: image.colorSpace, declared: profiles.declared) {
                 frame.properties[ImageFrame.iccKey] = icc
@@ -273,6 +278,17 @@ enum ImageReader {
             if let seconds = (unclamped ?? clamped) as? NSNumber { return seconds.doubleValue }
         }
         return nil
+    }
+
+    // ImageIO snaps BMP density near 72/96 DPI; recover it only from known Windows DIB layouts.
+    static func bmpDpi(_ data: Data) -> (x: Double, y: Double)? {
+        guard data.count >= 54, ImageEncoder.isBmp(data) else { return nil }
+        let header = Int(BinaryPrimitives.readUInt32LittleEndian(data, 14))
+        guard [40, 52, 56, 108, 124].contains(header),
+              Int(BinaryPrimitives.readUInt32LittleEndian(data, 10)) >= 14 + header else { return nil }
+        let x = BinaryPrimitives.readInt32LittleEndian(data, 38), y = BinaryPrimitives.readInt32LittleEndian(data, 42)
+        guard x > 0, y > 0 else { return nil }
+        return (Double(x) * 0.0254, Double(y) * 0.0254)
     }
 
     /// The resolution ImageMagick reads from the file, in pixels per inch; nil when it has none (or no unit).

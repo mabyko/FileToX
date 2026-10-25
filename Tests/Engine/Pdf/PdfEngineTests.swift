@@ -106,6 +106,18 @@ final class PdfEngineTests: XCTestCase {
         XCTAssertGreaterThan(GraphicsTestKit.pixel(result.frames[0], 5, 5).r, 250, "transparent picture areas render on white")
     }
 
+    func testBmpPdfUsesPhysicalHeaderDensity() async throws {
+        let input = FilePath.combine(dir, "density.bmp")
+        for ppm in [3780, 2835, 3000, 11811, 0, -1] {
+            try BmpResolutionFixture.data(x: Int32(ppm), y: Int32(ppm), topDown: true).write(to: URL(fileURLWithPath: input))
+            let output = try await GraphicsTestKit.convert(pages, input, to: "pdf")[0]
+            let box = try mediaBox(output)
+            let dpi = ppm > 0 ? Double(ppm) * 0.0254 : 96
+            XCTAssertEqual(box.width, 96 / dpi * 72, accuracy: 0.00001, "\(ppm) pixels per metre")
+            XCTAssertEqual(box.height, 64 / dpi * 72, accuracy: 0.00001, "\(ppm) pixels per metre")
+        }
+    }
+
     func testRotatedPagesRenderTurned() async throws {
         let pdf = try await GraphicsTestKit.convert(pages, GraphicsTestKit.makeImage(dir, "a.png"), to: "pdf")[0]
         let document = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: pdf)))
