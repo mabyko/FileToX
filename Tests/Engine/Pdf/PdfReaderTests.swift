@@ -7,6 +7,7 @@
 import CoreGraphics
 import CoreText
 import Foundation
+import PDFKit
 import XCTest
 @testable import FileToXEngineKit
 
@@ -268,6 +269,51 @@ final class PdfReaderTests: XCTestCase {
         let cases: [(String, String?)] = [("ABCDEF+TimesNewRomanPS-BoldMT", "Times New Roman"), ("Arial-BoldMT", "Arial"), ("Helvetica-Oblique", "Arial"),
                                           ("QWERTY+MalgunGothic,Bold", "Malgun Gothic"), ("NanumGothic", "NanumGothic"), ("F1", nil), ("T3Font_2", nil)]
         for (postScript, family) in cases { XCTAssertEqual(PdfDocumentReader.fontFamily(postScript), family, postScript) }
+    }
+
+    /// A page whose text is all shown in one state takes one letter's attributes for all letters instead of PDFKit's
+    /// attributed string; any change of font, size, matrix, mode or colour (or replacement text) keeps the attributed
+    /// string. Either way the words are the same as from the attributed string.
+    func testOneTextStatePagesKeepTheWordsOfThePagesAttributes() throws {
+        let pdf = PdfBuilder()
+        let words = "Plain words on a line of their own"
+        let changes: [(String, Bool, (PdfBuilder, PdfBuilder.Font) -> Void)] = [
+            ("one state", true, { _, _ in }),
+            ("black spelled another way", true, { pdf, font in pdf.raw("/DeviceGray cs 0 sc BT /\(font.resource) 11 Tf 50 500 Td (\(words)) Tj ET") }),
+            ("colour", false, { pdf, font in pdf.line(words, 11, font, 50, 300, color: (255, 0, 0)) }),
+            ("size", false, { pdf, font in pdf.line(words, 12, font, 50, 300) }),
+            ("font", false, { pdf, _ in pdf.line(words, 11, pdf.font(bold: true), 50, 300) }),
+            ("rise", false, { pdf, font in pdf.raw("BT /\(font.resource) 11 Tf 3 Ts 50 500 Td (\(words)) Tj ET") }),
+            ("scaling", false, { pdf, font in pdf.raw("BT /\(font.resource) 11 Tf 80 Tz 50 500 Td (\(words)) Tj ET") }),
+            ("mode", false, { pdf, font in pdf.raw("BT 2 Tr /\(font.resource) 11 Tf 50 500 Td (\(words)) Tj ET") }),
+            ("matrix", false, { pdf, font in pdf.raw("BT /\(font.resource) 1 Tf 11 0 0 11 50 500 Tm (\(words)) Tj ET") }),
+            ("stroke colour", false, { pdf, font in pdf.raw("1 0 0 RG BT /\(font.resource) 11 Tf 50 500 Td (\(words)) Tj ET 0 G") }),
+            ("replacement text", false, { pdf, font in pdf.raw("/Span << /ActualText (Other) >> BDC BT /\(font.resource) 11 Tf 50 500 Td (\(words)) Tj ET EMC") }),
+        ]
+        for (_, _, change) in changes {
+            pdf.newPage()
+            let font = pdf.font()
+            for line in 0..<3 { pdf.line("\(words) \(line)", 11, font, 50, 100 + Double(line) * 14) }
+            change(pdf, font)
+        }
+        let document = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: try pdf.save(FilePath.combine(dir, "states.pdf")))))
+        func signature(_ words: [PdfDocumentReader.PageWord]) -> [String] {
+            words.map { word in
+                "\(word.left) \(word.right) \(word.baseline) " + word.letters.map { letter in
+                    "\(letter.text) \(letter.box) \(letter.baseline) \(letter.size) \(letter.fontName) \(letter.bold) \(letter.italic) "
+                        + "\(letter.color?.components ?? []) \(letter.mode) \(letter.horizontal)"
+                }.joined(separator: "|")
+            }
+        }
+        for (index, (name, uniform, _)) in changes.enumerated() {
+            let page = try XCTUnwrap(document.page(at: index))
+            let scan = PdfDocumentReader.scanContent(try XCTUnwrap(page.pageRef))
+            XCTAssertEqual(scan.uniformText, uniform, name)
+            let words = PdfDocumentReader.pageWords(page, scan: scan)
+            scan.mixedText = true // the page's own attributed string
+            XCTAssertEqual(signature(words), signature(PdfDocumentReader.pageWords(page, scan: scan)), name)
+            XCTAssertGreaterThanOrEqual(words.count, 27, name)
+        }
     }
 
     func testParallelTextKeepsPageOrderRepeatedHeadersAndStyleChanges() async throws {
