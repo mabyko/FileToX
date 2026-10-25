@@ -37,6 +37,8 @@ SwiftUI/AppKit → `AppModel` → `FileToXCore.EngineHost` → 번들의 Swift h
 
 `job.cancel`은 `ConversionJob.cancel()`과 Swift Task 취소로 이어진다. 단계 사이와 출력 확정 전에 취소를 검사하며 동기 네이티브 호출은 즉시 중단되지 않을 수 있다. `ProcessRunner`는 외부 도구를 셸 없이 실행 파일과 인자 배열로 시작하고, timeout·취소 시 자식 프로세스 트리를 종료한다. 취소 요청 후 30초 안에 종료 이벤트가 오지 않으면 앱 클라이언트는 helper 프로세스 그룹을 종료한다. 다른 대기 작업도 중단되며 host 재시작은 제한된 횟수로 시도한다. 취소한 작업을 자동 재실행하지 않는다.
 
+Skia SVG는 기록한 그리기 명령을 재생하는 사이에도 취소를 확인한다. SVG 파싱·명령 기록·단일 복잡한 그리기는 즉시 중단되지 않는다. OpenJPEG는 샘플 복사와 출력 콜백에서 취소를 확인하지만 웨이블릿·엔트로피 계산 중에는 수 초 지연될 수 있다. 앞서 실행하는 ImageIO JP2 컨테이너 인코딩도 즉시 취소를 보장하지 않는다. 취소된 결과는 출력 확정에 사용하지 않는다.
+
 ## 데이터 경계와 출력 안전
 
 앱은 `~/Library/Application Support/FileToX/`의 `core`·`engines`·`tmp`를 생성한다. helper는 명시한 `--data`·`--engines` 경로를 사용하고 `TMPDIR`을 같은 루트의 `tmp`로 설정한다. `UserDataStore`의 Filee 기본 경로에 의존하지 않는다. `core`에는 설정·프리셋·프로필·이력과 엔진 상태를 저장하고 `engines`는 선택 엔진 경로, `tmp/Filee/<jobId>`는 작업 중간 파일이다. 서명한 앱 내부에는 사용자 데이터를 쓰지 않는다.
