@@ -1352,8 +1352,10 @@ corrections and final parent verification below. Report and exact commands:
 `worktrees/t3-b315f9d1/build/image-parity/findings.txt`.
 
 Remaining image differences include CMYK ICO processing order, GIF quantization and some AVIF/JXL/TGA output.
-The reference's unmarked-CMYK inversion and ink-channel grayscale errors are intentionally corrected, with
-black/white regressions; strict differences remain recorded. Metadata forwarding beyond JPEG/PNG, arbitrary JP2
+At this stage, unmarked-CMYK inversion was classified as a reference error; the 2026-10-25 investigation corrected
+that classification. ImageIO's decode array and ImageMagick both use inverted JPEG inks without an Adobe marker,
+so the native reader now follows that convention. The reference's ink-channel grayscale error remains deliberately
+different, with black/white regressions; strict differences remain recorded. Metadata forwarding beyond JPEG/PNG, arbitrary JP2
 ICC preservation and one-pixel JP2 quality control remain limited. OpenJPEG cancellation is checked during sample
 copy and stream callbacks; cancellation latency inside wavelet/entropy computation is not established.
 

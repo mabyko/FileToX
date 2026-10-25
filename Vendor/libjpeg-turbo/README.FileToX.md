@@ -2,9 +2,11 @@
 
 FileToX writes JPEG with libjpeg-turbo so the files are the same as the C# helper's, which wrote JPEG through
 Magick.NET 14.17.2 (ImageMagick 7.1.2-32 Q8, libjpeg-turbo 3.2.0). LibRaw uses the same library to decode lossy
-DNG and Kodak JPEG RAW files. Ordinary 8-bit RGB/grayscale JPEG input also uses this library's decoder;
-ImageIO supplies its metadata, orientation, resolution and ICC space. CMYK/YCCK, higher precision and unsupported
-color-space models retain ImageIO decoding until their color handling has parity evidence.
+DNG and Kodak JPEG RAW files. Ordinary 8-bit RGB, grayscale and CMYK/YCCK JPEG input also uses this library's
+decoder; ImageIO supplies metadata, orientation and resolution. Complete embedded ICC profiles label native
+samples when the component model matches. CMYK/YCCK samples are inverted with or without an Adobe marker,
+matching ImageIO's ink convention. Higher precision, unsupported color spaces and native decode failures retain
+ImageIO decoding and its decoded color space.
 
 | | |
 | --- | --- |

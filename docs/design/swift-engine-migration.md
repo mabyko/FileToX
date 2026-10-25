@@ -46,7 +46,7 @@ PDFium·Skia의 업스트림 버전·원본 해시·고지는 보존한다. 현�
 
 | 엔진 id | C# 의존 | Swift 대체 | 난이도 |
 | --- | --- | --- | --- |
-| `magick` | Magick.NET(ImageMagick) | ImageIO·CoreGraphics, JPEG 쓰기와 8비트 RGB/회색조 읽기는 libjpeg-turbo, 크기 조정은 ImageMagick 방식 Swift 이식. CMYK/YCCK JPEG 등은 ImageIO로 읽는다. ImageIO가 쓰지 못하는 형식(PSB 읽기·쓰기, XCF 읽기, PPM 계열 세부 형식, ICO 크기 지정, TIFF 압축 방식)은 Swift 코덱으로 보완. 카메라 RAW는 LibRaw(4절) | 중 — **WebP·JPEG XL 쓰기는 4절** |
+| `magick` | Magick.NET(ImageMagick) | ImageIO·CoreGraphics, JPEG 쓰기와 8비트 RGB/회색조/CMYK·YCCK 읽기는 libjpeg-turbo, 크기 조정은 ImageMagick 방식 Swift 이식. 고정밀·미지원 색 모델과 네이티브 디코딩 실패는 ImageIO로 읽는다. ImageIO가 쓰지 못하는 형식(PSB 읽기·쓰기, XCF 읽기, PPM 계열 세부 형식, ICO 크기 지정, TIFF 압축 방식)은 Swift 코덱으로 보완. 카메라 RAW는 LibRaw(4절) | 중 — **WebP·JPEG XL 쓰기는 4절** |
 | `pdfsharp` | PDFsharp | CoreGraphics PDF context·PDFKit(이미지→PDF, PDF 쪽 범위·분할, 합치기) | 중 |
 | `pdfium` | PDFtoImage(PDFium)·SkiaSharp | 번들 PDFium 147.0.7690.0 + 이미지 인코더 (`Vendor/PDFium`) | 중 |
 | `pdf-text` | PdfPig | PDFKit 문자·위치 정보 | 중 |
