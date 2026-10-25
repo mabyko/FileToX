@@ -306,6 +306,70 @@ final class ManagedEngineInstallerTests: XCTestCase {
         }
     }
 
+    func testDelayedPublicationKeepsStatusCancelAndStopResponsive() async throws {
+        let d = CoreTempDir(), archive = try fixture(d)
+        let entered = expectation(description: "publication entered"), answered = expectation(description: "RPCs answered")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let installer = ManagedEngineInstaller(root: d.path + "/engines", components: ["pandoc": try pin(archive)], download: { _, path, _ in
+            try FileManager.default.copyItem(atPath: archive, toPath: path)
+        }, publish: { source, destination in
+            entered.fulfill()
+            _ = release.wait(timeout: .now() + 5)
+            try Task.checkCancellation()
+            try OutputCommit.move(source, destination, overwrite: false, sources: [])
+        })
+        let store = UserDataStore(d.path + "/core"); try store.load()
+        let output = try FileHandle(forWritingTo: URL(fileURLWithPath: try d.file("wire", "")))
+        defer { try? output.close() }
+        let wire = WireWriter(output.fileDescriptor)
+        let host = Host(wire, store, [], Localizer("en"), languageFixed: true, engineInstaller: installer, onStaging: { _ in })
+        _ = try host.handle("start", "engine.install", ["packageId": "pandoc"])
+        await fulfillment(of: [entered], timeout: 3)
+        let requests = Task.detached {
+            _ = try host.handle("status", "engine.packages", [:])
+            XCTAssertTrue(installer.isActive)
+            _ = try host.handle("cancel", "engine.install.cancel", ["packageId": "pandoc"])
+            _ = try host.handle("stop", "engine.install.stop", [:])
+            _ = try host.handle("watch", "watch.status", [:])
+            _ = try host.handle("job", "job.cancel", ["jobId": "absent"])
+            answered.fulfill()
+        }
+        await fulfillment(of: [answered], timeout: 1)
+        release.signal()
+        try await requests.value
+        let status = try await finished(installer)
+        XCTAssertEqual(status.state, "cancelled")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: d.path + "/engines/pandoc"))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: d.path + "/engines"), [])
+        await host.cancelAll(1); wire.complete(1)
+    }
+
+    func testSuccessfulInstallStaysActiveUntilStagingCleanupFinishes() async throws {
+        let d = CoreTempDir(), archive = try fixture(d)
+        let entered = expectation(description: "cleanup entered"), release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let installer = ManagedEngineInstaller(root: d.path + "/engines", components: ["pandoc": try pin(archive)], download: { _, path, _ in
+            try FileManager.default.copyItem(atPath: archive, toPath: path)
+        }, cleanup: { path in
+            entered.fulfill()
+            _ = release.wait(timeout: .now() + 5)
+            try? FileManager.default.removeItem(atPath: path)
+        })
+        _ = try installer.start("pandoc")
+        await fulfillment(of: [entered], timeout: 3)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: d.path + "/engines/pandoc/bin/pandoc"))
+        XCTAssertTrue(installer.isActive)
+        XCTAssertTrue(try XCTUnwrap(installer.snapshot().first { $0.id == "pandoc" }).isActive)
+        installer.stop()
+        XCTAssertEqual(installer.snapshot().first { $0.id == "pandoc" }?.state, "cancelling")
+        release.signal()
+        await installer.shutdown()
+        XCTAssertFalse(installer.isActive)
+        XCTAssertEqual(installer.snapshot().first { $0.id == "pandoc" }?.state, "installed")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: d.path + "/engines"), ["pandoc"])
+    }
+
     func testHostDownloadsDoNotHoldGateOrBlockSettingsWatchStatusOrJobCancellation() async throws {
         let d = CoreTempDir(), archive = try fixture(d), started = expectation(description: "started")
         let installer = ManagedEngineInstaller(root: d.path + "/engines", components: ["pandoc": try pin(archive)], download: { _, _, _ in

@@ -31,6 +31,8 @@ final class ManagedEngineInstaller: @unchecked Sendable {
     private let components: [String: EngineComponent]
     private let download: Download
     private let run: Run
+    private let publish: @Sendable (String, String) throws -> Void
+    private let cleanup: @Sendable (String) -> Void
     private let lock = NSLock()
     private var statuses: [String: EngineInstallStatus] = [:]
     private var tasks: [String: Task<Void, Never>] = [:]
@@ -39,9 +41,15 @@ final class ManagedEngineInstaller: @unchecked Sendable {
     init(root: String = EngineEnvironment.downloadRoot, runtime: String = EngineEnvironment.runtimeIdentifier,
          components: [String: EngineComponent] = EngineDownloads.components,
          download: @escaping Download = { try await ManagedEngineInstaller.downloadArchive($0, to: $1, progress: $2) },
-         run: @escaping Run = { try await ProcessRunner.run($0, $1, timeout: $2) }) {
+         run: @escaping Run = { try await ProcessRunner.run($0, $1, timeout: $2) },
+         publish: @escaping @Sendable (String, String) throws -> Void = {
+             try Task.checkCancellation()
+             try OutputCommit.move($0, $1, overwrite: false, sources: [])
+         },
+         cleanup: @escaping @Sendable (String) -> Void = { try? FileManager.default.removeItem(atPath: $0) }) {
         self.root = URL(fileURLWithPath: root).standardizedFileURL.path
         self.components = components; self.download = download; self.run = run
+        self.publish = publish; self.cleanup = cleanup
         for package in EngineDownloads.packages {
             let component = components[package.id]
             let supported = runtime == "osx-arm64" && Self.supportedArchitecture && component != nil &&
@@ -82,16 +90,21 @@ final class ManagedEngineInstaller: @unchecked Sendable {
             status.state = "queued"; status.bytesReceived = 0; status.errorKey = nil; status.errorDetail = nil
             statuses[id] = status
             tasks[id] = Task.detached(priority: .utility) { [self] in
+                var result: Error?
                 do { try await install(package, component) }
-                catch {
-                    lock.withLock {
+                catch { result = error }
+                lock.withLock {
+                    if let error = result {
                         let failure = error as? EngineInstallFailure
                         statuses[id]?.state = failure?.key == "engines.error.detach" ? "failed" : Task.isCancelled ? "cancelled" : "failed"
                         statuses[id]?.errorKey = failure?.key ?? "engines.error.install"
                         statuses[id]?.errorDetail = error.localizedDescription
+                    } else {
+                        // Publication already succeeded; cancellation during cleanup cannot undo it.
+                        statuses[id]?.state = "installed"; statuses[id]?.bytesReceived = component.size
                     }
+                    tasks[id] = nil
                 }
-                lock.withLock { tasks[id] = nil }
             }
             return status
         }
@@ -149,7 +162,7 @@ final class ManagedEngineInstaller: @unchecked Sendable {
         guard let created = mkdtemp(&template) else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
         let stage = String(cString: created), payload = FilePath.combine(stage, "payload")
         var retainMount = false
-        defer { if !retainMount { try? fm.removeItem(atPath: stage) } }
+        defer { if !retainMount { cleanup(stage) } }
         try fm.createDirectory(atPath: payload, withIntermediateDirectories: false)
         let archive = FilePath.combine(stage, "archive." + component.kind)
         try phase(id, "downloading")
@@ -194,14 +207,12 @@ final class ManagedEngineInstaller: @unchecked Sendable {
             throw EngineInstallFailure("engines.error.program", "The package program failed validation: \(result.standardError)")
         }
         try Data((component.sha256.lowercased() + "\n").utf8).write(to: URL(fileURLWithPath: FilePath.combine(installedPayload, ".filee-component")), options: .withoutOverwriting)
-        try lock.withLock {
-            try Task.checkCancellation()
-            var current = stat()
-            guard lstat(root, &current) == 0, current.st_dev == rootInfo.st_dev, current.st_ino == rootInfo.st_ino,
-                  current.st_mode & S_IFMT == S_IFDIR else { throw EngineInstallFailure("engines.error.path", "The managed root changed during installation.") }
-            try OutputCommit.move(installedPayload, destination, overwrite: false, sources: [])
-            statuses[id]?.state = "installed"; statuses[id]?.bytesReceived = component.size
-        }
+        try lock.withLock { try Task.checkCancellation() }
+        var current = stat()
+        guard lstat(root, &current) == 0, current.st_dev == rootInfo.st_dev, current.st_ino == rootInfo.st_ino,
+              current.st_mode & S_IFMT == S_IFDIR else { throw EngineInstallFailure("engines.error.path", "The managed root changed during installation.") }
+        try Task.checkCancellation()
+        try publish(installedPayload, destination)
         EngineEnvironment.forgetSystemCopies()
     }
 
