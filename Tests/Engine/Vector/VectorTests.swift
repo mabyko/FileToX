@@ -3,6 +3,7 @@
 // Filee's route tests need the route planner of the core; here the engines' direct edges are checked instead.
 
 import CoreGraphics
+import CoreText
 import Foundation
 import PDFKit
 import XCTest
@@ -614,6 +615,108 @@ extension VectorTests {
 }
 
 extension VectorTests {
+    private func verticalSource(_ body: String) -> Data {
+        Data("<svg xmlns='http://www.w3.org/2000/svg' width='120' height='180' font-family='Helvetica' font-size='16'>\(body)</svg>".utf8)
+    }
+
+    private func verticalPaths(_ body: String) throws -> [String] {
+        let root = try XDocument.load(data: SvgNormalizer.normalize(verticalSource(body), baseDirectory: dir)).root
+        return root.descendants().filter { $0.name.localName == "path" }.compactMap { $0.attributeValue("d") }
+    }
+
+    private func verticalImage(_ body: String) throws -> CGImage {
+        let input = FilePath.combine(dir, "vertical.svg")
+        try verticalSource(body).write(to: URL(fileURLWithPath: input))
+        return try SvgRenderer.rasterize(SvgRenderer.load(input), scale: 4).image
+    }
+
+    private func verticalInkBounds(_ image: CGImage, channel: Int? = nil) -> CGRect {
+        let bitmap = ImagePixels.bitmap(image)
+        var bounds = CGRect.null
+        for y in 0..<bitmap.height {
+            for x in 0..<bitmap.width {
+                let i = (y * bitmap.width + x) * 4
+                guard bitmap.pixels[i + 3] > 160 else { continue }
+                if let channel, !(0..<3).allSatisfy({ $0 == channel || Int(bitmap.pixels[i + channel]) > Int(bitmap.pixels[i + $0]) + 50 }) { continue }
+                bounds = bounds.union(CGRect(x: x, y: y, width: 1, height: 1))
+            }
+        }
+        XCTAssertFalse(bounds.isNull)
+        return bounds
+    }
+
+    func testVerticalTextRotatesLatinAndKeepsCjkUpright() throws {
+        let image = try verticalImage("<text x='60' y='15' writing-mode='vertical-rl'><tspan fill='red'>F</tspan><tspan fill='blue'>한</tspan><tspan fill='lime'>글</tspan></text>")
+        let latin = verticalInkBounds(image, channel: 0)
+        let first = verticalInkBounds(image, channel: 2), second = verticalInkBounds(image, channel: 1)
+        XCTAssertGreaterThan(latin.width, latin.height, "Latin glyphs rotate clockwise in mixed vertical text")
+        XCTAssertGreaterThan(first.minY, latin.maxY)
+        XCTAssertGreaterThan(second.minY, first.maxY)
+        XCTAssertEqual(first.midX, second.midX, accuracy: 4)
+        XCTAssertEqual(first.midX, 240, accuracy: 8)
+        let upright = try verticalImage("<text x='60' y='15' writing-mode='vertical-rl' text-orientation='upright'>F</text>")
+        let bounds = verticalInkBounds(upright)
+        XCTAssertGreaterThan(bounds.height, bounds.width)
+    }
+
+    func testVerticalTextPositionsAndAnchorsUseTheInlineAxis() throws {
+        let positioned = try verticalPaths("<text x='40' y='30' writing-mode='tb'>A<tspan x='80' y='70' dx='3' dy='5'>B</tspan></text>")
+        let separate = try verticalPaths("<text x='40' y='30' writing-mode='tb'>A</text><text x='83' y='75' writing-mode='tb'>B</text>")
+        XCTAssertEqual(positioned.count, 2)
+        XCTAssertEqual(positioned, separate)
+        let font = CTFontCreateWithName("Helvetica" as CFString, 16, nil)
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "AB", attributes: [.init(kCTFontAttributeName as String): font]))
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        for (anchor, shift) in [("middle", width / 2), ("end", width)] {
+            XCTAssertEqual(try verticalPaths("<text x='60' y='100' writing-mode='tb' text-anchor='\(anchor)'>AB</text>"),
+                           try verticalPaths("<text x='60' y='\(100 - shift)' writing-mode='tb'>AB</text>"))
+        }
+        XCTAssertEqual(try verticalPaths("<text x='60' y='100' writing-mode='vertical-lr' direction='rtl'>AB</text>"),
+                       try verticalPaths("<text x='60' y='\(100 - width)' writing-mode='tb'>AB</text>"))
+    }
+
+    func testVerticalAliasesInheritanceAndOrientationKeepTheirGeometry() throws {
+        let reference = try verticalPaths("<text x='60' y='15' writing-mode='tb'>e&#x301; 한글</text>")
+        XCTAssertFalse(reference.isEmpty)
+        for mode in ["tb-rl", "vertical-rl", "vertical-lr"] {
+            XCTAssertEqual(reference, try verticalPaths("<g style='writing-mode:\(mode)'><text x='60' y='15'>e&#x301; 한글</text></g>"))
+        }
+        for (legacy, modern) in [("0", "upright"), ("90", "sideways")] {
+            XCTAssertEqual(try verticalPaths("<text x='60' y='15' writing-mode='tb' glyph-orientation-vertical='\(legacy)'>AB한</text>"),
+                           try verticalPaths("<text x='60' y='15' writing-mode='tb' style='text-orientation:\(modern)'>AB한</text>"))
+        }
+        let horizontal = "<text x='10' y='30'>A<tspan font-weight='bold'>B</tspan>C</text>"
+        XCTAssertEqual(try verticalPaths(horizontal), try verticalPaths(horizontal.replacingOccurrences(of: "<tspan", with: "<tspan writing-mode='vertical-rl'")),
+                       "The new vertical path does not change existing horizontal-root layout")
+    }
+
+    func testVerticalColorGlyphsRemainPositionedAndTextPdfStaysVector() throws {
+        let normalized = SvgNormalizer.normalize(verticalSource("<text x='60' y='15' writing-mode='tb'>😀😺</text>"), baseDirectory: dir)
+        let text = try XDocument.load(data: normalized).root.descendants().filter { $0.name.localName == "text" }
+        XCTAssertEqual(text.count, 2)
+        XCTAssertTrue(text.allSatisfy { $0.attributeValue("writing-mode") == "horizontal-tb" })
+        XCTAssertEqual(Set(text.compactMap { $0.attributeValue("transform") }).count, 2)
+        let source = FilePath.combine(dir, "vertical-pdf.svg"), output = FilePath.combine(dir, "vertical.pdf")
+        try verticalSource("<text x='60' y='15' writing-mode='tb'>Vertical 한글</text>").write(to: URL(fileURLWithPath: source))
+        try SvgRenderer.writePdf(SvgRenderer.load(source), output, title: "vertical", pdfA: false)
+        let page = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: output))?.page(at: 0)?.pageRef)
+        var content = "", images: [(Int, Int)] = [], fonts = 0
+        PdfContent.collect(page, &content, &images, &fonts)
+        XCTAssertTrue(images.isEmpty)
+        XCTAssertEqual(fonts, 0)
+        XCTAssertNotNil(content.range(of: #"\s(c|l|re)\s"#, options: .regularExpression))
+    }
+
+    func testUprightVerticalCursiveTextUsesIsolatedGraphemes() throws {
+        let letters = "سلام"
+        let source = "<text x='60' y='15' writing-mode='tb' text-orientation='upright'>\(letters)</text>"
+        let paths = try verticalPaths(source)
+        XCTAssertEqual(paths.count, letters.count, "Upright Arabic uses isolated forms instead of joining letters")
+        XCTAssertEqual(paths, try verticalPaths(source.replacingOccurrences(of: "writing-mode='tb'", with: "writing-mode='tb' direction='rtl'")))
+        let combined = try verticalPaths("<text x='60' y='15' writing-mode='tb' text-orientation='upright'>e&#x301;한</text>")
+        XCTAssertEqual(combined.count, 2, "Combining marks stay with their base character")
+    }
+
     func testRelativeFontWeightsUseComputedAncestorsAfterTheCascade() throws {
         // CSS Fonts 4 §2.2.1, including interval boundaries and weights outside 100...900.
         let weights = [(1, 400, 1), (99, 400, 99), (100, 400, 100), (349, 400, 100),
@@ -648,7 +751,7 @@ extension VectorTests {
         XCTAssertEqual(root.descendants().map { $0.attributeValue("font-weight") }, ["400", "700", "400"])
     }
 
-    func testRelativeWeightsKeepMixedTextAndVerticalFallbackSemantics() throws {
+    func testRelativeWeightsKeepMixedAndVerticalTextSemantics() throws {
         let bodies = [
             "<text x='100' y='40' text-anchor='middle' font-weight='bolder'>A&#x301;<tspan font-weight='lighter'>bc</tspan>Def</text>",
             "<style>g {writing-mode:tb} text {font-weight:bolder}</style><text x='100' y='5'>A&#x301;<tspan font-weight='lighter'>bc</tspan></text>",
@@ -661,13 +764,8 @@ extension VectorTests {
             let relative = normalize(body)
             XCTAssertEqual(relative, normalize(absolute))
             let root = try XDocument.load(data: relative).root
-            if body.contains("writing-mode") {
-                XCTAssertEqual(root.descendants().filter { $0.name.localName == "text" }.count, 1)
-                XCTAssertTrue(root.descendants().contains { $0.name.localName == "tspan" })
-            } else {
-                XCTAssertFalse(root.descendants().contains { $0.name.localName == "text" })
-                XCTAssertTrue(root.descendants().contains { $0.name.localName == "path" })
-            }
+            XCTAssertFalse(root.descendants().contains { $0.name.localName == "text" })
+            XCTAssertTrue(root.descendants().contains { $0.name.localName == "path" })
         }
     }
 

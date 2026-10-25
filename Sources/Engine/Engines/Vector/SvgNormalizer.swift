@@ -8,7 +8,8 @@
 //   text-anchor per chunk, letter-spacing, baseline-shift, underline/overline/line-through, xml:space — and replaced by
 //   its glyph outlines, the way Filee's OutlinedTextPlayback drew text for PDF output. Real bold and italic faces are
 //   used where the family has them (CoreSVG ignores font-style), synthesized (stroke, slant) where it has not, and
-//   missing characters fall back to other fonts like Skia's font manager. Text on a path and vertical text stay text.
+//   missing characters fall back to other fonts like Skia's font manager. Vertical text uses mixed upright/sideways glyphs.
+//   Text on a path stays text.
 // • Files: images next to the drawing are embedded; network references are dropped (converting must not fetch anything).
 //
 // Anything that can't be parsed leaves the file as it was.
@@ -42,7 +43,7 @@ enum SvgNormalizer {
         "font-variant", "font-weight", "glyph-orientation-horizontal", "glyph-orientation-vertical", "image-rendering", "kerning",
         "letter-spacing", "lighting-color", "marker-end", "marker-mid", "marker-start", "mask", "opacity", "overflow", "pointer-events",
         "shape-rendering", "stop-color", "stop-opacity", "stroke", "stroke-dasharray", "stroke-dashoffset", "stroke-linecap",
-        "stroke-linejoin", "stroke-miterlimit", "stroke-opacity", "stroke-width", "text-anchor", "text-decoration", "text-rendering",
+        "stroke-linejoin", "stroke-miterlimit", "stroke-opacity", "stroke-width", "text-anchor", "text-decoration", "text-orientation", "text-rendering",
         "unicode-bidi", "visibility", "word-spacing", "writing-mode", "paint-order", "vector-effect",
     ]
 
@@ -345,7 +346,7 @@ enum SvgNormalizer {
             "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin",
             "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "paint-order", "visibility", "color", "font-family", "font-size",
             "font-weight", "font-style", "font-stretch", "font-variant", "letter-spacing", "word-spacing", "text-anchor", "text-decoration",
-            "direction", "writing-mode", "xml:space",
+            "direction", "writing-mode", "text-orientation", "glyph-orientation-vertical", "xml:space",
         ]
 
         func adding(_ element: XElement) -> TextStyle {
@@ -362,6 +363,17 @@ enum SvgNormalizer {
                 }
             }
             return style
+        }
+
+        var vertical: Bool { ["tb", "tb-rl", "vertical-rl", "vertical-lr"].contains(values["writing-mode"] ?? "") }
+
+        var verticalOrientation: String {
+            if let value = values["text-orientation"] { return value }
+            switch values["glyph-orientation-vertical"] {
+            case "0", "0deg": return "upright"
+            case "90", "90deg": return "sideways"
+            default: return "mixed"
+            }
         }
 
         var fontSize: Double { values["font-size"].flatMap(Double.init) ?? 16 }
@@ -421,6 +433,7 @@ enum SvgNormalizer {
             var startsChunk = false
             var anchor = "start"
             var opacity: String?
+            var vertical = false
         }
 
         let element: XElement
@@ -438,7 +451,7 @@ enum SvgNormalizer {
 
         /// The outlines in a group carrying the text's own attributes, or nil to leave the text to CoreSVG.
         func outlined() -> XElement? {
-            if (style.values["writing-mode"] ?? "").hasPrefix("tb") || element.descendants().contains(where: { $0.name.localName == "textPath" }) { return nil }
+            if element.descendants().contains(where: { $0.name.localName == "textPath" }) { return nil }
             collect(element, style, isRoot: true)
             if unsupported { return nil }
             if style.values["xml:space"] != "preserve", let last = runs.indices.last {
@@ -452,6 +465,8 @@ enum SvgNormalizer {
         private func collect(_ node: XElement, _ inherited: TextStyle, isRoot: Bool) {
             let style = isRoot ? inherited : inherited.adding(node)
             if !isRoot && node.attributeValue("display") == "none" { return }
+            // Mixed inline writing modes in vertical text retain the existing CoreSVG fallback.
+            if self.style.vertical && !style.vertical { unsupported = true }
             let size = style.fontSize
             // Positions of the element apply to its first characters.
             let x = SvgNormalizer.lengths(node.attributeValue("x"), fontSize: size), y = SvgNormalizer.lengths(node.attributeValue("y"), fontSize: size)
@@ -467,7 +482,7 @@ enum SvgNormalizer {
             case let value?: shift = SvgNormalizer.length(value, fontSize: size, percentOf: size) ?? 0
             case nil: break
             }
-            penY -= shift
+            if self.style.vertical { penX += shift } else { penY -= shift }
             for child in node.nodes {
                 switch child {
                 case .element(let element) where ["tspan", "a", "textPath"].contains(element.name.localName):
@@ -478,11 +493,16 @@ enum SvgNormalizer {
                     break
                 }
             }
-            penY += shift
+            if self.style.vertical { penX -= shift } else { penY += shift }
         }
 
         /// Adds characters with SVG's white-space handling; characters with their own x/y/dx/dy start runs of their own.
-        private func add(_ raw: String, _ style: TextStyle, opacity: String?) {
+        private func add(_ raw: String, _ inherited: TextStyle, opacity: String?) {
+            var style = inherited
+            if !self.style.vertical {
+                style.values.removeValue(forKey: "text-orientation")
+                style.values.removeValue(forKey: "glyph-orientation-vertical")
+            }
             let preserve = style.values["xml:space"] == "preserve"
             var text = ""
             for character in raw {
@@ -499,24 +519,46 @@ enum SvgNormalizer {
             }
             for character in text {
                 let positioned = !pendingX.isEmpty || !pendingY.isEmpty || !pendingDX.isEmpty || !pendingDY.isEmpty
-                if positioned || runs.isEmpty || runs[runs.count - 1].style.values != style.values || runs[runs.count - 1].opacity != opacity {
+                // Upright cursive scripts use isolated forms, so each grapheme is shaped separately.
+                if positioned || (self.style.vertical && style.verticalOrientation == "upright") || runs.isEmpty || runs[runs.count - 1].style.values != style.values || runs[runs.count - 1].opacity != opacity {
                     var run = Run(text: "", style: style, font: SvgNormalizer.font(style), opacity: opacity)
-                    if let x = pendingX.first { run.x = x; run.startsChunk = true; pendingX.removeFirst() } else { run.x = .nan }
-                    if let y = pendingY.first { penY = y; pendingY.removeFirst() }
-                    if let dx = pendingDX.first { run.width = dx; pendingDX.removeFirst() }
-                    if let dy = pendingDY.first { penY += dy; pendingDY.removeFirst() }
-                    run.y = penY
+                    run.vertical = self.style.vertical
+                    if run.vertical {
+                        if let x = pendingX.first { penX = x; run.startsChunk = true; pendingX.removeFirst() }
+                        if let y = pendingY.first { run.y = y; run.startsChunk = true; pendingY.removeFirst() } else { run.y = .nan }
+                        if let dx = pendingDX.first { penX += dx; pendingDX.removeFirst() }
+                        if let dy = pendingDY.first { run.width = dy; pendingDY.removeFirst() }
+                        run.x = penX
+                    } else {
+                        if let x = pendingX.first { run.x = x; run.startsChunk = true; pendingX.removeFirst() } else { run.x = .nan }
+                        if let y = pendingY.first { penY = y; pendingY.removeFirst() }
+                        if let dx = pendingDX.first { run.width = dx; pendingDX.removeFirst() }
+                        if let dy = pendingDY.first { penY += dy; pendingDY.removeFirst() }
+                        run.y = penY
+                    }
                     run.anchor = style.values["text-anchor"] ?? "start"
+                    if run.vertical && style.verticalOrientation != "upright" && style.values["direction"] == "rtl" {
+                        if run.anchor == "start" { run.anchor = "end" } else if run.anchor == "end" { run.anchor = "start" }
+                    }
                     runs.append(run)
                 }
                 runs[runs.count - 1].text.append(character)
             }
         }
 
-        /// Pen positions and widths. A run's `width` holds its dx until measured.
+        /// Pen positions and advances. A run's `width` holds its inline-axis offset until measured.
         private func measure() {
             penX = 0
+            penY = 0
             for i in runs.indices {
+                if runs[i].vertical {
+                    if !runs[i].y.isNaN { penY = runs[i].y }
+                    penY += runs[i].width
+                    runs[i].y = penY
+                    runs[i].width = SvgNormalizer.advance(runs[i].text, runs[i].font, runs[i].style, vertical: true)
+                    penY += runs[i].width
+                    continue
+                }
                 let dx = runs[i].width
                 if !runs[i].x.isNaN { penX = runs[i].x }
                 penX += dx
@@ -527,15 +569,17 @@ enum SvgNormalizer {
             if let first = runs.indices.first { runs[first].startsChunk = true }
         }
 
-        /// text-anchor middle / end moves every run of a chunk (from one absolute x to the next).
+        /// text-anchor middle / end moves every run of a chunk along its inline axis.
         private func anchorChunks() {
             var start = 0
             while start < runs.count {
                 var end = start + 1
                 while end < runs.count && !runs[end].startsChunk { end += 1 }
-                let left = runs[start].x, right = runs[end - 1].x + runs[end - 1].width
+                let vertical = runs[start].vertical
+                let left = vertical ? runs[start].y : runs[start].x
+                let right = (vertical ? runs[end - 1].y : runs[end - 1].x) + runs[end - 1].width
                 let shift: Double = switch runs[start].anchor { case "middle": -(right - left) / 2; case "end": -(right - left); default: 0 }
-                for i in start..<end { runs[i].x += shift }
+                for i in start..<end { if vertical { runs[i].y += shift } else { runs[i].x += shift } }
                 start = end
             }
         }
@@ -580,23 +624,46 @@ enum SvgNormalizer {
         return table.min { abs($0.0 - weight) < abs($1.0 - weight) }!.1
     }
 
-    private static func line(_ text: String, _ font: CTFont, _ style: TextStyle) -> CTLine {
+    private static let uprightCharacters = try! NSRegularExpression(pattern: "^[\\p{vo=U}\\p{vo=Tu}\\p{vo=Tr}]")
+
+    private static func line(_ text: String, _ font: CTFont, _ style: TextStyle, vertical: Bool) -> CTLine {
         var attributes: [NSAttributedString.Key: Any] = [.init(kCTFontAttributeName as String): font]
         if let spacing = style.values["letter-spacing"], spacing != "normal",
            let value = length(spacing, fontSize: style.fontSize, percentOf: style.fontSize) {
             attributes[.init(kCTKernAttributeName as String)] = value
         }
-        return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
+        guard vertical else { return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes)) }
+        let attributed = NSMutableAttributedString(string: text, attributes: attributes)
+        if style.verticalOrientation != "upright" && style.values["direction"] == "rtl" {
+            attributed.addAttribute(.init(kCTWritingDirectionAttributeName as String), value: [NSWritingDirection.rightToLeft.rawValue], range: NSRange(location: 0, length: (text as NSString).length))
+        }
+        let orientation = style.verticalOrientation
+        if orientation == "upright" {
+            attributed.addAttribute(.init(kCTVerticalFormsAttributeName as String), value: true, range: NSRange(location: 0, length: (text as NSString).length))
+        } else if orientation != "sideways" {
+            var offset = 0, ranges: [NSRange] = []
+            for value in text {
+                let character = String(value)
+                let count = (character as NSString).length
+                if uprightCharacters.firstMatch(in: character, range: NSRange(location: 0, length: count)) != nil {
+                    if let last = ranges.indices.last, NSMaxRange(ranges[last]) == offset { ranges[last].length += count }
+                    else { ranges.append(NSRange(location: offset, length: count)) }
+                }
+                offset += count
+            }
+            for range in ranges { attributed.addAttribute(.init(kCTVerticalFormsAttributeName as String), value: true, range: range) }
+        }
+        return CTLineCreateWithAttributedString(attributed)
     }
 
-    private static func advance(_ text: String, _ font: CTFont, _ style: TextStyle) -> Double {
-        CTLineGetTypographicBounds(line(text, font, style), nil, nil, nil)
+    private static func advance(_ text: String, _ font: CTFont, _ style: TextStyle, vertical: Bool = false) -> Double {
+        CTLineGetTypographicBounds(line(text, font, style, vertical: vertical), nil, nil, nil)
     }
 
     /// The run as paths (glyph outlines and decoration lines) with its paint; glyphs without outlines (colour emoji)
     /// stay text.
     private static func outline(_ run: TextLayout.Run) -> [XElement] {
-        let ctLine = line(run.text, run.font, run.style)
+        let ctLine = line(run.text, run.font, run.style, vertical: run.vertical)
         let path = CGMutablePath()
         var leftovers: [XElement] = []
         let wantsItalic = run.style.italic
@@ -607,15 +674,40 @@ enum SvgNormalizer {
             let font = value as! CTFont
             var glyphs = [CGGlyph](repeating: 0, count: count)
             var positions = [CGPoint](repeating: .zero, count: count)
+            var indices: [CFIndex] = []
+            var renderedClusters = Set<Int>()
+            if run.vertical && CTFontGetSymbolicTraits(font).contains(.traitColorGlyphs) {
+                indices = [CFIndex](repeating: 0, count: count)
+                CTRunGetStringIndices(glyphRun, CFRange(location: 0, length: count), &indices)
+            }
             CTRunGetGlyphs(glyphRun, CFRange(location: 0, length: count), &glyphs)
             CTRunGetPositions(glyphRun, CFRange(location: 0, length: count), &positions)
             // A family without an italic face gets the slant Skia gives it.
             let slant: CGFloat = wantsItalic && !CTFontGetSymbolicTraits(font).contains(.traitItalic) ? 0.21 : 0
             for i in 0..<count {
                 var transform = CGAffineTransform(a: 1, b: 0, c: slant, d: -1, tx: CGFloat(run.x) + positions[i].x, ty: CGFloat(run.y) - positions[i].y)
+                if run.vertical {
+                    let matrix = CTRunGetTextMatrix(glyphRun)
+                    let position = positions[i].applying(matrix)
+                    let center = matrix == .identity ? (CTFontGetAscent(font) - CTFontGetDescent(font)) / 2 : 0
+                    // Core Text's run matrix precedes the clockwise inline axis and SVG's downward y axis.
+                    transform = CGAffineTransform(a: 1, b: 0, c: slant, d: 1, tx: 0, ty: 0).concatenating(matrix).concatenating(CGAffineTransform(a: 0, b: 1, c: 1, d: 0, tx: CGFloat(run.x) + position.y - center, ty: CGFloat(run.y) + position.x))
+                }
                 if let glyph = CTFontCreatePathForGlyph(font, glyphs[i], &transform) {
                     path.addPath(glyph)
                 } else if CTFontGetSymbolicTraits(font).contains(.traitColorGlyphs) {
+                    if run.vertical {
+                        let source = run.text as NSString
+                        let range = source.rangeOfComposedCharacterSequence(at: indices[i])
+                        guard renderedClusters.insert(range.location).inserted else { continue }
+                        let text = XElement(svg + "text", XAttribute("x", 0), XAttribute("y", 0),
+                                            XAttribute("font-family", CTFontCopyFamilyName(font) as String), XAttribute("font-size", run.style.fontSize),
+                                            XAttribute("writing-mode", "horizontal-tb"), XAttribute("text-anchor", "start"), XAttribute("direction", "ltr"),
+                                            XAttribute("transform", "matrix(\(transform.a) \(transform.b) \(-transform.c) \(-transform.d) \(transform.tx) \(transform.ty))"))
+                        text.add(source.substring(with: range))
+                        leftovers.append(text)
+                        continue
+                    }
                     let range = CTRunGetStringRange(glyphRun)
                     let characters = (run.text as NSString).substring(with: NSRange(location: range.location, length: range.length))
                     let text = XElement(svg + "text", XAttribute("x", Double(run.x) + Double(positions[0].x)), XAttribute("y", run.y),
@@ -627,10 +719,16 @@ enum SvgNormalizer {
             }
         }
         decorate(run, path)
-        guard !path.isEmpty else { return leftovers }
-        let element = XElement(svg + "path", XAttribute("d", pathData(path)))
         let paint = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit",
                      "stroke-dasharray", "stroke-dashoffset", "paint-order"]
+        if run.vertical {
+            for text in leftovers {
+                for name in paint { if let value = run.style.values[name] { text.setAttributeValue(XName(name), value) } }
+                if let opacity = run.opacity { text.setAttributeValue("opacity", opacity) }
+            }
+        }
+        guard !path.isEmpty else { return leftovers }
+        let element = XElement(svg + "path", XAttribute("d", pathData(path)))
         for name in paint { if let value = run.style.values[name] { element.setAttributeValue(XName(name), value) } }
         if let opacity = run.opacity { element.setAttributeValue("opacity", opacity) }
         // A family without a bold face gets Skia's fake bold: a thin outline in the fill colour.
@@ -648,6 +746,14 @@ enum SvgNormalizer {
         let decoration = (run.style.values["text-decoration"] ?? "").lowercased()
         guard decoration.contains("underline") || decoration.contains("overline") || decoration.contains("line-through") else { return }
         let thickness = max(CTFontGetUnderlineThickness(run.font), CGFloat(run.style.fontSize) / 20)
+        if run.vertical {
+            let half = (CTFontGetAscent(run.font) + CTFontGetDescent(run.font)) / 2
+            let x = CGFloat(run.x), y = CGFloat(run.y), height = CGFloat(run.width)
+            if decoration.contains("underline") { path.addRect(CGRect(x: x - half - thickness, y: y, width: thickness, height: height)) }
+            if decoration.contains("overline") { path.addRect(CGRect(x: x + half, y: y, width: thickness, height: height)) }
+            if decoration.contains("line-through") { path.addRect(CGRect(x: x - thickness / 2, y: y, width: thickness, height: height)) }
+            return
+        }
         let left = CGFloat(run.x), width = CGFloat(run.width), baseline = CGFloat(run.y)
         if decoration.contains("underline") {
             path.addRect(CGRect(x: left, y: baseline - CTFontGetUnderlinePosition(run.font) - thickness / 2, width: width, height: thickness))
