@@ -369,6 +369,8 @@ enum SvgNormalizer {
                     style.values[name] = String(SvgNormalizer.length(attribute.value, fontSize: style.fontSize, percentOf: style.fontSize) ?? style.fontSize)
                 } else if name == "font-weight" {
                     style.values[name] = String(SvgNormalizer.numericWeight(attribute.value, parent: style.weight))
+                } else if ["writing-mode", "text-orientation", "direction"].contains(name) {
+                    style.values[name] = keyword
                 } else {
                     style.values[name] = attribute.value
                 }
@@ -484,7 +486,7 @@ enum SvgNormalizer {
             if !isRoot && node.attributeValue("display") == "none" { return }
             // shortcut: mixed vertical/horizontal inlines stay with CoreSVG until orthogonal inline layout is implemented.
             if self.style.vertical && !style.vertical { unsupported = true }
-            if self.style.vertical, let bidi = node.attributeValue("unicode-bidi"), bidi.lowercased() != "normal" { unsupported = true }
+            if self.style.vertical, let bidi = node.attributeValue("unicode-bidi"), bidi.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "normal" { unsupported = true }
             let size = style.fontSize
             // Positions of the element apply to its first characters.
             let x = SvgNormalizer.lengths(node.attributeValue("x"), fontSize: size), y = SvgNormalizer.lengths(node.attributeValue("y"), fontSize: size)
@@ -494,7 +496,7 @@ enum SvgNormalizer {
             pendingDY += SvgNormalizer.lengths(node.attributeValue("dy"), fontSize: size)
             if node.attributeValue("rotate") != nil { unsupported = true }
             var shift = 0.0
-            switch node.attributeValue("baseline-shift") {
+            switch node.attributeValue("baseline-shift")?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
             case "super": shift = size * 0.33
             case "sub": shift = -size * 0.2
             case let value?: shift = SvgNormalizer.length(value, fontSize: size, percentOf: size) ?? 0

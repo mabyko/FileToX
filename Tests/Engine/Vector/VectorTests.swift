@@ -785,6 +785,28 @@ extension VectorTests {
         XCTAssertFalse(try verticalPaths("<text x='60' y='30' writing-mode='tb' text-orientation='upright'>&#x202E;AB<tspan fill='red'>CD</tspan>EF&#x202C;</text>").isEmpty)
     }
 
+    func testVerticalLayoutKeywordsIgnoreSurroundingWhitespace() throws {
+        for (property, value) in [("writing-mode", "tb"), ("writing-mode", "vertical-lr"),
+                                  ("text-orientation", "upright"), ("text-orientation", "sideways"),
+                                  ("direction", "ltr"), ("direction", "rtl"),
+                                  ("unicode-bidi", "normal"), ("baseline-shift", "super")] {
+            let mode = property == "writing-mode" ? "" : " writing-mode='tb'"
+            let prefix = "<text x='60' y='30'\(mode) \(property)='"
+            XCTAssertEqual(try verticalPaths(prefix + value + "'>AV한</text>"),
+                           try verticalPaths(prefix + " \t" + value.uppercased() + " \n'>AV한</text>"), property)
+        }
+        let prefix = "<text x='60' y='150' writing-mode='tb' direction='"
+        let suffix = "'>AB<tspan fill='red'>CD</tspan>EF</text>"
+        let expected = try verticalImage(prefix + "rtl" + suffix)
+        for value in ["rtl ", " RTL "] {
+            let body = prefix + value + suffix
+            let root = try XDocument.load(data: SvgNormalizer.normalize(verticalSource(body), baseDirectory: dir)).root
+            XCTAssertEqual(root.descendants().filter { $0.name.localName == "text" }.count, 1)
+            XCTAssertTrue(root.descendants().filter { $0.name.localName == "path" }.isEmpty)
+            XCTAssertEqual(ImagePixels.bitmap(try verticalImage(body)).pixels, ImagePixels.bitmap(expected).pixels)
+        }
+    }
+
     func testUprightVerticalCursiveTextUsesIsolatedGraphemes() throws {
         let letters = "سلام"
         let source = "<text x='60' y='15' writing-mode='tb' text-orientation='upright'>\(letters)</text>"
