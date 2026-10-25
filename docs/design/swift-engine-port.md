@@ -5,7 +5,7 @@ C# 변환 helper(`EngineHost` + Filee `Core`·`Engines`)를 Swift helper로 옮�
 ## 원칙
 
 - **프로토콜은 그대로 둔다.** Swift helper는 [host-wire-v1](host-wire-v1.md)을 같은 필드·순서·오류 코드로 구현한다. 앱(`Sources/Core/Host`)은 helper가 바뀐 것을 몰라야 한다.
-- **동작 기준은 패치 적용된 Filee다.** `Vendor/Filee`(커밋 `21fdd05`)에 `Vendor/Filee.patches/*.patch`를 적용한 소스가 기준이다. 읽기 전용 사본: `/tmp/ftx-ref/filee-patched` (없으면 `Vendor/Filee`를 복사하고 패치를 `git apply`한다). host 동작은 `EngineHost/*.cs`가 기준이다.
+- **비교 기준은 수정하지 않는다.** 최초 이식은 Filee 커밋 `21fdd05ef7181b032ed83ec895cc9bbc4b198985`와 당시 host 패치를 기준으로 했다. `Vendor/Filee`·패치·C# `EngineHost`는 현재 빌드 입력에서 제거했다. 이후 비교는 보존한 원본 출력·이력과 고정 업스트림 소스를 사용하며, 일반 Swift 개발을 위해 C# 빌드나 로컬 참조 트리를 복원할 필요는 없다. 현재 구현은 `Sources/Engine`, 앱 클라이언트는 `Sources/Core/Host`에 있다.
 - **결과·옵션·진행률·취소·오류를 바꾸지 않는다.** 엔진 id, 변환 간선(edge)과 비용, 상태 사유 키(`engine.reason.*`), 출력 파일 이름(`Allocate` 확장자·접미사), 진행률 보고 시점, 취소 확인 지점, 사용자에게 보이는 오류 문구를 Filee와 같게 둔다. NuGet 라이브러리를 macOS 프레임워크나 Swift 코드로 바꾼 곳만 구현이 달라진다.
 - **동등하게 대체할 수 없는 부분은 임의로 빼지 않는다.** 구현할 수 없거나 품질이 확실히 달라지는 부분은 코드에서 지우거나 숨기지 말고, 보고서에 무엇이·왜·어떤 대안이 있는지 적는다.
 - **외부 실행 파일은 그대로 쓴다.** rhwp·7-Zip(번들), FFmpeg·Ghostscript·Pandoc·LibreOffice·Calibre(사용자 설치)는 같은 인자로 실행한다. 새 외부 프로그램을 추가하지 않는다.

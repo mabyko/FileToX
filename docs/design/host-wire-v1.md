@@ -21,4 +21,4 @@ Swift 인터페이스(EngineHost actor): start()→HostHello, catalog()→HostCa
 
 HostEvent = .hello(HostHello), .updated(HostJob), .finished(HostJob), .fatal(String), .interrupted(String). Models의 필드명은 위 JSON과 같다. HostLibrary 설정·프리셋·프로필은 JSONValue, HostHistory.preset은 JSONValue?. JSONValue는 Foundation 값의 전체 JSON을 보존하는 Codable/Sendable enum이다. 외부 변환 실패는 file/job 상태로 전달하며 host crash는 pending 요청 실패·interrupted 이벤트다.
 
-소유: Claude는 EngineHost/ C# 및 Vendor/Filee.patches, root는 Sources/Core/Host Swift client·tests, UI agent는 Sources/App·UI·Platform와 App/Platform tests, platform agent는 Tools 빌드·패키징 스크립트·Config·project.yml. Vendor/Filee 원본을 직접 수정하지 않는다.
+구현 경계: `Sources/Core/Host`는 Swift 앱의 클라이언트·wire 모델, `Sources/Engine/Host`와 `Sources/EngineMain`은 Swift helper의 요청·이벤트 처리를 담당한다. 앱 화면·macOS 연동은 `Sources/App`·`Sources/UI`·`Sources/Platform`, 빌드·패키징은 `Tools`·`Config`·`project.yml`에서 관리한다. 전환 전 C# helper는 현재 빌드 입력이 아니다.

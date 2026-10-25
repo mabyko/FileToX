@@ -82,3 +82,22 @@ The baseline/final host SHA-256 prefixes are `82b4e625`/`7add727d`.
 
 Final source/build/quality limits are recorded in
 [the final integration record](../../docs/design/engine-differential-triage.md#final-native-quality-integration-2026-10-24).
+
+
+## Apple Silicon final follow-up (2026-10-25)
+
+The final normal production host (`32bb0c6c…`) was measured against the immutable prior production host
+`7add727d…`, after all builds, delegated work and comparisons finished. Five rounds alternate host order;
+all 60 outputs match, with only the proven generated FB2 document UUID normalized. Best times:
+
+- big.pdf → txt: 1.405622 → **1.411316 s**; ≤0.84 s remains unmet.
+- big.epub → fb2: 0.440922 → **0.444566 s**; ≤0.54 s reached.
+- big.docx → md: 0.093436 → **0.094477 s**; ≤0.12 s reached.
+- big.docx → txt: 0.086643 → **0.085483 s**; ≤0.09 s reached.
+- big.md → html: 0.896054 → **0.866980 s**; improved.
+- big.md → txt: 0.828811 → **0.794579 s**; ≤0.60 s remains unmet.
+
+Raw times, medians, output hashes/parity, host/input hashes and exact isolated command are in
+`build/resume/remaining-1-5-20261024/arm64-final-20261025/`:
+`performance/{raw.json,summary.json}`, `performance-command.json`, `performance-result.json` and `bench-final.py`.
+No timing under concurrent builds is used as acceptance evidence.

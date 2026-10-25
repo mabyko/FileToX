@@ -1518,3 +1518,133 @@ from the earlier worker/pre-fix behavior. No universal metadata-preservation cla
 cancellation latency, interruption inside one Skia draw and PDF text cross-job throughput remain unmeasured;
 cancelled results are checked before output commit. Actual Intel/older-OS execution and distribution signing/
 notarization remain unverified.
+
+
+## Apple Silicon-only final verification (2026-10-25)
+
+The supported product is now **Apple Silicon M1 and newer, arm64, macOS 15+**.
+Intel and Rosetta execution are outside support and completion criteria; earlier cross-build evidence remains
+historical. Source checkpoint `70fff7d` includes the reviewed JPEG ICC, CMYKA ICO, SVG longhand inheritance,
+CMYKA flattening safety and Markdown block-context changes. App/helper/tests share `ARCHS: arm64`; engine
+staging rejects other architectures. CLI Xcode validation also passes `ARCHS=arm64` and an arm64 destination
+to constrain package dependency builds. This validation ran on **M2 Max/macOS 27.0.1**, not physical M1/macOS 15.
+
+Evidence root: `build/resume/remaining-1-5-20261024/arm64-final-20261025/`.
+The normal production host is arm64, SHA-256
+`32bb0c6c47bf5c06650e356168ee2c6569659c65c98116ec69b7bdb1c5dbdd96`;
+its capture preserves 13 executable/resource hashes and 745 tracked build-area paths. The only subsequent
+capture-path change was the authorized, noncompiled `Vendor/PDFium/README.md` support clarification.
+Raw integrity failures and before/after manifests preserve that difference; all runtime inputs, native binaries,
+resources, original corpus, external tools and original captures stayed intact. Full manifest equality is not claimed.
+
+### Changes and actual image checks
+
+- JPEG now tracks actual validated multipart ICC provenance. Genuine RGB sRGB (3,144 bytes) and CMYK
+  (55,280 bytes) profiles survive byte for byte; a gray JPEG no longer receives an invented 4,508-byte profile.
+  Writers reject profile/sample-model mismatches. Native APP2 marker counts handle exact 65,519-byte multiples.
+- CMYKA ICO keeps five-channel samples through padding/resizing, then converts to RGB. Shared background
+  flattening converts CMYKA to RGB before blending, preventing the old invalid-image force-unwrap crash.
+- The final host completed **135/135 image jobs plus four metadata jobs**. Strict stored equality against C# is
+  **103/135**, separate visible equality **105/135**, versus 102/104 for the prior `7add` production host.
+  No strict/visible equality regressions against `7add`; only the two CMYK ICO cases changed pixels.
+  Standard ICO matches **54/54 frames**, JP2 quality **12/12 cases**. Tagged CMYK ICO matches an independent
+  Q8 CMYKA-resize + genuine ICC/CoreGraphics oracle exactly, while still differing from unmanaged C#.
+- All seven prior tagged CMYK outputs preserve their pixels. Comments/IPTC/Photoshop metadata and stripping
+  are checked independently. JPEG provenance does not fix non-JPEG inference: gray PNG still has an inferred
+  GRAY profile and RGB PNG can lose the source sRGB bytes. Remaining 32 strict/30 visible differences are listed
+  in `image-final/summary.json`; no threshold/inspector waiver was applied.
+- SVG longhand font-weight inheritance improves seven new text cases while preserving 55 retained SVGs and
+  the original JP2/JPG/JXL gates. General vertical shaping, filters and shorthand inheritance remain limited.
+  New text cases still miss a quality gate; the original vertical fixture remains 20.83 dB.
+- Markdown avoids repeated block-context reference assignments while keeping all parent links weak.
+  Its implementation handoff passed 119,792 strict comparisons and 5,830 production outputs. The final
+  integrated suite/replay and large-input benchmark complement that evidence; those earlier corpus jobs are
+  not counted as newly repeated final-host conversions. No additional safe PDF text optimization was retained.
+
+### Build, tests and packaged execution
+
+- The integrated Swift release suite before the pause passed **582 engine + 12 Core tests**, 14 skips, zero
+  failures. Runtime code stayed unchanged afterwards. New arm64 SDK-denied **clean build-for-testing** passes;
+  Xcode engine tests: **581 tests, 57 skips, zero failures**. The process-tree timeout test is explicitly excluded
+  from that sandbox because `/bin/ps` is restricted; it passed in the normal Swift suite. Missing optional
+  tools account for additional skips. A separate clean-environment app run passes **74/74 tests**, outside the
+  SDK sandbox. Actual external-tool conversion coverage is recorded separately in the 849 replay.
+- The actual existing-team development-certificate **arm64 Xcode Release** succeeds. App/helper executables
+  are arm64. All five packaged Mach-O files have an arm64 slice; original universal 7-Zip/PDFium remain
+  universal. Deep/strict signing passes, helper has no library-validation exception, no .NET runtime/files or
+  Homebrew/.NET load dependencies are present, and exact OpenJPEG/Skia notices are included.
+- Release helper SHA-256: `5a3a393ca9b2fe4c216d63d08c73dc59bdda7181982002b0a1c5439c049c1727`.
+  A copied app outside the checkout passes **22 checks** with repository and SDK read/write access denied.
+  The Release helper also completes seven TCR conversions; Calibre's independent decoder reads all seven as
+  exact clean expected UTF-8. Settings/data compatibility evidence from the earlier phase remains applicable;
+  no user data, installed reference app or home SDK folders were replaced/deleted.
+- Commands/logs: `xcode-final-plan.json`, `xcode-final-results.json`, `swift-production-result.json`,
+  `release-final-audit.json`, `release-final-relocated-proof.json`, `release-tcr-readbacks.json`.
+  Isolation is a clean environment plus denied SDK paths on this Mac, not a fresh SDK-free OS installation.
+  Developer ID distribution, notarization, physical M1/macOS 15 and separate-OS execution remain unverified.
+
+### Fresh replay and corrected inspection
+
+All **849/849** host jobs ran once: **786 completed / 63 existing failures**, zero transport/harness errors.
+No job state, error-key, output count/assignment or history audit issue was found, and staging leftovers are empty.
+All seven TCR output files are byte-identical to `7add`.
+
+The initial capture had five WOFF2 inspection errors: the new TCR import prevented the isolated Python font
+inspector from starting. Commit `d309b62` moves that import into the TCR branch and adds an isolated-entry
+regression. Both Python 3.9 and 3.15 pass **24/24 harness tests**; all five preserved WOFF2 outputs decode correctly.
+The original replay/capture and errors remain intact. A separate derived capture re-inspects only those five
+fingerprints, with **zero repeated host conversions and zero artifact changes**; it has zero inspection errors.
+
+Comparison totals retain distinct policies. Legacy C# comparison: **580 PASS / 264 WARN / 5 FAIL**;
+legacy versus `7add`: **765 / 83 / 1**. The new exact-TCR + optional 144DPI PDF-page-content policy against C#:
+**585 PASS / 255 WARN / 9 FAIL**. These policies are not interchangeable and do not establish blanket layout parity.
+
+The unwaived legacy FAILs are the four captured C# missing-image references and `auto-067-tcr-to-txtz`.
+For the latter, title/author, normalized metadata and `index.txt` match, but Calibre-generated cover layouts and
+OCR differ; bounded evidence indicates likely template variation, and the strict result remains FAIL.
+Stronger inspection additionally retains the SNB/TCR trailing newline, corrected HTML/TCR `Fil` payload,
+SNB PDF first-page raster difference and BMP PDF raster PSNR 28.59248 dB. The BMP's extracted RGB image payload
+is byte-identical to source/C#/`7add`; this does not waive its rendered difference. The SNB PDF's second page is
+exact; the direct XObject probe did not establish first-page cover attribution. PDF inspection excludes annotations
+and uses bounded whole-media-box page content, not a proof of every visual/layout property.
+
+`final-replay-summary.json`/`REPORT.md` preserve the original run, failed inspection and exact documentation
+integrity delta. Corrected inspection provenance and reports are in `woff2-correction.json`, `reinspection-summary.json`,
+`replay-inspected/` and `reinspection/`. No outputs, comparison thresholds or old reports were rewritten.
+
+
+### Sequential performance and remaining dependencies
+
+The final normal production host (`32bb0c6c…`) was measured against the immutable prior production host
+`7add727d…`, after all builds, delegated work and comparisons finished. Five rounds alternate host order;
+all 60 outputs match, with only the proven generated FB2 document UUID normalized. Best times:
+
+- big.pdf → txt: 1.405622 → **1.411316 s**; ≤0.84 s remains unmet.
+- big.epub → fb2: 0.440922 → **0.444566 s**; ≤0.54 s reached.
+- big.docx → md: 0.093436 → **0.094477 s**; ≤0.12 s reached.
+- big.docx → txt: 0.086643 → **0.085483 s**; ≤0.09 s reached.
+- big.md → html: 0.896054 → **0.866980 s**; improved.
+- big.md → txt: 0.828811 → **0.794579 s**; ≤0.60 s remains unmet.
+
+Raw times, medians, output hashes/parity, host/input hashes and exact isolated command are in
+`build/resume/remaining-1-5-20261024/arm64-final-20261025/`:
+`performance/{raw.json,summary.json}`, `performance-command.json`, `performance-result.json` and `bench-final.py`.
+No timing under concurrent builds is used as acceptance evidence.
+
+The PDF investigation retained no additional safe speedup: PDFKit attributed-string construction remains the
+cost. PDFium text extraction changed Korean spacing; geometry-only font inference also failed parity. A global
+cmark-gfm replacement was rejected because 80,662/119,792 outputs differed. The smaller Swift Markdown change
+preserves the established semantics; the two performance goals are still open.
+
+Runtime dependencies are Swift/macOS frameworks plus pinned native LibRaw, libjpeg-turbo, libwebp, libjxl,
+OpenJPEG, PDFium and Skia. Bundled rhwp/7-Zip remain. FFmpeg, Ghostscript, Pandoc, LibreOffice and Calibre are
+external tools used only for their routes; pinned optional QA copies were retained. FreeType and native
+ImageMagick comparison oracles are QA dependencies, not libraries newly shipped with the app. Initial package
+resolution/download caches may need network access; they require no .NET tooling.
+
+Domain-specific routing, job management, settings/presets/history, wire protocol and format semantics stay in
+Swift. They have no drop-in C/C++ replacement that preserves the Filee contracts. C/C++ is used where a native
+codec/renderer matches quality and options; blanket replacements that changed text/images were not accepted.
+Remaining work includes the unwaived strict/WARN differences, general SVG text shaping, non-JPEG ICC and
+container fidelity, PDF/Markdown speed targets, native cancellation latency during synchronous computation,
+and separate hardware/OS/distribution verification. No conversion route was removed to obtain these results.

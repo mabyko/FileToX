@@ -1,5 +1,11 @@
 # PDFium in FileToX
 
+The current Swift helper uses the arm64 slice of this vendored PDFium library. FileToX supports
+**Apple Silicon M1 or later (arm64), macOS 15 or later**. Intel Macs and Rosetta execution are outside
+the product support and validation scope; retaining universal vendor assets does not add that obligation.
+
+## Historical C# renderer baseline
+
 PDF rasterization uses **PDFium 147.0.7690.0**, the exact build used by the old C# helper:
 Filee pins PDFtoImage **5.2.1**, whose macOS dependency is bblanchon.PDFium.macOS **147.0.7690**.
 The installed C# helper's `.deps.json` confirms both versions. The arm64 executable `__text` section
@@ -23,8 +29,11 @@ __TEXT __text` rows: `ad4bf12d44c5822760723a8c9597179d94811300be148eb153b9144c95
 
 The sole dylib modification is `install_name_tool -id @rpath/libpdfium.dylib`, followed by ad-hoc signing.
 Checked-in dylib SHA-256: `e09fa5c6c9ac1baa56b6e8b25257eb402f644312d983d3e23b714e4de1e80079`.
-Both macOS arm64 and x86_64 slices are retained. The app builds one native architecture at a time,
-with macOS 15 deployment (`project.yml`). No PDFium downloads or generation occur at build time.
+Both macOS arm64 and x86_64 slices are retained. The pinned upstream universal archive stays an
+unmodified original; the prepared dylib has only the install-name/signature adjustment above. The app,
+helper and tests use `ARCHS: arm64` with macOS 15 deployment (`project.yml`) and link the arm64 slice.
+The pinned Skia upstream archives and prepared universal static SVG library are also retained; their
+x86_64 slices do not imply Intel support. No PDFium downloads or generation occur at build time.
 
 ## Build and embedding
 
@@ -36,9 +45,24 @@ Existing libwebp/libjxl Swift package dependencies still need their ordinary fir
 XcodeGen imports the same module in EngineKit and explicitly links, embeds and code-signs the dylib in
 `FileToXEngine.app/Contents/Frameworks` and in the engine test bundle. Their rpaths use the executable/loader's
 `../Frameworks`, without a vendor-source rpath. Xcode also injects a Debug package-products rpath;
-PDFium loads from the embedded library, verified after relocating the helper to `/tmp`.
+Previous-phase verification confirmed PDFium loading from the embedded library after relocating
+the helper to `/tmp`.
 Xcode signs nested code before signing the helper. The staging
 script copies PDFium's licences alongside LibRaw's. Regenerate with `xcodegen generate` after project edits.
+
+## Current validation status (2026-10-25)
+
+Production source is `70fff7d`. The parent verified Release app/helper settings as arm64 with a macOS 15
+deployment target, and a fresh arm64 SDK-denied clean build passed. Engine tests are running and final
+checks remain pending. Xcode invocations specify both `-destination 'platform=macOS,arch=arm64'` and
+`ARCHS=arm64` to constrain package dependency builds too. The validation host is an M2 Max on macOS 27;
+physical M1 execution and macOS 15 execution are not claimed.
+
+The [previous-phase integration record](../../docs/design/engine-differential-triage.md#final-native-quality-integration-2026-10-24)
+preserves successful development-certificate Release signing and relocated conversion checks. Those
+results do not establish the pending arm64 final checks. Historical x86_64 cross-compilation/linkage
+passed while Intel execution was unavailable; Intel/Rosetta validation is not a current requirement.
+Developer ID signing and notarization remain unverified. This documentation update ran no builds.
 
 ## Rendering contract
 

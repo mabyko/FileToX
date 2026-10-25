@@ -4,7 +4,7 @@
 
 FileToX is a Mac-only file converter inspired by [Filee](https://github.com/KnifeLemon/Filee). Drop a file and pick a format to convert it.
 
-Built with SwiftUI and AppKit for macOS 15 or later. English is the default language, with Korean and Japanese also available.
+Built with SwiftUI and AppKit for Apple Silicon Macs (M1 or later, arm64) running macOS 15 or later. Intel Macs and Rosetta execution are outside the support and validation scope. English is the default language, with Korean and Japanese also available.
 
 ## See it in action
 
@@ -54,7 +54,7 @@ This does not guarantee conversion between every registered format. The route pl
 
 The default bundle includes built-in libraries, rhwp and 7-Zip. FFmpeg, Ghostscript, Pandoc, LibreOffice and Calibre use system installations or copies selected under **Conversion engines → External engine executables**. Copies fetched by the development download tool are not automatically added to user settings.
 
-Outputs are written to a hidden staging folder beside the source, then published individually. Source files stay protected even with Overwrite; the default conflict policy chooses a new name. If publishing multiple outputs fails partway through, already published results are reported accurately. The whole batch is not an atomic transaction. App data is separated under `~/Library/Application Support/FileToX/{core,engines,tmp}`.
+Outputs are written to a hidden staging folder beside each final destination, then published individually. Source files stay protected even with Overwrite; the default conflict policy chooses a new name. If publishing multiple outputs fails partway through, already published results are reported accurately. The whole batch is not an atomic transaction. App data is separated under `~/Library/Application Support/FileToX/{core,engines,tmp}`.
 
 <details>
 <summary>Development, build instructions and verification</summary>
@@ -68,25 +68,25 @@ The current app version is **0.0.1 (build 2)**, an internal development version 
 ```sh
 xcodegen generate
 xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
-  -destination 'platform=macOS' -derivedDataPath build/DerivedData build
+  -destination 'platform=macOS,arch=arm64' ARCHS=arm64 -derivedDataPath build/DerivedData build
 open 'build/DerivedData/Build/Products/Debug/FileToX Dev.app'
 ```
 
-Xcode consumes the engine and Core products from the root `Package.swift`, then signs and embeds the Swift helper, PDFium and bundled tools. Initial package resolution fetches pinned libwebp/libjxl sources; staging downloads pinned rhwp and 7-Zip archives only when their verified cache is missing. LibRaw, libjpeg-turbo and OpenJPEG sources, the PDFium dylib, and a pinned universal static Skia SVG library are checked in. Native SVG rendering covers a conservative primitive subset; other SVG features and vector PDF retain CoreSVG. Vendor records contain provenance and license notices.
+Xcode consumes the engine and Core products from the root `Package.swift`, then signs and embeds the Swift helper, PDFium and bundled tools. `project.yml` sets `ARCHS: arm64` for the app, helper and tests; bundled-engine staging rejects other architectures. The Xcode commands here specify both the arm64 destination and `ARCHS=arm64` to constrain Swift package dependency builds too. Initial package resolution fetches pinned libwebp/libjxl sources; staging downloads pinned rhwp and 7-Zip archives only when their verified cache is missing. LibRaw, libjpeg-turbo and OpenJPEG sources, the PDFium dylib, and a pinned universal static Skia SVG library are checked in. Pinned upstream PDFium and Skia archives remain unmodified originals; the retained universal vendor libraries supply their arm64 slices to the app's linkage. Their x86_64 slices do not imply Intel support. Native SVG rendering covers a conservative primitive subset; other SVG features and vector PDF retain CoreSVG. Vendor records contain provenance and license notices.
 
 ```sh
 swift build -c release --product FileToXEngine
 python3 Tools/fetch-optional-engines.py --help
 ```
 
-The Debug bundle ID is `forked.filetox.local.dev`; Release uses `forked.filetox.local`. Keep personal settings in the Git-excluded `Config/Local.xcconfig`. Debug and Release default to local ad-hoc signing; an actual Xcode Release build with the existing team's development certificate has also been verified. Developer ID signing and notarization are unfinished. x86_64 Release compilation and linkage are verified; Intel execution has not been verified.
+The Debug bundle ID is `forked.filetox.local.dev`; Release uses `forked.filetox.local`. Keep personal settings in the Git-excluded `Config/Local.xcconfig`. Debug and Release default to local ad-hoc signing. The arm64 Release also passed an actual Xcode build with the existing team's development certificate, deep/strict signature verification and 22 relocated checks with repository and .NET SDK access denied. Developer ID signing and notarization remain unverified. Validation ran on an M2 Max/macOS 27; physical M1 or macOS 15 execution is not claimed. See the [latest verification record](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25) for scope and remaining differences.
 
 ## Verification
 
 ```sh
 swift test
 xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
-  -destination 'platform=macOS' -derivedDataPath build/DerivedData test
+  -destination 'platform=macOS,arch=arm64' ARCHS=arm64 -derivedDataPath build/DerivedData test
 python3 -I Tools/engine-compare/test_harness.py
 python3 -I Tools/test-engine-entitlements.py
 ```
@@ -101,9 +101,11 @@ python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optiona
 
 During earlier app verification on Apple silicon, 32 Xcode tests, 12 Swift Package tests, 22 built-in engine checks (20 actual conversions and 2 selection checks), and 11 additional samples covering optional engines, video, audio, in-flight cancellation and attached-image collisions passed. Swift communication also verified PNG→JPG, PDF merge→multiple PNGs, unknown files and folders→ZIP→extraction, and history. In the running app, clicking the donut's JPG preset produced an output and a recent-history entry. Actual Finder Option-drag checks covered slow movement, source preservation and Finder focus after dropping. Korean HWP and DOCX→PDF text extraction and PNG rendering were also verified. Language switches between English, Korean and Japanese update the running app and host. The native color picker, saved colors after relaunch, localized built-in names and preservation of custom names were also verified.
 
-The final 849-case replay at `dc7ab6a` records **581 PASS / 264 WARN / 4 FAIL** against C#, with 786 completed jobs and the same 63 failed jobs as the baseline. The four strict failures involve missing image references in the captured baseline; they remain unwaived. WARN does not establish visual or layout equivalence. Final-source SDK-denied clean builds/tests, certificate signing, relocated conversions, native image comparisons and remaining limitations are in [the final integration record](docs/design/engine-differential-triage.md#final-native-quality-integration-2026-10-24). Earlier user-data compatibility evidence remains in [the integration record](docs/design/engine-differential-triage.md#performance-integration-2026-10-23). Safe TCR writing requires `calibre-debug` beside the resolved `ebook-convert` in a complete Calibre installation; no separate Python installation is needed.
+The 2026-10-25 arm64 replay ran all **849 cases**: 786 completed and the same 63 failed jobs as the baseline, with no state/error-key/output-count changes. After correcting and re-running only five WOFF2 inspections, inspection errors are zero. Legacy comparison against C#: **580 PASS / 264 WARN / 5 FAIL**; stronger exact-TCR and PDF raster inspection: **585 / 255 / 9**. Policies are separate. Strict failures remain unwaived, including four missing baseline image references and a Calibre-generated cover difference. WARN does not establish visual or layout equivalence. Commands, native image results, signing and remaining limits are in [the latest verification record](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25); earlier user-data compatibility evidence remains in [the integration record](docs/design/engine-differential-triage.md#performance-integration-2026-10-23). Safe TCR writing requires `calibre-debug` beside the resolved `ebook-convert` in a complete Calibre installation; no separate Python installation is needed.
 
-Not every format pair or codec has been tested. Ghostscript is absent on this machine, and its FFmpeg lacks some encoders. Automatic watch folders and in-app engine downloads are not connected yet. Login registration and notification delivery across a real logout/login remain unverified. External exFAT and SMB volumes, Intel, distribution notarization and TCC relaunch checks remain unverified.
+Historical architecture evidence: before the arm64-only support decision, x86_64 Release cross-compilation and linkage passed; Intel execution was unavailable (`Bad CPU type in executable`, no Rosetta). This record does not create an Intel or Rosetta validation requirement for the current product.
+
+Not every format pair or codec has been tested. Ghostscript is absent on this machine, and its FFmpeg lacks some encoders. Automatic watch folders and in-app engine downloads are not connected yet. Login registration and notification delivery across a real logout/login remain unverified. External exFAT and SMB volumes, distribution notarization and TCC relaunch checks remain unverified.
 
 ## Source and design
 
@@ -122,4 +124,4 @@ Mockups from the earlier conversation are kept in `docs/archive/pre-filetox/`. A
 
 FileToX is a Mac-only file converter inspired by [Filee](https://github.com/KnifeLemon/Filee), built with SwiftUI and AppKit for macOS. It is an independent project, not an official Filee release.
 
-FileToX is licensed under the [MIT License](LICENSE). Filee's [MIT license](docs/upstream/Filee.LICENSE) and [third-party notices](docs/upstream/Filee.THIRD-PARTY-NOTICES.md) are preserved. MIT does not replace the licenses of external engines. Camera RAW is decoded with [LibRaw](https://www.libraw.org) 0.22.2, used under the [CDDL-1.0](docs/upstream/LibRaw.LICENSE) ([notices](docs/upstream/LibRaw.THIRD-PARTY-NOTICES.md)); its unmodified source is in `Vendor/LibRaw`. JPEG files are written, and lossy DNGs decoded, with [libjpeg-turbo](https://libjpeg-turbo.org) 3.2.0 under the IJG License ([licence](docs/upstream/libjpeg-turbo.LICENSE), [notices](docs/upstream/libjpeg-turbo.THIRD-PARTY-NOTICES.md)); this software is based in part on the work of the Independent JPEG Group. Its unmodified source is in `Vendor/libjpeg-turbo`. Notices for the actual bundle are included in the helper's `Contents/Resources/Notices`. PDF pages are rasterized with bundled [PDFium](Vendor/PDFium/README.md) 147.0.7690.0 (macOS arm64/x86_64), matching the former C# renderer; its [BSD-3 license](docs/upstream/PDFium.LICENSE) and [bundled third-party notices](docs/upstream/PDFium.THIRD-PARTY-NOTICES.md) ship with the helper.
+FileToX is licensed under the [MIT License](LICENSE). Filee's [MIT license](docs/upstream/Filee.LICENSE) and [third-party notices](docs/upstream/Filee.THIRD-PARTY-NOTICES.md) are preserved. MIT does not replace the licenses of external engines. Camera RAW is decoded with [LibRaw](https://www.libraw.org) 0.22.2, used under the [CDDL-1.0](docs/upstream/LibRaw.LICENSE) ([notices](docs/upstream/LibRaw.THIRD-PARTY-NOTICES.md)); its unmodified source is in `Vendor/LibRaw`. JPEG files are written, and lossy DNGs decoded, with [libjpeg-turbo](https://libjpeg-turbo.org) 3.2.0 under the IJG License ([licence](docs/upstream/libjpeg-turbo.LICENSE), [notices](docs/upstream/libjpeg-turbo.THIRD-PARTY-NOTICES.md)); this software is based in part on the work of the Independent JPEG Group. Its unmodified source is in `Vendor/libjpeg-turbo`. Notices for the actual bundle are included in the helper's `Contents/Resources/Notices`. PDF pages are rasterized with bundled [PDFium](Vendor/PDFium/README.md) 147.0.7690.0 (arm64 linkage from the retained universal library), matching the former C# renderer; its [BSD-3 license](docs/upstream/PDFium.LICENSE) and [bundled third-party notices](docs/upstream/PDFium.THIRD-PARTY-NOTICES.md) ship with the helper.

@@ -1,14 +1,32 @@
-# C# 변환 엔진의 Swift 전환 계획
+# C# 변환 엔진의 Swift 전환 기록
+
+## 현재 상태 (2026-10-25)
+
+현재 제품 소스는 `70fff7d`다. 앱은 SwiftUI·AppKit, helper는 `Sources/EngineMain`에서 시작하는 Swift 실행 파일이다. 앱 통신·모델은 `Sources/Core`(`FileToXCore`), host·변환 코어·엔진은 `Sources/Engine`(`FileToXEngineKit`)에 있다. 빌드 정의는 `Package.swift`, 앱·helper 번들·서명·도구 내장은 `project.yml`과 `Tools/stage-bundled-engines.sh`가 담당한다. 현재 빌드·실행에는 .NET SDK·런타임·NuGet 복원이나 과거 C# host가 필요 없다.
+
+지원 범위는 **Apple Silicon M1 이상(arm64), macOS 15 이상**이다. 최소 OS는 유지하며 Intel·Rosetta 실행과 그 검증은 요구하지 않는다. 앱·helper·테스트는 `ARCHS: arm64`이고 staging도 다른 아키텍처를 거부한다. Xcode 명령에는 `-destination 'platform=macOS,arch=arm64' ARCHS=arm64`를 함께 지정해 Swift package 의존성 빌드도 제한한다. 구체적인 명령과 현재 데이터·취소·출력 안전은 [README](../../README.md), [아키텍처](../architecture.md), [패키징](macos-packaging.md)을 따른다.
+
+내장 엔진은 Swift 코드·macOS 프레임워크·네이티브 라이브러리를 사용하고 rhwp·7-Zip은 번들 실행 파일을 사용한다. FFmpeg·Ghostscript·Pandoc·LibreOffice·Calibre는 시스템 설치나 사용자 지정 사본을 사용한다. 아래 초기 계획의 JPEG 2000 품질 제한 수용, SVG 렌더링 범위와 CMYK 처리 설명은 당시 결정이다. 이후 JPEG 2000 쓰기는 OpenJPEG를 사용하고, 제한된 SVG 기본 도형은 정적 Skia bridge로 처리하며 나머지 SVG 기능과 벡터 PDF는 CoreSVG를 유지한다. 현재 색상 처리·비교 한계는 [이전 단계 최종 통합 기록](engine-differential-triage.md#final-native-quality-integration-2026-10-24)에서 확인한다.
+
+PDFium·Skia의 pinned upstream archive는 원본 그대로 보존한다. 준비된 universal vendor 라이브러리의 arm64/x86_64 slice는 유지하고 앱은 arm64에 링크한다. PDFium install name·서명 조정과 Skia 자체 bridge·정적 링크는 각 Vendor provenance에 기록한다. 보존된 x86_64 slice와 과거 x86_64 교차 빌드 증거는 Intel 지원이나 추가 검증 의무를 뜻하지 않는다. 라이선스와 고지는 계속 보존한다.
+
+이전 단계에서 SDK 접근 차단 빌드·테스트, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사와 재배치한 앱의 변환 검증을 통과했다. 이는 Developer ID 서명·공증 검증이 아니다. 위 기록의 이전 최종 비교 결과와 WARN·FAIL 한계도 그대로 유지하며 새 검증 결과로 재사용하지 않는다.
+
+실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [최신 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
+
+## 과거 전환 계획과 단계별 결정 (2026-10-23)
+
+이하 본문은 전환 전 구조, 당시 선택지·구현 결정·비교 수치와 전환 순서를 보존한 기록이다. C#·NuGet·.NET 빌드 단계, 대체 전후 설명과 당시 남은 한계는 현재 빌드 지침이나 최신 상태로 적용하지 않는다. 현재 상태는 위 절과 연결된 최종 통합 기록을 따른다.
 
 작성 2026-10-23. FileToX의 C# helper(`EngineHost` + Filee `Core`·`Engines` + NuGet)를 Swift helper로 바꿔 개발·빌드·배포·실행에서 .NET을 없앤다. 이식 규칙은 [swift-engine-port.md](swift-engine-port.md)에 있다.
 
-## 1. 현재 구조와 .NET 의존
+### 1. 전환 전 구조와 .NET 의존 (당시 기록)
 
 - 앱(SwiftUI·AppKit)은 `Contents/Helpers/FileToXEngine.app/Contents/MacOS/FileToXEngine`을 실행하고 stdio NDJSON([host-wire-v1](host-wire-v1.md))으로 통신한다.
 - helper는 C# `EngineHost/*.cs`(약 2,000줄)가 Filee `Core`(3,566줄)·`Engines`(33,000줄)와 NuGet 패키지를 참조하는 self-contained .NET 10 앱이다. 배포 helper는 약 190 MB이며 .NET 런타임·NuGet DLL·native dylib(ImageMagick, PDFium, Skia, HarfBuzz, Unhwp)를 포함한다.
 - Xcode 빌드 단계가 매번 `Tools/build-engine-host.sh`를 호출하고, 이 스크립트가 엔진 변경과 관계없이 `~/.dotnet` SDK를 먼저 확인한다.
 
-## 2. 실제로 지원·검증된 변환 기능
+### 2. 실제로 지원·검증된 변환 기능
 
 엔진 23개가 Filee `FormatRegistry`의 171개 형식을 다룬다. 실제 가능한 조합은 엔진 상태와 `RoutePlanner`(최대 3단계)가 정한다. 기존 기록(`EngineHost/IMPLEMENTATION.md`, README)으로 확인된 범위는 다음과 같다.
 
@@ -22,7 +40,7 @@
 
 전체 형식 조합은 위 표본 밖에 있다. 전환에서는 C# helper를 기준선으로 실행해 **모든 형식의 선택 결과(사용 가능한 출력 형식·프리셋)와 형식별 대표 변환 결과**를 기록하고 Swift helper와 비교한다(5절).
 
-## 3. 엔진별 C# 의존과 대체 방법
+### 3. 엔진별 C# 의존과 대체 방법
 
 | 엔진 id | C# 의존 | Swift 대체 | 난이도 |
 | --- | --- | --- | --- |
@@ -53,7 +71,7 @@ Calibre의 TCR 쓰기는 기존 문서 해석·텍스트 작성기를 유지하�
 
 코어와 host도 Swift로 옮긴다: 형식 레지스트리, 프리셋·출력 규칙·이름 바꾸기, 프로필 선택, 경로 탐색(`RoutePlanner`·`ConverterCatalog`), 작업 큐와 출력 staging·확정(패치 0001), 설정·프리셋·프로필·이력 저장소(`UserDataStore`의 JSON 형식과 스키마 이전 그대로), 지역화, NDJSON 프로토콜·잠금·journal 정리.
 
-## 4. 동등한 대체가 어려운 기능
+### 4. 동등한 대체가 어려운 기능
 
 다음은 그대로 옮기기 어렵거나 결과가 달라질 수 있다. 결정 전에는 제거하지 않는다.
 
@@ -84,7 +102,7 @@ Calibre의 TCR 쓰기는 기존 문서 해석·텍스트 작성기를 유지하�
 
 그 밖에 PDF 텍스트 배치(PdfPig→PDFKit), HTML 파싱(AngleSharp→libxml2), Markdown 확장(Markdig→Swift 파서)은 결과가 미세하게 달라질 수 있어 비교 검증으로 확인한다. 앱에 연결되지 않은 Filee 기능(앱 내 엔진 다운로드 `EngineInstaller`, 감시 폴더 실행 `FolderWatcher`)은 설정 데이터만 보존하고 실행 코드는 옮기지 않는다.
 
-## 5. 전환 순서와 검증
+### 5. 전환 순서와 검증
 
 1. **기반**: 계약(형식·프리셋·변환기 프로토콜), ZIP·XML·인코딩·바이너리·이미지 정보·경로 도구, 외부 프로그램 실행기(프로세스 트리 종료·타임아웃·취소), 엔진 위치 탐색, 공유 문서·표 모델. — 완료(테스트 19건 통과).
 2. **기준선**: 설치된 C# helper로 전체 선택 결과와 형식별 대표 변환을 기록하는 비교 도구(`Tools/engine-compare/`).

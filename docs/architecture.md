@@ -1,22 +1,69 @@
 # FileToX 설계
 
-## 현재 구현
+## 현재 구현과 지원 범위 (2026-10-25)
 
-앱은 SwiftUI·AppKit, 변환 helper는 Swift로 구현한다. 엔진·작업 큐·설정·이력은 `Sources/Engine`,
-앱에서 사용하는 통신·모델은 `Sources/Core`에 있다. 엔진과 네이티브 라이브러리의 빌드 정의는
-루트 `Package.swift`, 앱 번들·서명·내장은 `project.yml`이 담당한다. .NET SDK·런타임·NuGet 의존성은 없다.
-현재 기능별 구성은 [Swift 전환 계획](design/swift-engine-migration.md), 빌드·배포는
-[패키징](design/macos-packaging.md), 실제 검증 범위는 [최종 검증 기록](design/engine-differential-triage.md#performance-integration-2026-10-23)을 따른다.
+FileToX는 Filee에서 영감을 받은 Mac 전용 파일 변환 앱이다. **Apple Silicon M1 이상(arm64), macOS 15 이상**을 지원한다. 최소 OS는 바뀌지 않는다. Intel Mac·Rosetta 실행과 그 검증은 제품 지원 범위에 포함하지 않는다.
 
-## 전환 전 설계 기록
+앱은 SwiftUI·AppKit, 변환 helper는 Swift다. 현재 빌드에는 .NET SDK·런타임·NuGet 복원이나 Filee C# 프로젝트가 필요 없다. C# 기준선은 이식 결과를 비교하기 위한 과거 증거로 보존한다.
 
-이하 C#·NuGet·Filee manifest 관련 내용은 당시 설계의 조사 기록이며 현재 빌드 지침으로 적용하지 않는다.
+## 소스와 빌드 경계
+
+- `Sources/App`, `Sources/UI`, `Sources/Platform`: 앱 상태·화면·원형 메뉴, Finder 드래그·창·권한·로그인·알림 등 macOS 연동.
+- `Sources/Core` → `FileToXCore`: 앱이 사용하는 공개 통신 클라이언트(`EngineHost`), wire 모델과 정적 카탈로그 로더. 변환 엔진을 앱 프로세스에서 실행하지 않는다.
+- `Sources/Engine` → `FileToXEngineKit`: Swift host, 형식·프리셋·프로필·설정·이력, 경로 탐색·작업 큐, 변환기와 외부 도구 실행.
+- `Sources/EngineMain`: `EngineHostMain.run`을 호출하는 `FileToXEngine` 실행 진입점.
+- `Package.swift`: Core·EngineKit·helper 실행 제품, 네이티브 라이브러리·리소스·패키지 테스트의 공통 정의.
+- `project.yml`: 로컬 Swift 패키지를 사용하는 앱·helper 번들, 내장 라이브러리·도구·리소스, 서명·Xcode 테스트. 공통 `ARCHS: arm64`를 사용하고 bundled-engine staging도 다른 아키텍처를 거부한다.
+
+PDFium과 Skia의 pinned upstream archive는 원본 그대로 보존한다. 준비된 universal vendor 라이브러리는 유지하되 앱·helper는 arm64 slice에 링크한다. PDFium dylib의 install name·서명 조정과 Skia의 자체 bridge/정적 링크는 각 Vendor provenance에 별도로 기록돼 있다. universal 자산의 x86_64 slice는 앱의 Intel 지원을 뜻하지 않는다. 상세 배치는 [패키징](design/macos-packaging.md)을 따른다.
+
+## 형식과 변환 엔진
+
+실행 시점의 기준은 Swift `FormatRegistry`, `EngineRegistry`, `ConverterCatalog`다. 가상 `folder`를 제외한 171개 형식과 23개 엔진을 등록하며, 읽기 전용 형식은 출력 선택에서 제외한다. 등록 수가 모든 형식 쌍의 변환 가능성을 뜻하지 않는다. `ConverterCatalog.statusOf`·`createPlanner`가 사용 가능한 엔진을 반영하고 `RoutePlanner`는 최대 3단계 경로를 찾는다. `Selection`·`ProfileSelector`가 입력별 프로필과 프리셋·출력 선택을 판단한다. UI는 host의 판단 결과를 사용한다.
+
+`Resources/FileeFormats.json`은 앱의 정적 카탈로그용이다. 엔진의 실행 가능 여부나 경로를 이 JSON으로 판단하지 않는다. 형식 목록은 [formats.md](formats.md), 기능별 이식 근거는 [Swift 전환 기록](design/swift-engine-migration.md)에 있다.
+
+내장 변환기는 Swift 코드와 macOS 프레임워크, LibRaw·libjpeg-turbo·libwebp·libjxl·OpenJPEG·PDFium·Skia 등의 네이티브 구성 요소를 사용한다. `MagickImageConverter`·`PdfSharpConverter` 등 기존 id/타입 이름은 호환성을 위해 남아 있으며 해당 NuGet 패키지를 실행한다는 뜻이 아니다. PDF 래스터는 PDFium, PDF 편집·텍스트 처리는 PDFKit을 사용한다. Skia SVG bridge는 허용한 기본 도형만 처리하며 나머지 SVG 기능과 벡터 PDF는 CoreSVG를 유지한다.
+
+기본 번들에는 rhwp·7-Zip 실행 파일을 포함한다. FFmpeg·Ghostscript·Pandoc·LibreOffice·Calibre는 시스템 설치나 사용자가 지정한 사본을 사용한다. `EngineEnvironment`는 사용자 지정 → 번들/다운로드 경로 → 시스템 경로 순서로 찾으며, 개발 다운로드 도구로 받은 사본이 사용자 설정에 자동 등록되지는 않는다. 없는 엔진과 지원하지 않는 macOS 경로는 사용 불가 이유를 반환한다.
+
+## 통신·진행·취소·이력
+
+SwiftUI/AppKit → `AppModel` → `FileToXCore.EngineHost` → 번들의 Swift helper → `Host`·`JobQueue` → 내장 변환기/외부 도구 순서로 실행한다. 앱은 `Contents/Helpers/FileToXEngine.app/Contents/MacOS/FileToXEngine`을 별도 프로세스로 시작한다.
+
+통신은 stdin/stdout의 버전 1 NDJSON이다. `EngineHostMain`은 protocol fd를 분리하고 엔진의 일반 stdout을 stderr로 돌려 wire 오염을 막는다. 요청 id, 버전·형식·입력 경로와 프리셋 옵션을 검증한다. 주요 요청은 `catalog.get`, `selection.resolve`, `job.start`, `job.cancel`, `library.get/save`, `settings.save`, `history.get/clear`다. 계약은 [host-wire-v1](design/host-wire-v1.md), 실제 구현은 `Sources/Core/Host/EngineHost.swift`, `Sources/Engine/Host/Host.swift`다.
+
+`job.start` 응답으로 job id를 먼저 보낸다. `JobQueue`는 작업을 순서대로 실행하고 작업 안에서는 CPU 수와 엔진별 동시 실행 제한에 따라 파일을 처리한다. 단계별 진행을 파일 진행률로 합산하며 작업 진행률은 파일 평균이다. `Host`가 변경분을 100ms 간격으로 `job.updated`로 보내고 종료 시 `job.finished`에 파일별 결과·복수 출력·오류·재시도 입력을 담는다. `UserDataStore.addHistory`는 이력 저장 설정을 따르며 최대 200개를 보존한다. 이력 저장 실패는 stderr로 기록하고 변환 결과는 계속 보고한다.
+
+`job.cancel`은 `ConversionJob.cancel()`과 Swift Task 취소로 이어진다. 단계 사이와 출력 확정 전에 취소를 검사하며 동기 네이티브 호출은 즉시 중단되지 않을 수 있다. `ProcessRunner`는 외부 도구를 셸 없이 실행 파일과 인자 배열로 시작하고, timeout·취소 시 자식 프로세스 트리를 종료한다. 취소 요청 후 30초 안에 종료 이벤트가 오지 않으면 앱 클라이언트는 helper 프로세스 그룹을 종료한다. 다른 대기 작업도 중단되며 host 재시작은 제한된 횟수로 시도한다. 취소한 작업을 자동 재실행하지 않는다.
+
+## 데이터 경계와 출력 안전
+
+앱은 `~/Library/Application Support/FileToX/`의 `core`·`engines`·`tmp`를 생성한다. helper는 명시한 `--data`·`--engines` 경로를 사용하고 `TMPDIR`을 같은 루트의 `tmp`로 설정한다. `UserDataStore`의 Filee 기본 경로에 의존하지 않는다. `core`에는 설정·프리셋·프로필·이력과 엔진 상태를 저장하고 `engines`는 선택 엔진 경로, `tmp/Filee/<jobId>`는 작업 중간 파일이다. 서명한 앱 내부에는 사용자 데이터를 쓰지 않는다.
+
+helper는 `core/.lock`으로 같은 데이터 디렉터리의 중복 실행을 막는다. 설정·라이브러리 저장 요청은 revision 충돌과 옵션을 검증한다. JSON은 임시 파일에 쓴 뒤 rename으로 교체하고, 읽지 못하는 기존 파일은 `.broken` 사본 보존을 시도한다. 여러 설정 파일을 한 번에 바꾸는 트랜잭션을 보장하지는 않는다.
+
+최종 출력은 프리셋의 저장 규칙으로 결정한다. 기본은 원본 옆·이름 충돌 시 새 이름이다. `StagedOutputs`는 각 최종 출력의 부모 폴더에 숨김 `.filee-out-<8자리 hex>` 폴더를 만들고 엔진이 그 안에 쓰게 한다. `OutputCommit`은 확정 시 기존 경로와 입력 파일의 identity를 확인해 Overwrite에서도 입력을 보호한다. 파일별로 확정하며 다중 결과·부속 파일·압축 해제 디렉터리 전체가 하나의 원자적 트랜잭션은 아니다. 중간에 실패하면 이미 확정한 출력은 결과에 남긴다.
+
+정상 종료·실패·취소 시 미확정 staging과 작업 임시 파일 정리를 시도한다. staging 경로는 `core/staging.journal`에 기록하고 다음 helper 시작 시 이름·절대 경로·symlink 여부를 검사해 잔여 staging을 정리한다. 강제 종료가 이미 게시한 결과를 되돌리지는 않는다. 실제 경계는 `JobQueue.swift`, `OutputCommit.swift`, `StagingJournal.swift`와 해당 회귀 테스트를 따른다.
+
+## 현재 UI와 검증 범위
+
+홈에서 파일·폴더와 프리셋/파일 도구를 선택해 실행하거나 원형 메뉴를 연다. Finder 드래그의 기본 호출 키는 Control, 파일 도구 메뉴는 Control+Shift이며 사용자 설정과 호출 순서를 따른다. 앱은 프리셋·프로필·테마·언어·엔진 경로 편집, 진행·취소·실패 재시도·최근 이력을 연결한다. 로그인 항목·메뉴 막대·알림·호출 제외 앱도 구현돼 있다. 자동 변환 폴더와 앱 내 엔진 다운로드는 아직 실행 흐름에 연결하지 않았다.
+
+이전 최종 통합 기록은 개발 인증서로 서명한 Release 빌드, SDK 접근을 막은 빌드·테스트와 재배치한 앱의 22개 검사를 통과했다. [기록](design/engine-differential-triage.md#final-native-quality-integration-2026-10-24)의 849건 비교는 581 PASS / 264 WARN / 4 FAIL이며 WARN은 시각적 동등성의 증거가 아니다. 과거 x86_64 교차 컴파일·링크 성공과 Intel/Rosetta 실행 불가는 당시 증거로만 보존한다.
+
+실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [최신 검증 기록](design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
+
+## 전환 전 .NET 설계·검증 기록 (2026-10-11)
+
+이하 본문은 2026-10-11의 C#·NuGet·Filee manifest 설계와 당시 검증 기록이다. 당시의 지원 계획·완료 조건·파일 크기·미연결 기능을 보존하며 현재 구현이나 배포 의무로 적용하지 않는다. Intel·Rosetta 검증은 현재 지원 범위에 포함되지 않는다.
 
 FileToX는 Filee에서 영감을 받아 만든 Mac 전용 파일 변환 앱이다. UI는 SwiftUI·AppKit으로 구성하고, 변환 작업은 C# 보조 실행 파일에서 처리한다. 지원 범위를 JPEG·PNG로 제한하지 않는다. 최소 OS는 macOS 15이며 Swift 앱과 host의 타깃도 동일하다. .NET 10의 공식 지원 범위를 따른다.
 
 검토 기준은 Filee 커밋 `21fdd05ef7181b032ed83ec895cc9bbc4b198985`다. 이 설계를 바탕으로 전체 변환 host와 SwiftUI 앱을 연결했다. 구현 범위와 검증 결과는 마지막 절에 구분했다.
 
-## 설계와 구현 구성
+### 설계와 구현 구성
 
 - [전체 형식 목록](formats.md): 실제 171개 형식·257개 확장자, 읽기 전용과 가상 폴더를 보존한 생성 문서.
 - [변환 host](design/engine-host.md): 요청·진행·취소·작업 결과, 전체 프리셋·프로필·설정과 파일 안전.
@@ -30,7 +77,7 @@ FileToX는 Filee에서 영감을 받아 만든 Mac 전용 파일 변환 앱이�
 
 `Resources/FileeFormats.json`은 고정 소스에서 생성한 정적 카탈로그이며 `Sources/Core/FormatCatalog.swift`로 읽는다. 원본 `FormatRegistry`가 실행 시점의 기준이다. 이 JSON을 엔진 사용 가능 여부나 변환 경로 판단에 쓰지 않는다.
 
-## 참고 소스와 담당 기능
+### 참고 소스와 담당 기능
 
 | 참고 소스 | FileToX에서 처리할 방식 |
 | --- | --- |
@@ -44,7 +91,7 @@ FileToX는 Filee에서 영감을 받아 만든 Mac 전용 파일 변환 앱이�
 
 화면과 상호작용은 SwiftUI·AppKit으로 구현한다. 변환 모듈은 별도의 host에서 실행하며, SwiftUI 타깃에는 Avalonia 의존성을 넣지 않는다.
 
-## UI 범위
+### UI 범위
 
 - **홈:** 큰 파일 드롭 영역과 작업 단위 최근 변환. 파일을 넣으면 해당 입력에 맞는 도넛을 열고 클릭으로 프리셋을 선택한다.
 - **도넛:** Option 드래그로 커서 위치에 열고 프리셋별 부채꼴에 드롭한다. 중앙에는 파일 수·입력 형식 또는 선택 안내를 표시한다. 변환 후 진행 링·취소·성공·실패 상태로 바뀐다. 중심·Escape는 닫기, 프리셋 우클릭은 편집이다.
@@ -55,7 +102,7 @@ FileToX는 Filee에서 영감을 받아 만든 Mac 전용 파일 변환 앱이�
 
 Filee에서 영감을 받아 홈·원형 툴바·프리셋 편집 화면을 macOS에 맞게 구성한다. 창 장식과 기본 글꼴은 macOS를 따른다. 모든 메뉴를 빈 페이지로 먼저 추가하지 않고 실제 코어 기능과 함께 연결한다. 제품 이름과 업데이트·배포 경로는 FileToX에 맞춘다.
 
-## 형식과 엔진
+### 형식과 엔진
 
 `FormatRegistry`의 전체 형식을 카탈로그에 담는다. 현재 가상 `folder`를 제외한 171개 형식이 14개 분류로 등록돼 있다. 읽기 전용 형식과 확장자 별칭도 보존한다. 이미지, 벡터, PDF, 문서, HWP, 표, 프레젠테이션, 텍스트, 전자책, 영상, 음성, 압축, 글꼴, CAD가 대상이다.
 
@@ -63,7 +110,7 @@ Filee에서 영감을 받아 홈·원형 툴바·프리셋 편집 화면을 macO
 
 내장 변환기와 NuGet 의존성은 helper에 포함한다. rhwp·7-Zip은 해당 실행 파일도 필요하다. 영상·음성은 FFmpeg, 일부 형식은 LibreOffice·Pandoc·Ghostscript·Calibre 등이 필요하다. 엔진이 없는 경우 설치 필요 상태와 이유를 표시한다. macOS에서는 EMF·WMF 등 Windows 전용 경로도 구분한다. 세부 지원은 원본 `docs/ENGINES.md`와 실제 macOS 검사 결과를 기준으로 한다.
 
-## 실행 구조
+### 실행 구조
 
 ```mermaid
 flowchart LR
@@ -84,7 +131,7 @@ Swift 앱은 UI와 macOS 연동을 소유한다. 보조 실행 파일은 변환 
 
 저장 경로는 `~/Library/Application Support/FileToX/` 아래 `core`·`engines`·`tmp`로 분리한다. `UserDataStore`의 디렉터리와 `EngineEnvironment.DownloadRoot`를 모두 FileToX 경로로 지정한다. 기존 Filee의 설정·이력·엔진 상태를 변경하지 않는다. 초기 출력은 원본 옆에 저장하고 이름 충돌은 별도 이름으로 처리한다.
 
-## 병렬 작업과 순서
+### 병렬 작업과 순서
 
 공통 메시지·데이터 구조를 먼저 고정한 뒤 세 갈래로 진행한다.
 
@@ -94,7 +141,7 @@ Swift 앱은 UI와 macOS 연동을 소유한다. 보조 실행 파일은 변환 
 
 첫 통합은 도넛 UI와 변환 코어를 연결한다. 이후 프리셋·프로필·설정 페이지를 구현한다. 이 순서는 구현 순서이며 지원 형식을 이미지 두 가지로 줄이는 결정이 아니다.
 
-## 완료 기준과 배포 확인
+### 완료 기준과 배포 확인
 
 - 원본 형식 목록과 실제 사용 가능한 변환 조합을 코어에서 읽어 UI에 반영한다.
 - 이미지 외에도 PDF·문서·표·압축·전자책 등 연결된 엔진의 대표 파일을 실제 변환해 확인한다.
@@ -109,10 +156,10 @@ arm64 개발 번들에서 .NET 런타임·내장 엔진과 rhwp·7-Zip의 실행
 
 Swift 앱은 XcodeGen으로 생성하는 Xcode 프로젝트를 유지한다. 조직 서명 팀은 넣지 않고 `forked.filetox.local` 및 Debug의 `.dev` 식별자를 쓴다. 개인 설정은 Git에서 제외한 `Config/Local.xcconfig`에 둔다.
 
-## 현재 구현 상태
+### 당시 구현 상태
 
 2026-10-11 Apple silicon에서 엔진 23개·전체 카탈로그를 .NET host로 연결했고 SwiftUI 홈·도넛·프리셋·프로필·설정·엔진 페이지를 구현했다. 실제 앱에서 도넛 JPG 클릭, 결과 생성과 최근 이력 표시를 확인했다. 기존 JPEG·PNG 전용 ImageIO 경로는 실제 helper 통합 테스트를 통과한 뒤 삭제했다.
 
-기본 엔진 22개 검증(변환 20개·선택 판단 2개)과 추가 엔진·영상·음성·취소·첨부 이미지 충돌 11개 표본이 통과했다. 원본 Core/Engines 테스트와 패치 테스트를 비교해 FFmpeg 인코더 부족의 기존 실패를 구분했다. 원본 236개 파일의 SHA-256은 유지한다. 실제 실행 명령과 제한은 [README](../README.md), 세부 결과는 [host 구현 현황](../EngineHost/IMPLEMENTATION.md)에 적었다.
+기본 엔진 22개 검증(변환 20개·선택 판단 2개)과 추가 엔진·영상·음성·취소·첨부 이미지 충돌 11개 표본이 통과했다. 원본 Core/Engines 테스트와 패치 테스트를 비교해 FFmpeg 인코더 부족의 기존 실패를 구분했다. 원본 236개 파일의 SHA-256은 유지한다. 실제 실행 명령과 제한은 [README](../README.md), 당시 세부 결과는 현재 제거한 `EngineHost/IMPLEMENTATION.md`에 기록했다. 최신 Swift 검증은 [통합 기록](design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
 
 자동 변환 폴더·앱 내 엔진 다운로드·로그인 항목은 후속 UI/host 연결 대상이다. 모든 형식 조합이나 Intel·외장 볼륨·공증 완료를 의미하지 않는다.
