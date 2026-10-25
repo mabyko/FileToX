@@ -271,6 +271,101 @@ extension Markdown {
             return false
         }
 
+        /// Builds literal cells directly, without the provisional pipe/newline inlines and their reparenting.
+        func tryParseLiteralTable(_ state: InlineProcessor, _ text: Slice) -> Bool {
+            guard state.block is ParagraphBlock, !state.document.depthLimitExceeded,
+                  !text.isEmpty, !text.text[text.end].isNewLine else { return false }
+            var rows: [[Slice]] = []
+            var unfinishedHeader = false
+            var lineStart = text.start
+            while lineStart <= text.end {
+                var lineEnd = lineStart
+                while lineEnd <= text.end && !text.text[lineEnd].isNewLine { lineEnd += 1 }
+                var cells: [Slice] = []
+                var cellStart = lineStart
+                var pipeCount = 0
+                var opening = state.parsers.indexOfOpeningCharacter(text.text, lineStart, lineEnd - 1)
+                while opening >= 0 {
+                    let c = text.text[opening]
+                    if c == "|" {
+                        cells.append(Slice(text.text, cellStart, opening - 1))
+                        cellStart = opening + 1
+                        pipeCount += 1
+                    } else {
+                        guard rows.count == 1, c == ":", let candidates = state.parsers.parsersForOpeningCharacter(c),
+                              candidates.count == 1, candidates[0] === self else { return false }
+                    }
+                    opening = state.parsers.indexOfOpeningCharacter(text.text, opening + 1, lineEnd - 1)
+                }
+                guard pipeCount > 0 else { return false }
+                let firstIsPipe = cells[0].isEmptyOrWhitespace()
+                if firstIsPipe { cells.removeFirst() }
+                let trailing = Slice(text.text, cellStart, lineEnd - 1)
+                if !trailing.isEmpty {
+                    // Unconsumed whitespace after a trailing pipe belongs to the original paragraph.
+                    guard !trailing.isEmptyOrWhitespace() else { return false }
+                    cells.append(trailing)
+                }
+                for i in cells.indices { cells[i].trim() }
+                rows.append(cells)
+                // A leading-only pipe needs a following newline to finish Markdig's header scan.
+                if rows.count == 2 { unfinishedHeader = firstIsPipe && pipeCount == 1 && !trailing.isEmpty }
+                if lineEnd <= text.end && text.text[lineEnd] == "\r" && lineEnd < text.end && text.text[lineEnd + 1] == "\n" {
+                    lineEnd += 1
+                }
+                lineStart = lineEnd + 1
+            }
+            var definitions: [TableColumnDefinition]?
+            if rows.count > 1 && !(rows.count == 2 && unfinishedHeader) {
+                var parsed: [TableColumnDefinition] = []
+                var total = 0
+                var valid = true
+                for var cell in rows[1] {
+                    if cell.isEmpty {
+                        parsed.append(TableColumnDefinition(alignment: nil, width: 0))
+                    } else if let column = Markdown.parseColumnHeader(&cell, "-"), cell.currentChar == .zero {
+                        total += column.count
+                        parsed.append(TableColumnDefinition(alignment: column.align, width: 0))
+                    } else {
+                        valid = false
+                        break
+                    }
+                }
+                if valid && total > 0 { definitions = parsed }
+            }
+            guard !requireHeaderSeparator || definitions != nil else { return false }
+            let table = Table(nil)
+            if let attributes = state.block?.tryGetAttributes() { attributes.copyTo(table.getAttributes()) }
+            if let definitions { table.columnDefinitions = definitions }
+            for (index, slices) in rows.enumerated() {
+                let row = TableRow()
+                row.isHeader = index == 0 && (requireHeaderSeparator || definitions != nil)
+                if index == 1 && definitions != nil {
+                    table.add(row)
+                    continue
+                }
+                for slice in slices {
+                    let inlines = ContainerInline()
+                    if !slice.isEmpty {
+                        let literal = LiteralInline(slice)
+                        literal.span = SourceSpan(0, 0)
+                        inlines.appendChild(literal)
+                    }
+                    let paragraph = ParagraphBlock(nil)
+                    paragraph.inline = inlines
+                    let cell = TableCell(nil)
+                    cell.add(paragraph)
+                    row.add(cell)
+                }
+                table.add(row)
+            }
+            if definitions != nil { table.removeAt(1) }
+            state.root?.span = text.text[text.end] == "|" ? .empty : SourceSpan(0, 0)
+            table.normalizeUsingMaxWidth()
+            state.blockNew = table
+            return true
+        }
+
         func postProcess(_ state: InlineProcessor, _ root: Inline?, _ lastChild: Inline?, _ index: Int, _ isFinalProcessing: Bool) -> Bool {
             let container = root as? ContainerInline
             let tableState = state.state(self) as? TableState

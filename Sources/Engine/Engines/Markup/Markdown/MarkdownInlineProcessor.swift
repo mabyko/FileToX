@@ -27,6 +27,7 @@ extension Markdown {
         private let candidateIndex: [UInt32]
         let globalParsers: [InlineParser]?
         let postInlineProcessors: [PostInlineProcessor]
+        let literalTableParser: PipeTableParser?
         // 0: literal, 1: parser, 2: autolink only (ordinary words can stay in the literal scan).
         private let openingCharacters: [UInt8]
 
@@ -51,6 +52,14 @@ extension Markdown {
             }
             self.openingCharacters = openingCharacters
             (candidates, candidateIndex) = Markdown.characterTable(byCharacter)
+            // These postprocessors do nothing to literal cells; custom processors need the delimiter tree.
+            if global.isEmpty, let table = postInlineProcessors.first as? PipeTableParser,
+               postInlineProcessors.dropFirst().allSatisfy({ $0 is EmphasisInlineParser }),
+               (["|", "\n", "\r"] as [Char]).allSatisfy({ byCharacter[$0]?.first === table }) {
+                literalTableParser = table
+            } else {
+                literalTableParser = nil
+            }
         }
 
         func parsersForOpeningCharacter(_ c: Char) -> [InlineParser]? {
@@ -121,8 +130,11 @@ extension Markdown {
             block = leafBlock
             blockNew = nil
             lineIndex = leafBlock.line
+            let lineCount = leafBlock.lines.count
             var text = leafBlock.lines.toSlice()
             leafBlock.lines = LineGroup()
+            if let table = parsers.literalTableParser, (lineCount > 1 || !table.requireHeaderSeparator),
+               table.tryParseLiteralTable(self, text) { return }
             var previousStart = -1
             // Markdig throws as soon as a limit is exceeded; going on would only redo the deepening walk per character.
             while !text.isEmpty && !document.depthLimitExceeded {

@@ -137,6 +137,159 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(mismatches, [])
     }
 
+    private final class TableProbe: Markdown.InlineParser {
+        var seen: [UInt16] = []
+        let replacement: String?
+        init(_ characters: [Markdown.Char]?, replacement: String? = nil) {
+            self.replacement = replacement
+            super.init()
+            openingCharacters = characters
+        }
+        override func match(_ processor: Markdown.InlineProcessor, _ slice: inout Markdown.Slice) -> Bool {
+            seen.append(slice.currentChar.value)
+            guard let replacement else { return false }
+            processor.inline = Markdown.LiteralInline(replacement)
+            slice.skipChar()
+            return true
+        }
+    }
+
+    private final class TableObserver: Markdown.InlineParser, Markdown.PostInlineProcessor {
+        var seen: [String] = []
+        var stopAtDelimiters = false
+        override init() { super.init(); openingCharacters = [Markdown.Char(0xE000)] }
+        func postProcess(_ state: Markdown.InlineProcessor, _ root: Markdown.Inline?, _ lastChild: Markdown.Inline?,
+                         _ index: Int, _ isFinalProcessing: Bool) -> Bool {
+            let children = (root as? Markdown.ContainerInline)?.children ?? []
+            let hasDelimiters = children.contains { $0 is Markdown.PipeTableDelimiterInline }
+            seen.append(hasDelimiters ? "delimiters" : children.compactMap { ($0 as? Markdown.LiteralInline)?.content.description }.joined())
+            return !(stopAtDelimiters && hasDelimiters)
+        }
+    }
+
+    private func tablePipeline(_ parser: Markdown.InlineParser? = nil, before: Bool = true) -> Markdown.Pipeline {
+        let builder = Markdown.PipelineBuilder()
+        builder.extensions.append(Markdown.PipeTableExtension())
+        if let parser {
+            if before { builder.inlineParsers.insert(parser, at: 0) } else { builder.inlineParsers.append(parser) }
+        }
+        return Markdown.Pipeline(builder)
+    }
+
+    func testLiteralTablesKeepEmptyCellsHeaderTerminationAndMutations() throws {
+        let pipeline = tablePipeline()
+        let document = try Markdown.parse("| a | b |\n|:---|---:|\n|c||\n", pipeline)
+        let table = try XCTUnwrap(document[0] as? Markdown.Table)
+        XCTAssertEqual(table.count, 2)
+        XCTAssertEqual(table.mutations, 4) // Three rows added, then the separator row removed.
+        XCTAssertEqual(table.columnDefinitions.map(\.alignment), [.left, .right])
+        XCTAssertEqual(table.columnDefinitions.map(\.width), [0, 0])
+        XCTAssertTrue((table[0] as! Markdown.TableRow).isHeader)
+        let row = table[1] as! Markdown.TableRow
+        XCTAssertEqual(row.count, 2)
+        XCTAssertEqual(row.mutations, 2)
+        let emptyCell = row[1] as! Markdown.TableCell
+        XCTAssertEqual(emptyCell.count, 1)
+        XCTAssertNil((emptyCell[0] as! Markdown.ParagraphBlock).inline!.firstChild)
+        row.removeAt(1)
+        XCTAssertNil(emptyCell.parent)
+        row.insert(emptyCell, at: 0)
+        XCTAssertTrue(emptyCell.parent === row)
+        XCTAssertEqual(row.mutations, 4)
+
+        XCTAssertFalse(try Markdown.parse("a|b\n|---", pipeline)[0] is Markdown.Table)
+        XCTAssertTrue(try Markdown.parse("a|b\n|---\nc|d", pipeline)[0] is Markdown.Table)
+        let parser = try XCTUnwrap(pipeline.inlineParsers.parsers.first { $0 is Markdown.PipeTableParser } as? Markdown.PipeTableParser)
+        parser.requireHeaderSeparator = false
+        let headerless = try XCTUnwrap(try Markdown.parse("a|b", pipeline)[0] as? Markdown.Table)
+        XCTAssertFalse((headerless[0] as! Markdown.TableRow).isHeader)
+        XCTAssertTrue(headerless.columnDefinitions.isEmpty)
+    }
+
+    func testLiteralTablesRespectCustomInlineParsersAndGlobalParsers() throws {
+        let input = "a|b\n:--|--:\nc|d"
+        for character in (["a", "|", ":", "-"] as [Markdown.Char]) {
+            let probe = TableProbe([character], replacement: "X")
+            let pipeline = tablePipeline(probe)
+            let html = try Markdown.toHtml(input, pipeline)
+            XCTAssertFalse(probe.seen.isEmpty, character.description)
+            XCTAssertTrue(html.contains("X"), html)
+        }
+        let after = TableProbe(["a"], replacement: "X")
+        XCTAssertTrue(try Markdown.toHtml(input, tablePipeline(after, before: false)).contains("X"))
+        XCTAssertFalse(after.seen.isEmpty)
+        let shadowed = TableProbe(["|"], replacement: "X")
+        XCTAssertTrue(try Markdown.parse(input, tablePipeline(shadowed, before: false))[0] is Markdown.Table)
+        XCTAssertTrue(shadowed.seen.isEmpty)
+        let global = TableProbe(nil)
+        XCTAssertEqual(try Markdown.toHtml(input, tablePipeline(global)), try Markdown.toHtml(input, tablePipeline()))
+        XCTAssertFalse(global.seen.isEmpty)
+    }
+
+    func testLiteralTablesRespectPostprocessorOrderAndEarlyStop() throws {
+        let input = "a|b\n--|--\nc|d"
+        let before = TableObserver()
+        _ = try Markdown.parse(input, tablePipeline(before))
+        XCTAssertEqual(before.seen, ["delimiters", "a", "b", "c", "d"])
+        let after = TableObserver()
+        _ = try Markdown.parse(input, tablePipeline(after, before: false))
+        XCTAssertEqual(after.seen, ["a", "b", "c", "d"])
+        let stopping = TableObserver()
+        stopping.stopAtDelimiters = true
+        XCTAssertFalse(try Markdown.parse(input, tablePipeline(stopping))[0] is Markdown.Table)
+        XCTAssertEqual(stopping.seen, ["delimiters"])
+    }
+
+    func testLiteralTablesPreserveMalformedUTF16AndWeakParents() throws {
+        func process(_ units: [UInt16], _ pipeline: Markdown.Pipeline) throws -> Markdown.MarkdownDocument {
+            let document = Markdown.MarkdownDocument(), leaf = Markdown.ParagraphBlock(nil)
+            document.add(leaf)
+            var reader = Markdown.LineReader(units.map(Markdown.Char.init))
+            while let line = reader.readLine() { leaf.appendLine(line, column: 0, line: 0, sourceLinePosition: line.start) }
+            let processor = Markdown.InlineProcessor(document, pipeline.inlineParsers)
+            processor.processInlineLeaf(leaf)
+            document[0] = try XCTUnwrap(processor.blockNew)
+            return document
+        }
+        let pipeline = tablePipeline()
+        let fallback = tablePipeline(TableProbe(nil))
+        for units in ([[0xD800], [0xDC00], [0xD800, 0xD800], [0xD83D, 0xDE00], [0x0065, 0x0301], [0x0000]] as [[UInt16]]) {
+            let source = Array("a|b\r\n--|--\r\n".utf16) + units + Array("|x".utf16)
+            let fast = try process(source, pipeline), slow = try process(source, fallback)
+            XCTAssertEqual(Array(try Markdown.render(fast, pipeline).utf8), Array(try Markdown.render(slow, fallback).utf8))
+        }
+        var retained: Markdown.Inline?
+        weak var parent: Markdown.ContainerInline?
+        do {
+            let document = try process(Array("a|b\n--|--\nc|d".utf16), pipeline)
+            let table = document[0] as! Markdown.Table
+            let cell = (table[1] as! Markdown.TableRow)[0] as! Markdown.TableCell
+            let inlines = (cell[0] as! Markdown.ParagraphBlock).inline!
+            parent = inlines
+            retained = inlines.firstChild
+            XCTAssertTrue(retained?.parent === inlines)
+        }
+        XCTAssertNil(parent)
+        XCTAssertNil(retained?.parent)
+    }
+
+    func testLiteralTablesKeepEmptyInputAndDepthLimitBehavior() throws {
+        let pipeline = tablePipeline()
+        let parser = try XCTUnwrap(pipeline.inlineParsers.parsers.first { $0 is Markdown.PipeTableParser } as? Markdown.PipeTableParser)
+        parser.requireHeaderSeparator = false
+        for (text, exceeded) in [("", false), ("a|b\n", false), ("a|b", true)] {
+            let document = Markdown.MarkdownDocument(), leaf = Markdown.ParagraphBlock(nil)
+            document.add(leaf)
+            leaf.lines = Markdown.LineGroup(Markdown.chars(text))
+            document.depthLimitExceeded = exceeded
+            let processor = Markdown.InlineProcessor(document, pipeline.inlineParsers)
+            processor.processInlineLeaf(leaf)
+            XCTAssertNil(processor.blockNew)
+            XCTAssertEqual(document.depthLimitExceeded, exceeded)
+            if exceeded { XCTAssertNil(leaf.inline?.firstChild) }
+        }
+    }
+
     func testParserListsTakeAnyNumberOfOpeningCharacters() throws {
         final class InlineProbe: Markdown.InlineParser {
             init(_ characters: [Markdown.Char]) {
