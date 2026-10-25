@@ -33,11 +33,11 @@ SVGZ decompression, viewport resolution, raster scaling/limits and fallback.
   engine's libjpeg-turbo, libwebp, Brotli or other native dependencies.
 - Minimum macOS 15, C++20, `-O2 -DNDEBUG -DSK_BUILD_FOR_MAC`; public bridge types
   use C scalar/pointer types only. No C++ ABI crosses into Swift.
-- The checked-in archive was thinned with `lipo -thin arm64` from FileToX's
-  previous universal bridge. The arm64 archive bytes are unchanged;
-  `PROVENANCE.json` records the previous output hash and size and the current
-  thin output hash and size. This derives a FileToX output, without modifying
-  the pinned upstream archive, headers or notices.
+- The checked-in archive was rebuilt for arm64 to add cooperative picture
+  playback cancellation, using the same pinned upstream arm64 libraries.
+  `PROVENANCE.json` records its current hash and size and the preceding
+  thinned archive's hash. The upstream archive and notices are unchanged;
+  all checked-in headers, including those added for playback, are pinned there.
 
 Rebuild on macOS with Xcode's command-line tools and Python 3:
 
