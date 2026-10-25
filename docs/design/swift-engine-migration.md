@@ -12,7 +12,7 @@ PDFium·Skia의 업스트림 버전·원본 해시·고지는 보존한다. 현�
 
 이전 단계에서 SDK 접근 차단 빌드·테스트, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사와 재배치한 앱의 변환 검증을 통과했다. 이는 Developer ID 서명·공증 검증이 아니다. 위 기록의 이전 최종 비교 결과와 WARN·FAIL 한계도 그대로 유지하며 새 검증 결과로 재사용하지 않는다.
 
-후속 변경으로 감시 폴더 실행·설정 UI를 연결하고, JPEG·PNG의 ICC 추적과 BMP 안전 처리를 보완했다. PDF의 단일 텍스트 상태 검증과 Markdown 조회 캐시 최적화도 통합했다. 임의 색 공간·폼 기본 색 공간 등 확인할 수 없는 PDF는 기존 PDFKit 속성 경로를 유지한다. SVG 상대 font shorthand 변경은 비교 품질이 낮아진 표본 때문에 통합하지 않았다. 이 후속 소스의 전체 빌드·변환·성능 검증은 진행 중이며, 아래 `70fff7d` 수치는 앞선 단계의 기록이다. 현재 감시·취소·색상 처리 경계는 [아키텍처](../architecture.md)를 따른다. 앱 내 관리형 엔진 다운로드는 여전히 미구현이며, 전환 전 Mac host에도 설치 요청 API가 없었다.
+후속 변경으로 감시 폴더 실행·설정 UI를 연결하고, JPEG·PNG의 ICC 추적과 BMP 안전 처리를 보완했다. PDF의 단일 텍스트 상태 검증과 Markdown 조회 캐시 최적화도 통합했다. 임의 색 공간·폼 기본 색 공간 등 확인할 수 없는 PDF는 기존 PDFKit 속성 경로를 유지한다. SVG 상대 font shorthand 변경은 비교 품질이 낮아진 표본 때문에 통합하지 않았다. 후속 소스 `34bc0ae`의 SDK 접근 차단 clean build·테스트·개발 인증서 Release와 재배치 실행, 실제 849개·이미지 검증·순차 성능 측정을 완료했다. PDF TXT 최선 0.630초로 목표를 충족했고 Markdown TXT는 0.667초로 미달이다. 엄격 비교의 기존 실패는 그대로 남겼으며 [후속 검증 기록](engine-differential-triage.md#integrated-watch-icc-and-native-cancellation-follow-up-2026-10-25)에 결과·한계를 구분했다. 아래 `70fff7d` 수치는 앞선 단계의 기록이다. 현재 감시·취소·색상 처리 경계는 [아키텍처](../architecture.md)를 따른다. 앱 내 관리형 엔진 다운로드는 여전히 미구현이며, 전환 전 Mac host에도 설치 요청 API가 없었다.
 
 실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [최신 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
 

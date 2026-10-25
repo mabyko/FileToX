@@ -65,6 +65,8 @@ JPEG·PNG 입력의 실제 ICC를 추적하고, 화소의 색 공간이 달라�
 
 실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [최신 검증 기록](design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
 
+후속 소스 `34bc0ae`는 SDK 접근 차단 clean build·엔진 테스트 636개(57개 skip), 별도 clean 환경 앱 테스트 74개, 개발 인증서 Release·서명·재배치 22개 검사를 통과했다. 새 849건은 786완료·기존 63실패, 검사 오류 0이며 강화 C# 비교는 586 PASS / 254 WARN / 9 FAIL이다. 실패는 면제하지 않았다. 순차 최선 PDF TXT 0.630초는 목표를 충족하고 Markdown TXT 0.667초는 목표 미달이다. 실제 검증 범위와 남은 차이는 [후속 검증 기록](design/engine-differential-triage.md#integrated-watch-icc-and-native-cancellation-follow-up-2026-10-25)을 따른다.
+
 ## 전환 전 .NET 설계·검증 기록 (2026-10-11)
 
 이하 본문은 2026-10-11의 C#·NuGet·Filee manifest 설계와 당시 검증 기록이다. 당시의 지원 계획·완료 조건·파일 크기·미연결 기능을 보존하며 현재 구현이나 배포 의무로 적용하지 않는다. Intel·Rosetta 검증은 현재 지원 범위에 포함되지 않는다.

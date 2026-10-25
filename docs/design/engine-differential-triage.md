@@ -1688,3 +1688,109 @@ changed. Existing strict failures, non-JPEG ICC/container fidelity, SVG text lim
 native cancellation latency, physical M1/macOS 15/separate-OS execution and distribution notarization remain open.
 Generic upstream C/C++ portability code and immutable cross-platform manifest metadata remain as provenance,
 not active Intel application support. No push, deployment or installed-app replacement occurred.
+
+## Integrated watch, ICC and native cancellation follow-up (2026-10-25)
+
+Tested source: `34bc0ae9132c79d9e1333e9692b4f385f022b6a9`, on an M2 Max with macOS 27.0.1.
+Support remains M1+/arm64/macOS 15+. This is not physical M1 or macOS 15 execution evidence.
+All implementation review findings were resolved before final validation. The parent cancellation test fixture
+was then made independent of the caller's global `TMPDIR`; production temporary-folder protection was retained.
+
+Watch settings, cached status, queue events, history and ephemeral stop-before-quit are connected. The monitor
+baselines existing files, uses a three-second monotonic settling heuristic, skips packages/download directories,
+limits scans to 10,000 entries and batches to 128 inputs. It freezes physical output roots and validates allocation
+and publication against protected originals. Failed/cancelled/changed inputs are not moved. Historical batch
+errors remain visible without cancelling healthy work. External commit and output-kind filesystem work runs
+outside RPC/job state locks; local settings/history persistence remains synchronous.
+
+JPEG/PNG source ICC tracking follows the actual pixel space. Native JPEG samples retain valid numbered ICC
+chunks in either physical order; ImageIO fallback pixels retain decoder-space reconciliation. JPEG profiles above
+16,707,345 bytes fail before publication. PNG scan work includes bytes produced on failed zlib calls and stops
+within 16 MiB plus one 1 MiB buffer. BMP row padding is zeroed only for the verified layout; indexed BMP input
+is converted correctly and headerless output is rejected. The shared inflater still rejects corrupt streams.
+Skia picture playback now checks cancellation between draw commands. Parsing, recording and one draw can
+still be uninterruptible. The separately proposed SVG font-shorthand change `e3c9671` remains excluded.
+
+### Build, data and distribution checks
+
+- SDK-denied Swift: **636 engine tests, 14 skips, zero failures**, plus **13 Core tests, zero failures**.
+  The process-tree test's `/bin/ps` verification cannot launch inside the macOS sandbox profile. That one test
+  passes separately with an empty HOME and restricted PATH. Original environment-failure logs are retained.
+- SDK-denied Xcode arm64 clean build and **636 engine tests, 57 skips, zero failures** pass. App tests run in
+  the separate clean environment outside that extra profile: **74 tests, zero failures**.
+- Actual current-team development-certificate Release passes. All **five Mach-O files are arm64**, with no
+  .NET files or Homebrew dynamic linkage; deep/strict signing and helper library validation pass. This is not
+  Developer ID signing or notarization. The app contains **69,557,998 file bytes**.
+- The relocated app passes **22 checks** with checkout and SDK access denied. Its helper SHA-256 is
+  `e8dbd1caad290df64225ff2d29a50e47fecc9ad42cbbbe5bff945bd644e76440`.
+- The normal SwiftPM Release comparison host SHA-256 is
+  `e10e9b9c4d6d5b01e39a09886126da008c56b28bf11f55b2840f83afdccdebc3`.
+  Its **13 runtime files and 969 tracked source/input files** remain unchanged through validation. User SDK
+  folders, installed reference apps, corpora and all prior reports/captures are preserved. No C# reference was rerun.
+
+Settings schema 8 and wire v1 remain compatible. The current suite covers settings, presets, unknown fields,
+history and watch round trips; earlier copied-user-data evidence remains in the 2026-10-23 record. New requests
+are `watch.status` and session-only `watch.stop`; existing job events carry watch conversions.
+
+### Fresh conversion comparisons
+
+All **849 cases** replayed once: **786 completed, 63 existing failed jobs**, zero harness/inspection errors.
+There are no state, per-file error-key, output-count or output-name changes against C# or the immediately
+previous `32bb` capture. No staging remains and all outputs/inputs pass their hash/existence audits.
+
+- Legacy policy vs C#: **581 PASS / 263 WARN / 5 FAIL**.
+- Current exact-TCR/PDF-render policy vs C#: **586 / 254 / 9**.
+- Legacy policy vs `32bb`: **764 / 84 / 1**.
+- Current policy vs `32bb`: **764 / 83 / 2**.
+
+Every strict failure remains unwaived. The C# legacy failures are four missing baseline image references
+(`auto-061-psd-to-html`, `auto-077-webp-to-html`, `auto-086-dxf-to-md`, `auto-101-gif-to-md`) and Calibre's
+generated cover difference (`auto-067-tcr-to-txtz`). Current policy additionally flags the two corrected TCR
+payloads (`auto-063-snb-to-tcr`, `auto-096-html-to-tcr`) and two PDF raster differences
+(`auto-063-snb-to-pdf`, `auto-091-bmp-to-pdf`). Against `32bb`, only the SNB PDF page and TXTz cover remain.
+The changed RB→ODT classification is a coincidental Calibre cover match, not a claimed code improvement.
+
+All **149 image-target files and seven TCR outputs** are byte-identical to `32bb`; 14/15 compared PDF rasters
+match it exactly. The prior five WOFF2 inspection failures are gone and their outputs remain byte-identical.
+No new output has a broken image reference. One CoreGraphics PDF warning was not reproduced by a bounded
+read-only check and affected no output; its source remains unknown.
+
+The image supplement completes **135 matrix jobs + four metadata jobs**: strict **103/135**, visible **105/135**,
+unchanged. ICO **54/54 frames** and JP2 quality **12/12** match. Another 22 bounded controls yield 21 completed
+jobs and one expected JPEG-capacity rejection. Ordered/reordered profiles and BMP safeguards pass. Of the
+CMYK oracle controls, one resized case lacks the preserved independent resize oracle; it is checked unchanged
+against the prior output, without an independent resized-accuracy claim. The two PNG metadata changes and
+three BMP padding changes are accounted for; no blanket ICC/timestamp normalization was applied.
+
+### Sequential production timing
+
+Both frozen hosts use normal Release flags. Each case runs five alternating A/B rounds after this task's builds
+and conversion jobs stop. System load average was approximately 34.6→34.9; unrelated OS work was not controlled.
+These are observed timings on this host, not idle-machine or M1 guarantees. All **60 outputs** match apart from
+the previously proven generated FB2 document UUID.
+
+- PDF→TXT: best **1.349→0.630 s**, final median **0.634 s**; the ≤0.84 s target is met in this run.
+- Markdown→TXT: best **0.795→0.667 s**, median **0.676 s**; the ≤0.60 s target remains unmet.
+- Markdown→HTML: best **0.855→0.731 s**, median **0.733 s**.
+- EPUB→FB2: best **0.422→0.418 s**, median **0.425 s**.
+- DOCX→Markdown: best **0.091→0.089 s**, median **0.090 s**.
+- DOCX→TXT: best **0.085→0.082 s**, median **0.084 s**.
+
+### Remaining limits and evidence
+
+Strict image/container gaps and the TGA inspector limitation remain. Binary formats without semantic inspection
+(50 comparisons vs `32bb`, 51 vs C#), PDF annotations, general SVG vertical shaping/filters and arbitrary
+non-JPEG/PNG ICC provenance are not proven equivalent. Native OpenJPEG computation can still delay cancellation
+by seconds; preceding ImageIO work is also not immediately interruptible. Watch input caps do not bound total
+output-message size; unsupported exclusive rename retains originals. Settling remains heuristic.
+
+Managed in-app engine installation is unimplemented; the old Mac host also had no install API. Optional system
+or selected FFmpeg/Ghostscript/Pandoc/LibreOffice/Calibre remain dependencies for their respective conversions.
+Physical M1/macOS 15, separate SDK-free OS, GUI/TCC/SMB/exFAT and real login/notification lifecycle remain
+unverified. No deployment, notarization, push or installed-app replacement occurred.
+
+Local evidence is in `build/resume/remaining-collab-20261025/`: `FINAL.md`, `final-validation-summary.json`,
+`swift-final-results.json`, `xcode-final-results.json`, `sdk-absence-proof.json`, Release audit/relocation proofs,
+`replay-validation/`, `image-validation/`, and `performance/`. These directories hold exact commands,
+environments, output hashes and failure IDs. Source review/finding-to-test records are retained in
+`REPORT/watch-integration-20261025/` and the isolated implementation worktrees.
