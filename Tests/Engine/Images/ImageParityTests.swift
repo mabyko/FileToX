@@ -45,12 +45,12 @@ final class ImageParityTests: XCTestCase {
         }
     }
 
-    func testUnmarkedCmykIsNotInvertedAndGrayUsesLightRatherThanInk() throws {
+    func testUnmarkedCmykIsInvertedInkAndGrayUsesLightRatherThanInk() throws {
         let decoded = try read(Data(base64Encoded: Self.jpeg["plain"]!)!)
         XCTAssertFalse(ImagePixels.hasColorProfile(decoded.image))
         let samples = ImagePixels.straight(decoded.image).samples
-        // Adobe-free CMYK has ordinary ink amounts; ImageMagick inverts these incorrectly.
-        XCTAssertEqual(Array(samples.prefix(4)), [0, 56, 103, 162])
+        // Stored 0, 56, 103, 162 without an Adobe marker: inverted ink, as ImageIO and ImageMagick read it.
+        XCTAssertEqual(Array(samples.prefix(4)), [255, 199, 152, 93])
         let black = ImagePixels.make([0, 0, 0, 255], 1, 1, components: 4, space: CGColorSpaceCreateDeviceCMYK(), alpha: false)
         let white = ImagePixels.make([0, 0, 0, 0], 1, 1, components: 4, space: CGColorSpaceCreateDeviceCMYK(), alpha: false)
         XCTAssertEqual(ImagePixels.straight(ImagePixels.grayscale(black)).samples, [0])

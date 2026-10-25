@@ -123,8 +123,9 @@ int ftx_jpeg_decode(const unsigned char *data, unsigned long length, unsigned ch
         }
         JSAMPROW row = *pixels + (size_t)info.output_scanline * stride;
         jpeg_read_scanlines(&info, &row, 1);
-        // Adobe JPEG stores inverted CMYK (including YCCK); CGImage holds conventional ink amounts.
-        if (info.out_color_space == JCS_CMYK && info.saw_Adobe_marker)
+        // JPEG CMYK (including YCCK) is inverted ink with or without an Adobe marker, as ImageIO and ImageMagick
+        // (coders/jpeg.c ReadJPEGImage_) decode it; CGImage holds conventional ink amounts.
+        if (info.out_color_space == JCS_CMYK)
             for (size_t i = 0; i < stride; i++) row[i] = 255 - row[i];
     }
     jpeg_finish_decompress(&info);
