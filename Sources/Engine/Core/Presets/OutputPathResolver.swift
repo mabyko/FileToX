@@ -5,7 +5,7 @@ public enum OutputPathResolver {
         public var sourcePath: String; public var presetName: String; public var index: Int; public var now: Date
         public init(_ sourcePath: String, _ presetName: String, _ index: Int, _ now: Date = Date()) { self.sourcePath = sourcePath; self.presetName = presetName; self.index = index; self.now = now }
     }
-    public static func resolve(_ rule: OutputRule, _ tokens: Tokens, _ targetExtension: String, exists: (String) -> Bool, suffix: String? = nil) -> String? {
+    public static func resolve(_ rule: OutputRule, _ tokens: Tokens, _ targetExtension: String, reserved: (String) -> Bool = { _ in false }, exists: (String) -> Bool, suffix: String? = nil) -> String? {
         let sourceDir = FilePath.directoryName(FilePath.fullPath(tokens.sourcePath)) ?? ""
         let dir: String
         switch rule.location {
@@ -19,11 +19,11 @@ public enum OutputPathResolver {
         func source(_ p: String) -> Bool { FilePath.fullPath(p).caseInsensitiveCompare(FilePath.fullPath(tokens.sourcePath)) == .orderedSame }
         var candidate = path(name)
         if !source(candidate) {
-            if !exists(candidate) || rule.conflict == .overwrite { return candidate }
+            if !reserved(candidate) && (!exists(candidate) || rule.conflict == .overwrite) { return candidate }
             if rule.conflict == .skip { return nil }
         }
         var n = 2
-        while true { candidate = path("\(name) (\(n))"); if !exists(candidate) && !source(candidate) { return candidate }; n += 1 }
+        while true { candidate = path("\(name) (\(n))"); if !reserved(candidate) && !exists(candidate) && !source(candidate) { return candidate }; n += 1 }
     }
     public static func rename(_ name: String, _ steps: [RenameStep]) -> String { steps.reduce(name) { $1.apply($0) } }
     public static func rename(_ name: String, _ find: String?, _ replace: String?) -> String {

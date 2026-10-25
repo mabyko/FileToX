@@ -6,13 +6,14 @@ public final class JobQueue: @unchecked Sendable {
     private let combiner: FileCombiner?
     private let tiffMerger: TiffMerger?
     private let onStaging: ((String) throws -> Void)?
+    private let outputExists: (String) -> Bool
     private let lock = NSLock()
     private var tail: Task<Void, Never>?
     private var gates: [String: EngineConcurrencyGate] = [:]
     private var reserved = Set<String>()
     public var jobUpdated: ((ConversionJob) -> Void)?
     public var jobFinished: ((ConversionJob) -> Void)?
-    public init(_ catalog: ConverterCatalog, pdfMerger: PdfMerger? = nil, combiner: FileCombiner? = nil, tiffMerger: TiffMerger? = nil, onStaging: ((String) throws -> Void)? = nil) { self.catalog = catalog; self.pdfMerger = pdfMerger; self.combiner = combiner; self.tiffMerger = tiffMerger; self.onStaging = onStaging }
+    public init(_ catalog: ConverterCatalog, pdfMerger: PdfMerger? = nil, combiner: FileCombiner? = nil, tiffMerger: TiffMerger? = nil, outputExists: @escaping (String) -> Bool = { FileManager.default.fileExists($0) || FileManager.default.directoryExists($0) }, onStaging: ((String) throws -> Void)? = nil) { self.catalog = catalog; self.pdfMerger = pdfMerger; self.combiner = combiner; self.tiffMerger = tiffMerger; self.outputExists = outputExists; self.onStaging = onStaging }
     @discardableResult public func enqueue(_ sources: [String], _ preset: Preset, _ presetDisplayName: String) -> ConversionJob {
         let job = ConversionJob(sources, preset, presetDisplayName)
         lock.withLock {
@@ -177,13 +178,16 @@ public final class JobQueue: @unchecked Sendable {
         let staged: StagedOutputs
         init(_ queue: JobQueue, _ job: ConversionJob, _ source: String, _ index: Int) { self.queue = queue; self.job = job; tokens = .init(source, job.presetDisplayName, index, job.createdAt); staged = StagedOutputs(queue.onStaging) }
         func allocate(_ ext: String, suffix: String?) throws -> String? {
-            let path = queue.lock.withLock { () -> String? in
-                let path = OutputPathResolver.resolve(job.preset.output, tokens, ext, exists: { FileManager.default.fileExists($0) || FileManager.default.directoryExists($0) || self.queue.reserved.contains($0.lowercased()) }, suffix: suffix)
-                if let path { queue.reserved.insert(path.lowercased()) }; return path
+            while true {
+                try job.checkCancellation()
+                guard let path = OutputPathResolver.resolve(job.preset.output, tokens, ext, reserved: { path in
+                    self.queue.lock.withLock { self.queue.reserved.contains(path.lowercased()) }
+                }, exists: { path in self.job.isCancellationRequested ? false : self.queue.outputExists(path) }, suffix: suffix) else { return nil }
+                // Disk checks and rename-pattern matching must never hold the enqueue/reservation lock.
+                guard queue.lock.withLock({ queue.reserved.insert(path.lowercased()).inserted }) else { continue }
+                do { try job.checkCancellation(); try FileManager.default.createDirectoryIfNeeded(FilePath.directoryName(path)!); return try staged.stage(path) }
+                catch { release(path); throw error }
             }
-            guard let path else { return nil }
-            do { try FileManager.default.createDirectoryIfNeeded(FilePath.directoryName(path)!); return try staged.stage(path) }
-            catch { release(path); throw error }
         }
         func commit(_ produced: [String], _ outputs: inout [String]) throws { try staged.commit(produced, &outputs, job.preset.output, job.sources, release) }
         func abort() { staged.abort(release) }

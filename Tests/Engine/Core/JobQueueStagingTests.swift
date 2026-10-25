@@ -2,6 +2,62 @@ import XCTest
 @testable import FileToXEngineKit
 
 final class JobQueueStagingTests: XCTestCase {
+    func testBlockedOutputCheckDoesNotHoldEnqueueLockAndCancellationCleansReservations() async throws {
+        let d = CoreTempDir(), checking = expectation(description: "disk check blocked"), enqueued = expectation(description: "enqueue returned")
+        let done = expectation(description: "both cancelled"); done.expectedFulfillmentCount = 2
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        let q = JobQueue(ConverterCatalog([CoreFakeConverter("fake", ConversionEdge("jpg", "png"))]), outputExists: { _ in
+            checking.fulfill(); _ = release.wait(timeout: .now() + 8); return true
+        })
+        q.jobFinished = { job in XCTAssertEqual(job.state, .cancelled); done.fulfill() }
+        let source = try d.file("source.jpg"), first = q.enqueue([source], corePreset("png"), "first")
+        await fulfillment(of: [checking], timeout: 2)
+        DispatchQueue.global().async {
+            let second = q.enqueue([source], corePreset("png"), "second")
+            second.cancel(); first.cancel(); enqueued.fulfill()
+        }
+        await fulfillment(of: [enqueued], timeout: 1)
+        release.signal()
+        await fulfillment(of: [done], timeout: 3); await q.dispose()
+        XCTAssertEqual(try d.names(), ["source.jpg"])
+        XCTAssertTrue(d.leftovers().isEmpty)
+    }
+
+    func testParallelReservationsRemainDistinctAfterRacingDiskChecksIncludingOverwrite() async throws {
+        for conflict in [ConflictPolicy.rename, .overwrite] {
+            let d = CoreTempDir(), checked = expectation(description: "both checked same path"), allocated = expectation(description: "both reserved")
+            checked.expectedFulfillmentCount = 2; allocated.expectedFulfillmentCount = 2
+            let releaseCheck = DispatchSemaphore(value: 0), releaseConversion = DispatchSemaphore(value: 0), lock = NSLock()
+            var checks = 0
+            let c = CoreFakeConverter(edges: [ConversionEdge("jpg", "png")]) { step in
+                let path = try XCTUnwrap(step.output.allocate("png"))
+                try Data(FilePath.fileName(step.inputPath).utf8).write(to: URL(fileURLWithPath: path))
+                allocated.fulfill(); _ = releaseConversion.wait(timeout: .now() + 8)
+                return [path]
+            }
+            let q = JobQueue(ConverterCatalog([c]), outputExists: { path in
+                let block = lock.withLock { () -> Bool in
+                    guard FilePath.fileName(path) == "same.png" else { return false }
+                    checks += 1; return checks <= 2
+                }
+                if block { checked.fulfill(); _ = releaseCheck.wait(timeout: .now() + 8) }
+                return false
+            })
+            let p = corePreset("png") { $0.output.fileNamePattern = "same"; $0.output.conflict = conflict }
+            let first = ConversionJob([try d.file("one.jpg")], p, "one"), second = ConversionJob([try d.file("two.jpg")], p, "two")
+            let a = Task { await q.run(first) }, b = Task { await q.run(second) }
+            await fulfillment(of: [checked], timeout: 2)
+            releaseCheck.signal(); releaseCheck.signal()
+            await fulfillment(of: [allocated], timeout: 2)
+            releaseConversion.signal(); releaseConversion.signal()
+            await a.value; await b.value
+            XCTAssertEqual(first.state, .completed); XCTAssertEqual(second.state, .completed)
+            XCTAssertEqual(Set(first.outputs + second.outputs), [d.path + "/same.png", d.path + "/same (2).png"])
+            XCTAssertEqual(Set(try (first.outputs + second.outputs).map { try String(contentsOfFile: $0, encoding: .utf8) }), ["one.jpg", "two.jpg"])
+            XCTAssertTrue(d.leftovers().isEmpty)
+        }
+    }
     private func converter(_ from: String = "jpg", _ to: String = "png", _ script: @escaping (ConversionStep) throws -> [String]) -> CoreFakeConverter { CoreFakeConverter(edges:[ConversionEdge(from,to)],script:{ try script($0) }) }
     private func write(_ path: String, _ text: String) throws -> String { try Data(text.utf8).write(to:URL(fileURLWithPath:path)); return path }
     func testFailureAfterPagesReleasesNamesAndJournalPaths() async throws {

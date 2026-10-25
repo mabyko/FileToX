@@ -39,18 +39,18 @@ enum Validation {
             if p.presetIds.count > ToolbarProfile.maxSlices { throw invalid("Profile \(p.id): at most \(ToolbarProfile.maxSlices) presets.") }
         }
     }
-    static func settings(_ s: AppSettings) throws {
+    static func settings(_ s: AppSettings, resolve: (String) -> String = WatchFolderMonitor.canonical) throws {
         if s.schemaVersion != AppSettings.currentSchemaVersion { throw invalid("settings.schemaVersion must be \(AppSettings.currentSchemaVersion).") }
         if s.language != "auto" && !Localizer.languages.contains(s.language) { throw invalid("Unknown language \(s.language).") }
         if s.defaultOutput.location == .default { throw invalid("settings.defaultOutput.location can't be default.") }
         if !s.defaultOutput.customFolder.isEmpty && !FilePath.isFullyQualified(s.defaultOutput.customFolder) { throw invalid("settings.defaultOutput.customFolder must be an absolute path.") }
         try unique(s.watchFolders.map(\.id), "watch rule")
-        for rule in s.watchFolders { try watchRule(rule) }
+        for rule in s.watchFolders { try watchRule(rule, originals: s.watchFolders.filter { !$0.folder.isEmpty }.map(\.originalsFolder), resolve: resolve) }
         for path in s.engineOwnCopies.values where !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if !FilePath.isFullyQualified(path) { throw invalid("settings.engineOwnCopies must hold absolute paths.") }
         }
     }
-    static func watchRule(_ rule: WatchRule) throws {
+    static func watchRule(_ rule: WatchRule, originals: [String]? = nil, resolve: (String) -> String = WatchFolderMonitor.canonical) throws {
         if rule.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw invalid("A watch rule needs an id.") }
         if rule.enabled && (rule.folder.isEmpty || rule.presetId.isEmpty) { throw invalid("Choose a folder and preset for an enabled watch rule.") }
         for path in [rule.folder, rule.outputFolder] where !path.isEmpty {
@@ -58,6 +58,15 @@ enum Validation {
         }
         if !rule.folder.isEmpty && WatchFolderMonitor.contains(FilePath.trimEndingSeparator(FilePath.fullPath(rule.resolvedOutputFolder)), FilePath.trimEndingSeparator(FilePath.fullPath(rule.folder))) {
             throw invalid("A watch output folder cannot be the input folder or its parent.")
+        }
+        if !rule.folder.isEmpty {
+            let output = resolve(rule.resolvedOutputFolder).lowercased()
+            for path in originals ?? [rule.originalsFolder] {
+                let original = resolve(path).lowercased()
+                if WatchFolderMonitor.contains(original, output) || WatchFolderMonitor.contains(output, original) {
+                    throw invalid("A watch output folder must not overlap a saved originals folder.")
+                }
+            }
         }
         for pattern in rule.include {
             if let error = FileNameFilter.validate(pattern) { throw invalid("Watch folder: invalid include pattern: \(error)") }

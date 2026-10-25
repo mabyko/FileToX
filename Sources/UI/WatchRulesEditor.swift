@@ -63,7 +63,7 @@ private struct WatchRuleEditor: View {
             folder("watch.output", key: "outputFolder")
             TextField(L("watch.include"), text: Binding(get: {
                 rule["include"]?.array?.compactMap(\.string).joined(separator: "\n") ?? ""
-            }, set: { rule["include"] = .array($0.split(separator: "\n").map { .string(String($0)) }) }), axis: .vertical)
+            }, set: { rule["include"] = .array($0.split(separator: "\n", omittingEmptySubsequences: false).map { .string(String($0)) }) }), axis: .vertical)
             TextField(L("파일명 패턴"), text: text("fileNamePattern"))
             Picker(L("watch.originals"), selection: text("originals")) {
                 Text(L("watch.keep")).tag("keep")

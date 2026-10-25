@@ -181,7 +181,8 @@ final class Host: @unchecked Sendable {
         try gate.withLock { try checkRevision(p) }
         var settings = try WireJson.readStrict(AppSettings.self, p["settings"], "settings")
         for index in settings.watchFolders.indices { settings.watchFolders[index].include = settings.watchFolders[index].include.compactMap(FileNameFilter.normalize) }
-        try Validation.settings(settings)
+        // Physical alias checks run on the watch queue so a stalled volume cannot block configuration RPCs.
+        try Validation.settings(settings, resolve: { FilePath.trimEndingSeparator(FilePath.fullPath($0)) })
         settings.engineOwnCopies = settings.engineOwnCopies.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let result = try gate.withLock { () -> [String: Any] in
             try checkRevision(p)

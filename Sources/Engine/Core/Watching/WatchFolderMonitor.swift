@@ -27,7 +27,7 @@ final class WatchFolderMonitor {
         let rule: WatchRule, preset: Preset, files: [String: Stamp]
     }
     struct Contents { let identity: RootIdentity; let files: [String: Stamp] }
-    private struct Observation { let stamp: Stamp; let since: Date; var handled: Bool }
+    private struct Observation { let stamp: Stamp; let since: TimeInterval; var handled: Bool }
     private struct Snapshot { let rule: WatchRule; let root: RootIdentity; var files: [String: Observation] }
     private var snapshots: [String: Snapshot] = [:]
     private var active = Set<String>()
@@ -35,11 +35,13 @@ final class WatchFolderMonitor {
     private(set) var statuses: [[String: Any]] = []
     private let excluded: [String]
     private let reader: ((WatchRule, String, [String]) throws -> Contents)?
-    init(excluding paths: [String] = [], reader: ((WatchRule, String, [String]) throws -> Contents)? = nil) {
-        excluded = paths; self.reader = reader
+    private let clock: () -> TimeInterval
+    init(excluding paths: [String] = [], clock: @escaping () -> TimeInterval = { Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000 }, reader: ((WatchRule, String, [String]) throws -> Contents)? = nil) {
+        excluded = paths; self.clock = clock; self.reader = reader
     }
 
-    func scan(_ rules: [WatchRule], presets: [Preset], now: Date = Date()) -> [Batch] {
+    func scan(_ rules: [WatchRule], presets: [Preset], now: TimeInterval? = nil) -> [Batch] {
+        let now = now ?? clock()
         snapshots = snapshots.filter { id, _ in rules.contains { $0.id == id && $0.enabled } }
         let outputRoots = rules.filter { !$0.folder.isEmpty }.flatMap { [Self.canonical($0.resolvedOutputFolder), Self.canonical($0.originalsFolder)] } + excluded.map(Self.canonical)
         var batches: [Batch] = []
@@ -47,7 +49,7 @@ final class WatchFolderMonitor {
             var status: [String: Any] = ["id": rule.id, "state": "disabled", "detail": NSNull()]
             guard rule.enabled else { return status }
             do {
-                try Validation.watchRule(rule)
+                try Validation.watchRule(rule, originals: rules.filter { !$0.folder.isEmpty }.map(\.originalsFolder), resolve: Self.canonical)
                 guard let preset = presets.first(where: { $0.id == rule.presetId }) else { throw ConversionError("Choose an existing preset for this watch folder.") }
                 let root = Self.canonical(rule.folder)
                 guard !outputRoots.contains(where: { Self.contains($0, root) }) else { throw ConversionError("A watch folder cannot be inside an output, originals, or engine data folder.") }
@@ -63,7 +65,7 @@ final class WatchFolderMonitor {
                     }
                     else { observation = Observation(stamp: stamp, since: now, handled: old == nil) }
                     // shortcut: stable size and timestamps for 3 seconds, producers with longer pauses should publish by atomic rename.
-                    if ready.count < Self.batchLimit && !observation.handled && !active.contains(path) && now.timeIntervalSince(observation.since) >= 3 {
+                    if ready.count < Self.batchLimit && !observation.handled && !active.contains(path) && now - observation.since >= 3 {
                         observation.handled = true; ready[path] = stamp; active.insert(path)
                     }
                     next[path] = observation
@@ -89,8 +91,8 @@ final class WatchFolderMonitor {
         active.subtract(batch.files.keys)
         let failures = job.lock.withLock { job.files.compactMap { $0.errorDetail } }
         if let failure = failures.first { errors[batch.rule.id] = failure }
-        guard !job.isCancellationRequested, currentRules.contains(batch.rule), batch.rule.originals == .moveToOriginals, canMove() else { return }
-        for file in job.files where file.state == .done && !file.outputs.isEmpty {
+        guard !job.isCancellationRequested, !job.outputs.isEmpty, currentRules.contains(batch.rule), batch.rule.originals == .moveToOriginals, canMove() else { return }
+        for file in job.files where file.state == .done {
             guard let stamp = batch.files[file.sourcePath], Stamp.read(file.sourcePath) == stamp else { continue }
             do {
                 let folder = batch.rule.originalsFolder

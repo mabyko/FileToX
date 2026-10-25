@@ -2,6 +2,32 @@ import XCTest
 @testable import FileToXEngineKit
 
 final class WatchHostTests: XCTestCase {
+    func testLoadedOriginalsAliasRuleIsBlockedAndSavingDirectOverlapIsRejected() throws {
+        let d = CoreTempDir(), store = UserDataStore(d.path + "/core")
+        try store.load()
+        var preset = corePreset("md"); preset.id = "watch-preset"; preset.output.fileNamePattern = "victim"; preset.output.conflict = .overwrite
+        store.presets.append(preset)
+        var rule = WatchRule(); rule.folder = d.path + "/inbox"; rule.presetId = preset.id
+        let saved = try d.file("inbox/originals/victim.md", "saved original")
+        rule.outputFolder = d.path + "/originals-alias"
+        try FileManager.default.createSymbolicLink(atPath: rule.outputFolder, withDestinationPath: rule.originalsFolder)
+        store.settings.watchFolders = [rule]; try store.saveLibrary(); try store.saveSettings()
+        let child = try HostChild(d.path); defer { child.close() }
+        _ = try child.event("hello"); try waitForWatch(child, state: "error")
+        let source = try d.file("inbox/new.txt", "new input")
+        Thread.sleep(forTimeInterval: 4.1)
+        XCTAssertTrue(hostObjects(try child.call("history.get")["entries"]).isEmpty)
+        XCTAssertFalse(child.messages.contains { $0["event"] as? String == "job.finished" })
+        XCTAssertEqual(try String(contentsOfFile: saved, encoding: .utf8), "saved original")
+        XCTAssertEqual(try String(contentsOfFile: source, encoding: .utf8), "new input")
+        let library = try child.call("library.get")
+        var settings = hostObject(library["settings"]); rule.outputFolder = rule.originalsFolder
+        settings["watchFolders"] = [try WireJson.toNode(rule)]
+        try child.request("reject-originals", "settings.save", ["baseRevision": library["revision"]!, "settings": settings])
+        XCTAssertEqual(hostObject(try child.reply("reject-originals")["error"])["code"] as? String, "invalid_input")
+        XCTAssertEqual(try child.call("library.get")["revision"] as? Int, library["revision"] as? Int)
+    }
+
     func testBlockedScanKeepsHelloStatusSettingsProgressAndCancelResponsiveAndDropsStaleResults() async throws {
         for stop in [false, true] {
             let d = CoreTempDir(), entered = expectation(description: "scanner blocked"), replied = expectation(description: "RPCs returned")
@@ -21,10 +47,10 @@ final class WatchHostTests: XCTestCase {
             let store = UserDataStore(d.path + "/core"); try store.load(); store.presets.append(preset)
             var rule = WatchRule(); rule.folder = d.path + "/inbox"; rule.presetId = preset.id
             store.settings.watchFolders = [rule]
-            _ = monitor.scan([rule], presets: store.presets, now: Date().addingTimeInterval(-10))
+            _ = monitor.scan([rule], presets: store.presets, now: Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000 - 10)
             let watched = try d.file("inbox/watched.txt")
             files[watched] = try XCTUnwrap(WatchFolderMonitor.Stamp.read(watched))
-            _ = monitor.scan([rule], presets: store.presets, now: Date().addingTimeInterval(-10))
+            _ = monitor.scan([rule], presets: store.presets, now: Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000 - 10)
             block = true
             let converter = CoreFakeConverter(edges: [ConversionEdge("txt", "md")]) { step in
                 if step.inputPath == watched { staleJob.fulfill() }
