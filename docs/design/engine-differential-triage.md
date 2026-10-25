@@ -1944,3 +1944,67 @@ quality 50 and 3.6× at quality 75. These are single diagnostic runs under share
 benchmarks. Correct metadata/orientation handling, alpha policy and symbol isolation also remain necessary before
 shipping. Reports are in `native-avif/calibration/` above and
 `worktrees/t3-40b9a46e/build/avif-proto/REPORT.md`.
+
+## Managed engine installation and final follow-up (2026-10-25)
+
+이번 후속 변경은 관리형 외부 엔진 설치, PSD/PSB IPTC 보존, 대용량 host 응답과 Markdown 꼬리 추가 최적화다. 기준 실행 파일은 앞 절의 SwiftPM Release `158a40ecc3367b20098242d51ed0ebaf49883b109ab04ff7b8ea1f3244c33ffc`이며 C# 기준선은 다시 실행하지 않았다. 검증은 M2 Max/macOS 27.0.1에서 수행했다. 지원 범위는 M1 이상 arm64/macOS 15 이상으로 유지하지만 해당 최소 하드웨어·OS 실행 증거는 아니다.
+
+### 변경과 검토
+
+- Pandoc 3.12, Calibre 9.15.0, LibreOffice 26.2.6의 고정 arm64 패키지를 앱에서 내려받는다. 크기·SHA-256 검증, 안전한 압축 해제·DMG 분리·실행 파일 확인 후 기존 경로를 덮어쓰지 않고 배치한다. 진행·취소·재시도·상태 갱신과 종료 시 정리 대기를 연결했다. 디스크 작업은 상태 잠금 밖에서 수행하며 정리가 반환된 뒤 종료 상태와 task 제거를 함께 반영한다. 이미 배치한 설치를 취소로 되돌리지는 않는다. 기존 엔진 폴더 교체·자동 업데이트·이어받기는 제공하지 않는다.
+- 설치 UI의 갱신 오류가 다른 다운로드의 폴링을 중단하지 않도록 수정했다. 취소된 이전 폴링의 오류는 표시하지 않고, 종료 중 취소 응답·수동 새로고침이 새 폴링을 시작하지 않도록 했다. 기존 종료 정리 중 폴링은 유지한다. 독립 검토의 지적을 수정했고, 마지막 새로고침 가드는 부모 코드 검토와 수정 전 실패·수정 후 통과 회귀 테스트로 확인했다.
+- PSD/PSB는 JPEG APP13, PNG raw-profile tEXt/zTXt, PSD/PSB 리소스에서 IPTC `0x0404`와 digest `0x0425`만 바이트 그대로 보존한다. 픽셀·ICC·해상도와 다른 Photoshop 리소스는 이 경로로 복사하지 않는다. `keepMetadata=false`는 IPTC도 제거한다. PNG 해제량은 오류 스트림까지 누적 계산하며 한도를 넘으면 이후 해제를 하지 않는다. iTXt·다른 입력 형식·PSD의 COM/EXIF/XMP는 이번 범위에 포함하지 않았다.
+- 앱은 `--chunked-output`으로 큰 응답을 원문 2 MiB 단위로 받는다. 물리 줄은 4 MiB, 논리 메시지와 대기 큐는 각각 64 MiB까지다. 목록·이력을 잘라내지 않으며 기존 클라이언트와 요청 제한은 유지한다. 64 MiB 초과 메시지의 오류/fatal 정책은 남아 있다.
+- Markdown의 소유된 마지막 inline 노드에 바로 이어 붙이는 경로를 추가했다. weak 부모 참조와 기존 변형 API 의미는 유지했다. 119,792개 Markdig 바이트 비교, 5,830개 실제 host 출력과 관련 회귀 검사가 통과했다. 후속 single-child transfer 실험은 TXT 중앙값 0.66643→0.66503초(0.2%)에 그쳐 폐기했고 추가 생산 변경은 없다.
+
+### 소스와 실행 파일 연결
+
+엔진·Core 전체 검증 소스는 `8a7c3cc`, 849건·이미지 검증 소스는 `a5d32f2`, 마지막 앱 소스는 `d9b260d`다. 그 사이 바뀐 생산 코드는 `Sources/App/AppModel.swift`뿐이며 테스트 변경도 `Tests/App/AppModelTests.swift`에 한정된다. `final-host/`의 변환 검증용 캡처는 보존했고 `final-app-source-host/`에 마지막 앱 소스와의 연결을 따로 기록했다. 두 SwiftPM 실행 파일과 리소스 13개는 바이트가 같다.
+
+- SwiftPM Release helper SHA-256: `75da280a6647dbf851652a704c53ba3445acdeb71a8565b9fe77c862cf63aa94`.
+- 서명된 Xcode Release helper SHA-256: `baa76eabd1acb355bd28fa9346c794522b0b69e16a91ab0c2216896a80593107`.
+- Xcode 앱 실행 파일 SHA-256: `fe94cb099a26f6a9c4794ccb58b8db03e6f09aa7af86000ba5a4c0a2d39f6e38`.
+
+전체 명령·환경·종료 코드·해시는 `build/resume/until20-20261025/`에 보관한다. `swift-final-results.json`, `xcode-final-results.json`, `xcode-final-ui-results.json`, `xcode-final-quitguard-results.json`, `quitguard-source-binding.json`이 단계별 범위와 소스 차이를 구분한다. 후속 문서 커밋은 검증한 실행 소스를 바꾸지 않는다.
+
+### 빌드·테스트·배포 구성
+
+- SDK 접근 차단 Swift 엔진 669개: 14개 skip, 실패 0. `ps` 사용을 위해 별도 빈 HOME 환경에서 실행한 프로세스 트리 종료 1개도 통과했다. Core 18개는 실패 0이다.
+- SDK 접근 차단 Xcode 엔진 669개: 58개 skip, 실패 0. 최종 앱 소스의 Xcode 클린 빌드와 별도 clean 환경 앱 81개 테스트는 실패 0이다. 선택 도구·표본 미설정 skip을 통과로 세지 않는다.
+- 기존 개발 인증서의 Release 서명과 deep/strict 검사가 통과했다. Mach-O 5개는 모두 arm64이며 .NET 파일·런타임과 Homebrew 동적 링크가 없다. 앱 파일 합계는 69,942,728바이트, helper는 35,292,832바이트다. Developer ID·공증 검증은 아니다.
+- 저장소와 .NET 경로 접근을 막은 재배치 앱의 22개 실행 검사가 통과했다. 같은 서명된 재배치 helper가 실제 HTTPS로 42,267,373바이트 Pandoc 패키지를 검증·설치하고 RST→DOCX 내용 검사를 통과했다. 설치 응답 0.000146초, 설치 중 다른 RPC 3개도 응답했고 staging 잔여물은 없다. 이 수치는 한 번의 기능 검사이며 성능 보장은 아니다. Calibre·LibreOffice도 고정 캐시 패키지 설치·실변환 검사에서 통과했다.
+- 사용자의 .NET/NuGet 폴더, 기존 설치 앱과 사용자 설정은 삭제·교체하지 않았다. SDK가 설치되지 않은 별도 OS나 물리 M1/macOS 15 검증으로 확대해 말하지 않는다.
+
+### 실제 변환 비교
+
+849건을 한 번 새로 실행했다. 786개 완료·기존과 같은 63개 변환 실패이며 harness·검사 오류는 0이다. 상태·오류 키·출력 수·이름의 변화가 없고 staging과 private HOME/TMP는 비어 있었다. 런타임 13개·캡처 소스 974개와 기준선·도구·입력의 전후 해시가 같았다.
+
+| 비교 정책 | PASS | WARN | FAIL |
+| --- | ---: | ---: | ---: |
+| Legacy 대 C# | 582 | 262 | 5 |
+| Legacy 대 직전 Swift 158a40 | 763 | 85 | 1 |
+| V2 PDF-render 대 C# | 587 | 254 | 8 |
+| V2 PDF-render 대 직전 Swift 158a40 | 763 | 84 | 2 |
+
+새 FAIL ID는 없고 기존 실패는 면제하지 않았다. C# 대 V2의 8건은 기준선의 이미지 참조 누락 4건, 수정된 TCR 내용 차이 2건, Calibre 자동 표지 차이 2건이다. TCR 7개는 직전 Swift와 바이트가 같다. C# 대비 한 건의 WARN→PASS는 LIT→DOCX 자동 표지가 우연히 같은 바이트로 생성된 결과이며 생산 개선으로 세지 않는다. 바이너리 50개(대 C# 51개)는 의미 검사가 없고 PDF 주석은 래스터 검사 범위 밖이다.
+
+이미지 검증은 186건 중 185개 성공과 의도된 초과 ICC 거부 1개다. 기존 135개 화소·시각 결과는 모두 유지됐고 133개 파일은 바이트가 같다. `metadata` PSD/PSB 두 파일만 정확히 30바이트 IPTC가 추가됐으며 나머지 바이트는 그대로다. IPTC 23/23, ICO 54/54 프레임, JP2 품질 12/12, CMYKA 2/2와 독립 19×13 ICC resize oracle이 통과했다. 7,705개 보호 파일은 바뀌지 않았다.
+
+C# 엄격·시각 일치는 112/135이며 TGA 검사 오류만 고친 별도 정책은 113/135다. 기존 23개 차이는 C# CMYK 회색조 오류 5개, C# CMYK JXL 오류 2개, 실제 ICC 변환·코덱 손실 차이 10개, GIF/AVIF/RGB JXL 코덱 차이 5개, TGA 검사기 1개다. 실제 AVIF 품질 부족을 포함해 면제하지 않았다. 다른 Photoshop 리소스·일부 입력 형식의 메타데이터와 전체 형식의 시각 동등성까지 보장하지 않는다.
+
+### 순차 성능과 남은 항목
+
+다른 빌드·변환 작업을 끝낸 뒤 5회씩 순서를 교차한 60개 변환이다. 아래는 최선 값이며 공유 M2 Max의 진단값이다. 모든 비교 출력은 같고 FB2 문서 UUID만 이전에 입증한 규칙으로 제외했다. PDF 코드는 이번 변경에서 바뀌지 않았으므로 수치 변화 전부를 새 최적화의 효과로 해석하지 않는다.
+
+| 입력 → 출력 | 직전 Swift (초) | 현재 (초) |
+| --- | ---: | ---: |
+| big.pdf → TXT | 0.60619 | 0.54721 |
+| big.epub → FB2 | 0.45782 | 0.45616 |
+| big.docx → MD | 0.09280 | 0.09339 |
+| big.docx → TXT | 0.08451 | 0.08424 |
+| big.md → HTML | 0.74372 | 0.72686 |
+| big.md → TXT | 0.69104 | 0.66548 |
+
+PDF TXT의 0.84초 목표는 충족하지만 Markdown TXT의 0.60초 목표는 미달이다. AVIF 네이티브 대안은 앞 절의 회색조 회귀·alpha 크기·메모리·취소·패키징 문제 때문에 앱에 넣지 않았다. 복잡한 SVG·세로쓰기, JPEG/PNG 밖의 일부 ICC/메타데이터, 검사기가 없는 바이너리 의미, 실제 M1/macOS 15·SMB/exFAT/TCC·로그인/알림 실기와 배포 공증도 남아 있다.
+
+별도 AVIF 후속 실험에서는 기존 `ProcessRunner.swift`와 작은 scratch helper 대체물을 사용해 외부 인코더의 프로세스 그룹 취소를 검사했다. 24 MP·q75·인코더 2스레드에서 정상 인코딩은 2.46초, 실행 중 세 번의 취소는 5.3/7.6/8.8ms, 외부 그룹 종료의 재측정은 8.2ms였다. 여섯 인코더 호출에서 게시·staging 파일은 남지 않았으며 정상 출력은 이전 native 출력과 바이트가 같다. 인자 파싱 실패 네 번은 인코더를 시작하기 전 실패로 따로 남겼다. 이는 앱 큐·staging 통합이나 최종 파일 쓰기 도중 강제 종료 검증이 아니다. 회색조 0.42–0.96dB 회귀, 24 MP에서 ImageIO보다 큰 메모리·시간 비용, alpha 크기, 화소·메타데이터 전달과 별도 서명 helper 패키징은 해결하지 않았다. `build/avif-proto/REPORT.md`의 후속 절에 근거를 남겼으며 앱 소스·의존성은 바꾸지 않았다.

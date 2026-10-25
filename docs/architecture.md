@@ -15,7 +15,7 @@ FileToX는 Filee에서 영감을 받은 Mac 전용 파일 변환 앱이다. **Ap
 - `Package.swift`: Core·EngineKit·helper 실행 제품, 네이티브 라이브러리·리소스·패키지 테스트의 공통 정의.
 - `project.yml`: 로컬 Swift 패키지를 사용하는 앱·helper 번들, 내장 라이브러리·도구·리소스, 서명·Xcode 테스트. 공통 `ARCHS: arm64`를 사용하고 bundled-engine staging도 다른 아키텍처를 거부한다.
 
-PDFium의 검증된 universal 원본과 upstream 출처·고지는 보존한다. Skia 정적 bridge는 기존 arm64 부분과 바이트가 같은 arm64 전용 파일로 줄였으며 빌드·다운로드도 arm64만 사용한다. 배포 staging은 PDFium·번들 도구에서 arm64만 추출한 뒤 서명한다. 앱·helper·번들 도구·배포 PDFium 모두 arm64이며, 원본 라이브러리의 보존은 Intel 지원을 뜻하지 않는다. 상세 배치는 [패키징](design/macos-packaging.md)을 따른다.
+PDFium의 검증된 universal 원본과 upstream 출처·고지는 보존한다. Skia 정적 bridge는 arm64 전용으로 줄인 뒤 취소 확인을 위해 다시 빌드했으며 현재 빌드·다운로드도 arm64만 사용한다. 각 출력의 해시와 경위는 Vendor/SkiaSVG의 출처 기록에 보존한다. 배포 staging은 PDFium·번들 도구에서 arm64만 추출한 뒤 서명한다. 앱·helper·번들 도구·배포 PDFium 모두 arm64이며, 원본 라이브러리의 보존은 Intel 지원을 뜻하지 않는다. 상세 배치는 [패키징](design/macos-packaging.md)을 따른다.
 
 ## 형식과 변환 엔진
 
@@ -25,7 +25,9 @@ PDFium의 검증된 universal 원본과 upstream 출처·고지는 보존한다.
 
 내장 변환기는 Swift 코드와 macOS 프레임워크, LibRaw·libjpeg-turbo·libwebp·libjxl·OpenJPEG·PDFium·Skia 등의 네이티브 구성 요소를 사용한다. `MagickImageConverter`·`PdfSharpConverter` 등 기존 id/타입 이름은 호환성을 위해 남아 있으며 해당 NuGet 패키지를 실행한다는 뜻이 아니다. PDF 래스터는 PDFium, PDF 편집·텍스트 처리는 PDFKit을 사용한다. Skia SVG bridge는 허용한 기본 도형만 처리하며 나머지 SVG 기능과 벡터 PDF는 CoreSVG를 유지한다.
 
-기본 번들에는 rhwp·7-Zip 실행 파일을 포함한다. FFmpeg·Ghostscript·Pandoc·LibreOffice·Calibre는 시스템 설치나 사용자가 지정한 사본을 사용한다. `EngineEnvironment`는 사용자 지정 → 번들/다운로드 경로 → 시스템 경로 순서로 찾으며, 개발 다운로드 도구로 받은 사본이 사용자 설정에 자동 등록되지는 않는다. 없는 엔진과 지원하지 않는 macOS 경로는 사용 불가 이유를 반환한다.
+기본 번들에는 rhwp·7-Zip 실행 파일을 포함한다. 앱의 관리형 설치는 고정된 arm64 Pandoc·LibreOffice·Calibre를 사용자 데이터의 `engines` 아래에 설치한다. FFmpeg·Ghostscript는 시스템 설치나 사용자가 지정한 사본을 사용한다. `EngineEnvironment`는 사용자 지정 → 번들/다운로드 경로 → 시스템 경로 순서로 찾는다. 설치는 사용자 지정 경로 설정을 바꾸지 않으며 기존 폴더를 교체하지 않는다. 없는 엔진과 지원하지 않는 macOS 경로는 사용 불가 이유를 반환한다.
+
+`ManagedEngineInstaller`는 내려받은 크기·SHA-256을 확인한 뒤 전용 staging에서 압축 경로·심볼릭 링크를 검사하고 실행 파일을 확인한다. DMG는 읽기 전용으로 연결하고 복사 후 분리한다. 최종 배치는 기존 경로를 덮어쓰지 않는 rename을 사용한다. 디스크 작업은 상태 잠금 밖에서 수행하며 정리가 반환된 뒤 종료 상태와 작업 제거를 함께 반영한다. `engine.install`은 즉시 상태를 반환하고 앱이 짧은 상태 요청으로 진행을 읽는다. 종료 시 새 설치를 막고 취소·정리를 기다린 뒤 helper stdin을 닫는다. 이미 배치한 설치는 취소로 되돌리지 않으며 정리는 최선 노력이다. 자동 업데이트·기존 폴더 교체·이어받기는 제공하지 않는다.
 
 ## 통신·진행·취소·이력
 
@@ -61,13 +63,15 @@ JPEG·PNG 입력의 실제 ICC를 추적하고, 화소의 색 공간이 달라�
 
 ## 현재 UI와 검증 범위
 
-홈에서 파일·폴더와 프리셋/파일 도구를 선택해 실행하거나 원형 메뉴를 연다. Finder 드래그의 기본 호출 키는 Control, 파일 도구 메뉴는 Control+Shift이며 사용자 설정과 호출 순서를 따른다. 앱은 프리셋·프로필·테마·언어·엔진 경로 편집, 진행·취소·실패 재시도·최근 이력을 연결한다. 로그인 항목·메뉴 막대·알림·호출 제외 앱과 자동 변환 폴더도 연결돼 있다. 앱 내 엔진 다운로드는 아직 구현하지 않았다.
+홈에서 파일·폴더와 프리셋/파일 도구를 선택해 실행하거나 원형 메뉴를 연다. Finder 드래그의 기본 호출 키는 Control, 파일 도구 메뉴는 Control+Shift이며 사용자 설정과 호출 순서를 따른다. 앱은 프리셋·프로필·테마·언어·엔진 경로 편집, 진행·취소·실패 재시도·최근 이력을 연결한다. 로그인 항목·메뉴 막대·알림·호출 제외 앱과 자동 변환 폴더도 연결돼 있다. 앱 내 관리형 엔진 다운로드·취소·설치 상태도 연결했다.
 
 이전 최종 통합 기록은 개발 인증서로 서명한 Release 빌드, SDK 접근을 막은 빌드·테스트와 재배치한 앱의 22개 검사를 통과했다. [기록](design/engine-differential-triage.md#final-native-quality-integration-2026-10-24)의 849건 비교는 581 PASS / 264 WARN / 4 FAIL이며 WARN은 시각적 동등성의 증거가 아니다. 과거 x86_64 교차 컴파일·링크 성공과 Intel/Rosetta 실행 불가는 당시 증거로만 보존한다.
 
 실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [이전 arm64 검증 기록](design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
 
-현재 검증 소스 `5f9486a`는 SDK 접근 차단 clean build·엔진 테스트 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 Release·서명·재배치 22개 검사를 통과했다. CMYK JPEG 반전·PSD/PSB의 CMYK/ICC·BMP 해상도와 검사기를 보완했다. 새 849건은 786완료·기존 63실패, 검사 오류 0이며 V2 C# 비교는 586 PASS / 255 WARN / 8 FAIL이다. 이전 V1 수치와 구분하며 실패는 면제하지 않았다. 이미지 엄격 일치는 103→112/135건이고 TGA 검사 오류만 수정한 별도 수치는 113건이다. 이전 순차 PDF TXT 0.630초·Markdown TXT 0.667초는 재측정하지 않았다. [최신 수정·검증·남은 한계](design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)를 따른다.
+직전 검증 소스 `5f9486a`는 SDK 접근 차단 clean build·엔진 테스트 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 Release·서명·재배치 22개 검사를 통과했다. CMYK JPEG 반전·PSD/PSB의 CMYK/ICC·BMP 해상도와 검사기를 보완했다. 새 849건은 786완료·기존 63실패, 검사 오류 0이며 V2 C# 비교는 586 PASS / 255 WARN / 8 FAIL이다. 이전 V1 수치와 구분하며 실패는 면제하지 않았다. 이미지 엄격 일치는 103→112/135건이고 TGA 검사 오류만 수정한 별도 수치는 113건이다. 이전 순차 PDF TXT 0.630초·Markdown TXT 0.667초는 재측정하지 않았다. [최신 수정·검증·남은 한계](design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)를 따른다.
+
+최종 후속 앱 소스 `d9b260d`의 클린 빌드·앱 81개·서명·재배치 22개 검사를 통과했다. 엔진은 앞선 전체 Swift 669개(14개 skip)와 별도 프로세스 트리 1개, Core 18개, Xcode 엔진 669개(58개 skip)의 소스와 같다. 관리형 설치의 실제 HTTPS 전송·서명된 helper 실행도 확인했다. 변환 검증 소스 `a5d32f2` 이후 바뀐 것은 AppModel과 그 테스트뿐이며 SwiftPM helper·리소스 13개는 바이트가 같다. Xcode 배포 helper는 별도 빌드·서명·재배치 검사를 수행했다. 새 849건 V2 C# 비교는 587/254/8이고 새 엄격 실패 ID는 없다. PSD/PSB IPTC를 보존하며 다른 화소는 유지한다. 순차 PDF TXT 0.547초·Markdown TXT 0.665초와 남은 제한은 [최종 후속 기록](design/engine-differential-triage.md#managed-engine-installation-and-final-follow-up-2026-10-25)에 구분했다.
 
 ## 전환 전 .NET 설계·검증 기록 (2026-10-11)
 

@@ -46,7 +46,7 @@ FileToX를 메뉴 막대에서 실행해 둔 채, Finder에서 파일을 드래�
 
 등록된 모든 형식 사이의 변환을 보장하지는 않는다. 변환 경로 탐색기가 입력·엔진 상태에 따라 사용 가능한 프리셋과 출력 형식을 판단한다. 읽기 전용 형식 58개는 출력에 나타나지 않는다. 설치되지 않은 엔진과 macOS에서 불가능한 경로는 이유를 표시한다.
 
-기본 번들에는 내장 라이브러리와 rhwp·7-Zip을 포함한다. FFmpeg·Ghostscript·Pandoc·LibreOffice·Calibre는 시스템 설치 또는 **변환 엔진 → 외부 엔진 실행 파일**에서 지정한 사본을 사용한다. 개발용 다운로드 도구가 받은 사본은 자동으로 사용자의 설정에 등록하지 않는다.
+기본 번들에는 내장 라이브러리와 rhwp·7-Zip을 포함한다. **변환 엔진 → 관리형 엔진**에서 고정 버전의 arm64 Pandoc·LibreOffice·Calibre를 FileToX 전용으로 내려받을 수 있다. 설치 전에 크기와 SHA-256을 확인하며 진행률과 취소를 제공한다. 기존 엔진 폴더는 보존하고 **외부 엔진 실행 파일**에서 지정한 사본을 우선 사용한다. FFmpeg·Ghostscript는 시스템 설치나 지정한 사본을 사용한다. 앱 종료는 진행 중 다운로드를 취소하고 정리를 기다린다. 중단된 다운로드 이어받기는 지원하지 않는다.
 
 출력은 각 최종 저장 폴더의 숨김 작업 폴더에 쓴 뒤 결과별로 게시한다. 원본 파일은 Overwrite에서도 보호하고, 기본 충돌 정책은 새 이름이다. 여러 결과의 게시 중 실패하면 이미 게시한 결과를 정확히 보고한다. 전체 묶음을 한 번에 되돌리는 원자성을 약속하지 않는다. 데이터는 `~/Library/Application Support/FileToX/{core,engines,tmp}`로 분리한다.
 
@@ -101,9 +101,12 @@ python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optiona
 
 **설정 → 자동 변환 폴더**에서 입력 폴더와 프리셋을 지정하고 규칙을 켠 뒤 저장한다. **감시 중** 상태가 된 뒤 파일을 넣는다. 시작할 때 이미 있던 파일은 그대로 두고, 앱이 실행 중일 때 새 파일과 변경된 파일을 처리한다. 기본 출력은 `converted`이며 원본은 유지한다. 선택하면 변환에 성공하고 변경되지 않은 원본을 `originals`로 이동한다. 패키지 내부와 임시 다운로드 폴더는 제외한다. 3초 안정화 대기는 휴리스틱이므로 쓰기 중 오래 멈출 수 있는 프로그램은 완료한 파일을 원자적 rename으로 전달해야 한다. 스캔은 10,000개 항목, 작업은 입력 128개로 제한한다.
 
-모든 형식 조합·코덱을 검사하지 않았다. Ghostscript는 이 머신에 없고, 현재 FFmpeg에는 일부 인코더가 없다. 앱 안에서 엔진 다운로드는 아직 연결하지 않았다. 실제 로그아웃·로그인 후 자동 실행과 알림 전달은 검증하지 않았다. 외장 exFAT·SMB, 배포 공증·TCC 재실행 검증도 남아 있다. 위 비교 수치는 이전 스냅샷의 결과다.
+모든 형식 조합·코덱을 검사하지 않았다. Ghostscript는 이 머신에 없고, 현재 FFmpeg에는 일부 인코더가 없다. 실제 로그아웃·로그인 후 자동 실행과 알림 전달은 검증하지 않았다. 외장 exFAT·SMB, 배포 공증·TCC 재실행 검증도 남아 있다. 위 비교 수치는 이전 스냅샷의 결과다.
 
-현재 검증 소스 `5f9486a`에서 SDK 접근 차단 Xcode clean build·엔진 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 서명·재배치 22개 검사를 통과했다. Mach-O 5개는 arm64이며 .NET·Homebrew 동적 의존성이 없다. CMYK JPEG 반전, PSD/PSB의 CMYK·ICC 보존, BMP 물리 해상도를 수정했고 PSD 길이 초과는 저장 전에 실패시킨다. 이미지 엄격 일치는 **103→112/135건**(TGA 검사 오류만 바로잡은 별도 수치는 113건)이며 기존 일치 결과의 회귀는 없다. 새 849건은 **786완료·기존 63실패**, 검사 오류 0이고 V2 C# 비교는 **586 PASS / 255 WARN / 8 FAIL**이다. 실패를 면제하지 않았으며 PDF 검사기 V2의 표본 추출이 달라 과거 V1 수치와 분리했다. 이전 PDF·Markdown 성능은 재측정하지 않았고 Markdown TXT 목표 미달은 남아 있다. [최신 수정·검증·남은 한계](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)에 근거를 기록했다.
+직전 검증 소스 `5f9486a`에서 SDK 접근 차단 Xcode clean build·엔진 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 서명·재배치 22개 검사를 통과했다. Mach-O 5개는 arm64이며 .NET·Homebrew 동적 의존성이 없다. CMYK JPEG 반전, PSD/PSB의 CMYK·ICC 보존, BMP 물리 해상도를 수정했고 PSD 길이 초과는 저장 전에 실패시킨다. 이미지 엄격 일치는 **103→112/135건**(TGA 검사 오류만 바로잡은 별도 수치는 113건)이며 기존 일치 결과의 회귀는 없다. 새 849건은 **786완료·기존 63실패**, 검사 오류 0이고 V2 C# 비교는 **586 PASS / 255 WARN / 8 FAIL**이다. 실패를 면제하지 않았으며 PDF 검사기 V2의 표본 추출이 달라 과거 V1 수치와 분리했다. 이전 PDF·Markdown 성능은 재측정하지 않았고 Markdown TXT 목표 미달은 남아 있다. [최신 수정·검증·남은 한계](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)에 근거를 기록했다.
+
+
+최종 후속 소스 `d9b260d`에 Pandoc·LibreOffice·Calibre 관리형 설치, PSD/PSB IPTC 보존, 대용량 메시지 분할 전송을 통합했다. 최종 앱 클린 빌드·앱 테스트 81개·개발 인증서 서명·재배치 22개 검사가 통과했다. 변경되지 않은 엔진·Core 소스는 엔진 669개와 별도 프로세스 트리 종료 1개·Core 18개 테스트가 통과했다. 서명된 재배치 helper의 실제 HTTPS Pandoc 설치와 DOCX 내용도 확인했다. 새 849건에서 새 엄격 실패 ID는 없으며 V2 C# 비교는 **587 PASS / 254 WARN / 8 FAIL**이다. 이미지 화소는 직전 승인 출력과 같고 PSD/PSB 두 메타데이터 사례에만 IPTC가 추가됐다. 순차 PDF TXT는 **0.547초**, Markdown TXT는 **0.665초**이며 후자의 0.60초 목표는 미달이다. 소스·실행 파일 연결과 한계는 [최종 후속 기록](docs/design/engine-differential-triage.md#managed-engine-installation-and-final-follow-up-2026-10-25)을 따른다.
 
 ## 소스와 설계
 

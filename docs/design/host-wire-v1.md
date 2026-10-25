@@ -1,6 +1,6 @@
 # 구현 공통 프로토콜 v1
 
-모든 메시지는 UTF-8 NDJSON, 최대 4 MiB. 요청 `{v:1,id:String,method:String,params:Object}`, 응답 `{v:1,id,result}` 또는 `{v:1,id,error:{code,message}}`, 이벤트 `{v:1,event,data}`. enum은 camelCase 문자열, 날짜는 ISO8601. 이 문서는 병렬 구현에서 사용하는 필드 계약이다.
+전송은 UTF-8 NDJSON이며 한 줄은 최대 4 MiB다. 요청 `{v:1,id:String,method:String,params:Object}`, 응답 `{v:1,id,result}` 또는 `{v:1,id,error:{code,message}}`, 이벤트 `{v:1,event,data}`. enum은 camelCase 문자열, 날짜는 ISO8601. 이 문서는 병렬 구현에서 사용하는 필드 계약이다.
 
 앱은 helper 실행 시 `--chunked-output`을 전달한다. 이 옵션을 받은 helper는 4 MiB보다 큰 응답·이벤트를
 `{v:1,chunk:{id:UUID,offset:Int,total:Int,bytes:Base64}}` 전송 프레임으로 나눈다. 각 프레임은 기존 줄 제한을
@@ -10,6 +10,11 @@
 경로로 처리한다. 이 옵션이 없는 클라이언트에는 기존 v1 메시지만 보내며, 요청 줄 제한은 그대로 4 MiB다.
 
 - `hello`: `{protocol:1,hostVersion,fileeCommit,rid,dataDir}`.
+- `engine.packages {}` → `{packages:[EnginePackage]}`. 상태 스냅샷을 반환한다.
+- `engine.install {packageId:String}` → `EnginePackage`. 지원하는 고정 arm64 패키지의 설치를 시작하고 즉시 응답한다. 임의 URL은 받지 않는다.
+- `engine.install.cancel {packageId:String}` → `EnginePackage`. 해당 설치를 취소한다. 이미 배치된 설치는 유지한다.
+- `engine.install.stop {}` → `{}`. 현재 helper 세션의 새 설치를 막고 진행 중 설치를 취소한다. 저장 설정은 바꾸지 않는다.
+- EnginePackage = `{id,version?,downloadSize,installedSize,canDownload,guidanceKey?,state,bytesReceived,errorKey?,errorDetail?}`. 상태는 `idle`, `queued`, `downloading`, `verifying`, `installing`, `cancelling`, `cancelled`, `installed`, `existing`, `failed`다. 정리가 반환되기 전에는 활성 상태를 유지한다.
 - `catalog.get` → `{formats:[{id,displayName,category,extensions,writable,isVirtual}],engines:[{id,displayName,available,reasonKey?,detail?,version?}]}`.
 - `selection.resolve {paths:[String]}` → `{profileId:String?,formats:[String],unknown:[String],rejected:[{path,reason}],slices:[Slice],tools:[Slice],presetOptions:[Slice],targets:[Target]}`. 일치하는 툴바 프로필이 없으면 `profileId=null`, `slices=[]`이며 전체 출력 형식은 그대로 반환한다.
 - `tools`는 입력 종류와 옵션에 맞는 도구 프리셋(최대 12개), `presetOptions`는 모든 저장된 프리셋의 실행 가능 여부다. 기존 `slices`는 파일 종류별 사용자 프로필 순서를 유지한다. Swift는 두 새 배열이 없는 이전 응답도 읽을 수 있다. 클립보드·Finder 작업은 host 프리셋이 아니며 Swift에서 수행한다.
@@ -28,7 +33,7 @@
 
 Swift 인터페이스(EngineHost actor): start()→HostHello, catalog()→HostCatalog, resolve(paths:[String])→HostSelection, startJob(paths:[String],presetId:String?=nil,targetFormat:String?=nil,preset:JSONValue?=nil)→String, cancel(jobId:String), events()→AsyncStream<HostEvent>, history()→[HostHistory], library()→HostLibrary, saveLibrary(baseRevision:presets:profiles:)→HostLibrary, saveSettings(baseRevision:settings:)→HostLibrary, clearHistory(), shutdown(). 모두 async throws (events는 async, shutdown은 async). actor init(executableURL:URL?=nil,dataDirectory:URL?=nil).
 
-추가 클라이언트 메서드는 `watchStatus() async throws → [JSONValue]`, `stopWatching() async throws`다. 감시 작업은 기존 job 이벤트와 이력을 사용하며 이력의 `watchRuleId`로 규칙을 식별한다. 프로토콜 버전과 설정 schema 8은 유지한다.
+추가 클라이언트 메서드는 `watchStatus() async throws → [JSONValue]`, `stopWatching() async throws`, `enginePackages() async throws → [HostEnginePackage]`, `installEngine(packageId:)`, `cancelEngineInstall(packageId:)`, `stopEngineInstalls() async throws`다. 설치·취소 메서드는 `HostEnginePackage`를 반환한다. 앱 종료는 감시 중단 → 설치 중단·활성 상태 해소 대기 → stdin 종료 순서다. 감시 작업은 기존 job 이벤트와 이력을 사용하며 이력의 `watchRuleId`로 규칙을 식별한다. 프로토콜 버전과 설정 schema 8은 유지한다.
 
 HostEvent = .hello(HostHello), .updated(HostJob), .finished(HostJob), .fatal(String), .interrupted(String). Models의 필드명은 위 JSON과 같다. HostLibrary 설정·프리셋·프로필은 JSONValue, HostHistory.preset은 JSONValue?. JSONValue는 Foundation 값의 전체 JSON을 보존하는 Codable/Sendable enum이다. 외부 변환 실패는 file/job 상태로 전달하며 host crash는 pending 요청 실패·interrupted 이벤트다.
 
