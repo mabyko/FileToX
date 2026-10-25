@@ -609,6 +609,12 @@ extension Markdown {
                 firstChild = child
                 lastChild = child
                 child.parent = self
+            } else if let last = lastChild, last.nextSibling == nil, last.parent === self {
+                child.previousSibling = last
+                child.nextSibling = nil
+                last.nextSibling = child
+                lastChild = child
+                child.parent = self
             } else {
                 lastChild!.insertAfter(child)
             }

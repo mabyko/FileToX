@@ -325,6 +325,47 @@ final class MarkdownTests: XCTestCase {
         XCTAssertNil(inline.parent)
     }
 
+    func testAppendingLinkedInlineLeavesASafeDetachedSuccessor() {
+        let successor = Markdown.Inline()
+        weak var releasedParent: Markdown.ContainerInline?
+        weak var releasedChild: Markdown.Inline?
+        do {
+            let parent = Markdown.ContainerInline()
+            let first = Markdown.Inline(), child = Markdown.Inline()
+            releasedParent = parent
+            releasedChild = child
+            child.insertAfter(successor)
+            parent.appendChild(first).appendChild(child)
+            XCTAssertTrue(parent.firstChild === first)
+            XCTAssertTrue(parent.lastChild === child)
+            XCTAssertTrue(first.nextSibling === child)
+            XCTAssertTrue(child.previousSibling === first)
+            XCTAssertTrue(child.parent === parent)
+            XCTAssertNil(child.nextSibling)
+            XCTAssertNil(successor.parent)
+            XCTAssertTrue(successor.previousSibling === child)
+            withExtendedLifetime(parent) {}
+        }
+        XCTAssertNil(releasedParent)
+        XCTAssertNil(releasedChild)
+        XCTAssertNil(successor.previousSibling)
+    }
+
+    func testAppendingAfterATailWithASuccessorKeepsMarkdigEndpoints() {
+        let parent = Markdown.ContainerInline()
+        let first = Markdown.Inline(), successor = Markdown.Inline(), appended = Markdown.Inline()
+        first.insertAfter(successor)
+        parent.appendChild(first).appendChild(appended)
+        XCTAssertTrue(parent.firstChild === first)
+        XCTAssertTrue(parent.lastChild === first)
+        XCTAssertTrue(first.nextSibling === appended)
+        XCTAssertTrue(appended.previousSibling === first)
+        XCTAssertTrue(appended.nextSibling === successor)
+        XCTAssertTrue(successor.previousSibling === appended)
+        XCTAssertTrue(appended.parent === parent)
+        XCTAssertNil(successor.parent)
+    }
+
     func testDetachedSiblingCleanupPreservesRewiredBacklink() {
         var previous: Markdown.Inline? = Markdown.Inline()
         let next = Markdown.Inline()
