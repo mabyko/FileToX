@@ -120,6 +120,45 @@ final class HostContractTests: XCTestCase {
         let next = hostObject(try JSONSerialization.jsonObject(with: Data(try XCTUnwrap(lines.last))))
         XCTAssertEqual(next["id"] as? String, "next")
     }
+    func testOversizedConversionErrorFinishesWithoutTerminatingTheHost() async throws {
+        let d = CoreTempDir(), source = try d.file("source.txt", "keep me")
+        let detail = String(repeating: "변환 오류 설명", count: 100_000)
+        let converter = CoreFakeConverter(edges: [ConversionEdge("txt", "md")]) { _ in throw ConversionError(detail) }
+        let store = UserDataStore(d.path + "/core"); try store.load()
+        let path = try d.file("events", ""), output = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+        defer { try? output.close() }
+        let wire = WireWriter(output.fileDescriptor, chunkedOutput: true)
+        let host = Host(wire, store, [converter], Localizer("en"), languageFixed: true, onStaging: { _ in })
+        _ = try host.handle("start", "job.start", ["paths": [source], "targetFormat": "md"])
+        let deadline = Date().addingTimeInterval(10)
+        var saved = false
+        while Date() < deadline {
+            saved = !hostObjects(hostObject(try host.handle("history", "history.get", [:]))["entries"]).isEmpty
+            if saved { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(saved)
+        wire.response("still-alive", try XCTUnwrap(host.handle("alive", "watch.status", [:])))
+        await host.cancelAll(2); wire.complete(10)
+        var messages: [[String: Any]] = [], buffer = Data()
+        for line in try Data(contentsOf: URL(fileURLWithPath: path)).split(separator: 10) {
+            XCTAssertLessThanOrEqual(line.count + 1, WireJson.maxLine)
+            let message = hostObject(try JSONSerialization.jsonObject(with: Data(line)))
+            if let chunk = message["chunk"] as? [String: Any] {
+                XCTAssertEqual(chunk["offset"] as? Int, buffer.count)
+                buffer.append(try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(chunk["bytes"] as? String))))
+                if buffer.count == chunk["total"] as? Int {
+                    messages.append(hostObject(try JSONSerialization.jsonObject(with: buffer))); buffer = Data()
+                }
+            } else { messages.append(message) }
+        }
+        XCTAssertTrue(buffer.isEmpty)
+        XCTAssertFalse(messages.contains { $0["event"] as? String == "fatal" })
+        let finished = try XCTUnwrap(messages.first { $0["event"] as? String == "job.finished" })
+        XCTAssertEqual(hostObjects(hostObject(finished["data"])["files"]).first?["errorDetail"] as? String, detail)
+        XCTAssertEqual(messages.last?["id"] as? String, "still-alive")
+        XCTAssertEqual(try d.read("source.txt"), "keep me")
+    }
     func testValidationRangesAndPaths() throws {
         try Validation.library(BuiltInData.createPresets(),BuiltInData.createProfiles()); try Validation.settings(AppSettings())
         var japanese = AppSettings(); japanese.language = "ja"; try Validation.settings(japanese)
