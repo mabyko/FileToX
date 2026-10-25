@@ -396,11 +396,12 @@ final class AppModel {
     }
 
     func refreshLibrary() async {
+        guard !isShuttingDown else { return }
         do {
             library = try await host.library()
             enginePackages = try await host.enginePackages()
             engineInstallError = nil
-            defer { pollEngineInstalls(restart: true) }
+            defer { if !isShuttingDown { pollEngineInstalls(restart: true) } }
             try await refreshEngineAvailability()
         }
         catch { report(error) }

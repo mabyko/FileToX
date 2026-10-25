@@ -5,6 +5,32 @@ import XCTest
 
 final class AppModelTests: XCTestCase {
     @MainActor
+    func testLibraryRefreshDoesNotRequestOrRestartPollingAfterShutdown() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        try Data().write(to: fixture.root.appendingPathComponent("hold-catalog"))
+        let next = fixture.root.appendingPathComponent("next.json")
+        try #"{"pandoc":"idle","ffmpeg":"downloading","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        let refresh = Task { await model.refreshLibrary() }
+        try await wait { FileManager.default.fileExists(atPath: fixture.root.appendingPathComponent("catalog-held").path) }
+        try #"{"pandoc":"idle","ffmpeg":"cancelled","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        await model.shutDown()
+        await refresh.value
+        // A deferred restart would query the closed host on its next 400 ms tick.
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertNil(model.engineInstallError)
+        let status = model.statusMessage
+        let requests = fixture.root.appendingPathComponent("requests.log")
+        let before = try Data(contentsOf: requests)
+        await model.refreshLibrary()
+        XCTAssertEqual(model.statusMessage, status)
+        XCTAssertNil(model.engineInstallError)
+        XCTAssertEqual(try Data(contentsOf: requests), before)
+    }
+
+    @MainActor
     func testCancelledInstallPollCannotPublishAnAvailabilityError() async throws {
         let fixture = try makeInstallFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -459,6 +485,7 @@ final class AppModelTests: XCTestCase {
         send({"v":1,"event":"hello","data":{"protocol":1,"hostVersion":"test","fileeCommit":"21fdd05ef7181b032ed83ec895cc9bbc4b198985","rid":"osx-arm64","dataDir":"/tmp/data"}})
         for line in sys.stdin:
             r=json.loads(line);m=r["method"]
+            with open(os.path.join(root,"requests.log"),"a") as requests:requests.write(m+"\n")
             if m=="catalog.get":
                 result={"formats":[],"engines":[{"id":k,"displayName":k,"available":s=="installed"} for k,s in states.items()]}
                 hold=os.path.join(root,"hold-catalog")
