@@ -98,7 +98,7 @@ enum ImageReader {
         for index in indexes {
             try Task.checkCancellation()
             let options = [kCGImageSourceShouldCacheImmediately: jpeg == nil] as CFDictionary
-            guard var image = CGImageSourceCreateImageAtIndex(source, index, options) else {
+            guard var image = try CGImageSourceCreateImageAtIndex(source, index, options) ?? (format == "bmp" ? bmpWithProfile(path) : nil) else {
                 throw ConversionError("Could not decode \(FilePath.fileName(path)).")
             }
             if let jpeg { image = try decodeJpeg(jpeg, fallback: image) }
@@ -125,6 +125,15 @@ enum ImageReader {
             frames.append(frame)
         }
         return frames
+    }
+
+    /// A BMP with an embedded profile, which ImageIO refuses: a copy naming sRGB instead decoded by ImageIO, its samples
+    /// unconverted and labelled with the embedded profile. Nil when the file isn't one `EmbeddedProfiles` accepts.
+    private static func bmpWithProfile(_ path: String) throws -> CGImage? {
+        guard let (copy, profile) = EmbeddedProfiles.bmpWithoutProfile(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)),
+              let space = CGColorSpace(iccData: profile as CFData), let source = CGImageSourceCreateWithData(copy as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil), image.colorSpace?.model == .rgb else { return nil }
+        return image.copy(colorSpace: space)
     }
 
     /// Replace only pixels; ImageIO still supplies EXIF orientation, resolution, metadata and, unless the file holds a

@@ -2,6 +2,7 @@
 // looks for them. `CodecPixels.sourceProfile` matches them with the colour space ImageIO decoded each picture in, so
 // writers repeat the exact source bytes and never ImageIO's defaults for untagged pictures.
 
+import CoreGraphics
 import Foundation
 import libjxl
 
@@ -22,9 +23,40 @@ enum EmbeddedProfiles {
         case "heic", "avif": heif(file)
         case "jxl": jxl(file)
         case "jp2": jp2(file)
+        case "bmp": bmpProfile(file).map { ([[$0]], false) }
         case "tga": ([[]], false) // the format has no profile
         default: nil
         }
+    }
+
+    /// BMP: the profile a BITMAPV5HEADER embeds (PROFILE_EMBEDDED; a linked profile's path is never followed), for 24-bit
+    /// and 32-bit uncompressed or bit-field pictures. It must be a valid RGB profile within the budget, after the headers
+    /// and apart from the pixel rows; nil for anything else.
+    private static func bmpProfile(_ file: Data) -> Data? {
+        func number(_ at: Int, _ size: Int) -> Int { (0..<size).reduce(0) { $0 | Int(file[file.startIndex + at + $1]) << (8 * $1) } }
+        guard file.count >= 14 + 124, file.starts(with: [0x42, 0x4D]), number(14, 4) == 124,
+              file[file.startIndex + 70..<file.startIndex + 74].elementsEqual("DEBM".utf8) else { return nil } // 'MBED'
+        let width = number(18, 4), height = Int(Int32(truncatingIfNeeded: number(22, 4))), bits = number(28, 2), compression = number(30, 4)
+        guard width > 0, width <= Int(Int32.max), height != 0, number(26, 2) == 1, [24, 32].contains(bits),
+              compression == 0 || (compression == 3 && bits == 32) else { return nil }
+        let pixels = number(10, 4), stride = (width * bits + 31) / 32 * 4, rows = abs(height)
+        guard pixels >= 14 + 124, pixels <= file.count, rows <= (file.count - pixels) / stride else { return nil }
+        let start = 14 + number(126, 4), size = number(130, 4)
+        guard size > 0, size <= budget, start >= 14 + 124, start <= file.count - size,
+              start + size <= pixels || start >= pixels + stride * rows else { return nil }
+        guard let profile = CodecPixels.validProfile(file.subdata(in: file.startIndex + start..<file.startIndex + start + size)),
+              CGColorSpace(iccData: profile as CFData)?.model == .rgb else { return nil }
+        return profile
+    }
+
+    /// For a BMP `bmpProfile` accepts, which ImageIO doesn't decode: a copy whose header names sRGB instead (the profile
+    /// fields cleared), so ImageIO decodes its samples without converting them, and the profile they are in.
+    static func bmpWithoutProfile(_ file: Data) -> (copy: Data, profile: Data)? {
+        guard let profile = bmpProfile(file) else { return nil }
+        var copy = Data(file)
+        copy.replaceSubrange(70..<74, with: Array("BGRs".utf8)) // LCS_sRGB
+        copy.replaceSubrange(126..<134, with: [UInt8](repeating: 0, count: 8))
+        return (copy, profile)
     }
 
     /// TIFF: the InterColorProfile tag (34675) of every picture in the main IFD chain, when the chain has as many

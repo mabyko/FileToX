@@ -433,6 +433,106 @@ final class PngProfileTests: XCTestCase {
         }
     }
 
+    /// A 5 × 3 BMP with a BITMAPV5HEADER: 24-bit, or 32-bit with alpha bit fields; colour space `type` ("MBED" embedded,
+    /// "sRGB", "LINK"); `profile` after the pixel rows unless `profileAt` (from the header) and `profileSize` say
+    /// otherwise. Also the straight samples its rows hold, top row first: RGB, or RGBA.
+    private func bmpV5(_ bits: Int = 24, type: String = "MBED", profile: Data = Data(), profileAt: Int? = nil, profileSize: Int? = nil,
+                       topDown: Bool = false) -> (file: Data, samples: [UInt8]) {
+        let (width, height) = (5, 3), stride = (width * bits + 31) / 32 * 4
+        var stored: [UInt8] = [], rows: [[UInt8]] = []
+        for y in 0..<height {
+            var row: [UInt8] = []
+            for x in 0..<width {
+                let (r, g, b) = (UInt8((200 - x * 30 + y) & 255), UInt8((x * 20 + y * 60) & 255), UInt8((x * 50 + y * 7) & 255))
+                let a: UInt8 = [255, 128, 64, 255, 0][x]
+                stored += [b, g, r] + (bits == 32 ? [a] : [])
+                row += [r, g, b] + (bits == 32 ? [a] : [])
+            }
+            stored += [UInt8](repeating: 0, count: stride - width * bits / 8)
+            rows.append(row)
+        }
+        func u16(_ v: Int) -> [UInt8] { [UInt8(v & 255), UInt8(v >> 8 & 255)] }
+        func u32(_ v: Int) -> [UInt8] { (0..<4).map { UInt8(truncatingIfNeeded: v >> (8 * $0)) } }
+        var header = u32(124) + u32(width) + u32(topDown ? -height : height) + u16(1) + u16(bits) + u32(bits == 32 ? 3 : 0) + u32(stored.count)
+        header += u32(2835) + u32(2835) + u32(0) + u32(0)
+        header += bits == 32 ? u32(0x00FF0000) + u32(0x0000FF00) + u32(0x0000_00FF) + u32(0xFF00_0000) : [UInt8](repeating: 0, count: 16)
+        header += Array(String(type.reversed()).utf8) + [UInt8](repeating: 0, count: 48) + u32(4) // endpoints, gamma, intent
+        header += u32(profileAt ?? (profile.isEmpty ? 0 : 124 + stored.count)) + u32(profileSize ?? profile.count) + u32(0)
+        let body = header + stored + [UInt8](profile)
+        return (Data([0x42, 0x4D] + u32(14 + body.count) + u32(0) + u32(14 + 124) + body), (topDown ? rows : rows.reversed()).flatMap { $0 })
+    }
+
+    /// `image` drawn into an sRGB bitmap by CoreGraphics.
+    private func rendered(_ image: CGImage) -> [UInt8] {
+        var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        let context = CGContext(data: &pixels, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return pixels
+    }
+
+    func testBmpWithAnEmbeddedProfileGetsItsSamplesUnconvertedInThatProfile() throws {
+        let p3 = try profile(CGColorSpace.displayP3), unnamed = try unnamedProfile(), srgb = try profile(CGColorSpace.sRGB)
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        for (bits, icc, topDown) in [(24, p3, false), (24, unnamed, true), (32, p3, false), (24, srgb, false)] {
+            let (file, expected) = bmpV5(bits, profile: icc, topDown: topDown), name = "\(bits) \(icc.count) \(topDown)"
+            XCTAssertNil(CGImageSourceCreateWithData(file as CFData, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }, "ImageIO refuses it")
+            let path = FilePath.combine(folder, "embedded.bmp")
+            try file.write(to: URL(fileURLWithPath: path))
+            let frame = try XCTUnwrap(try ImageReader.read(path, format: "bmp", preset: Preset()).first, name)
+            XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), file, name) // the input is untouched
+            let space = try XCTUnwrap(CGColorSpace(iccData: icc as CFData))
+            XCTAssertEqual(frame.properties[ImageFrame.iccKey] as? Data, icc, name)
+            XCTAssertTrue(CFEqual(frame.image.colorSpace, space), name)
+            XCTAssertEqual(ImagePixels.straight(frame.image).samples, expected, name)
+            XCTAssertEqual(frame.dpi?.x ?? 0, 72, accuracy: 0.01, name)
+            // The oracle: the stored rows as samples of the embedded profile, rendered to sRGB by CoreGraphics.
+            let channels = bits / 8
+            let oracle = try XCTUnwrap(CGImage(width: 5, height: 3, bitsPerComponent: 8, bitsPerPixel: bits, bytesPerRow: 5 * channels, space: space,
+                                               bitmapInfo: CGBitmapInfo(rawValue: (bits == 32 ? CGImageAlphaInfo.last : .none).rawValue),
+                                               provider: CGDataProvider(data: Data(expected) as CFData)!, decode: nil, shouldInterpolate: false,
+                                               intent: .defaultIntent))
+            XCTAssertEqual(rendered(frame.image), rendered(oracle), name)
+            // Written again, the samples and the exact profile stay.
+            let png = try write(frame)
+            XCTAssertEqual(try writtenProfile(png), icc, name)
+            XCTAssertEqual(try samples(png), expected, name)
+            if bits == 24 { XCTAssertEqual(JpegEncoder.embeddedProfile(try write(frame, "jpg")), icc, name) }
+        }
+    }
+
+    func testBmpProfilesComeOnlyFromValidEmbeddedHeaders() throws {
+        let p3 = try profile(CGColorSpace.displayP3)
+        // ImageIO decodes a V5 that names sRGB itself: its own handling stays, the profile inferred as before.
+        let named = bmpV5(type: "sRGB")
+        let decoded = try read(named.file, "bmp")
+        XCTAssertNil(decoded.properties[ImageFrame.iccKey])
+        XCTAssertEqual(ImagePixels.straight(decoded.image).samples, named.samples)
+        // Rejected, so still not decodable: a gray profile for RGB samples, a profile past the file, inside the header or
+        // the pixel rows (the rows start where the profile does), beyond the budget, a linked profile (its path is never
+        // opened) and another layout.
+        let rowBytes = 3 * 16, link = "/System/Library/ColorSync/Profiles/Display P3.icc"
+        var overPixels = bmpV5(profile: p3).file
+        overPixels.replaceSubrange(10..<14, with: [UInt8](withUnsafeBytes(of: UInt32(14 + 124 + rowBytes).littleEndian) { Data($0) })) // rows begin at the profile
+        var otherLayout = bmpV5(profile: p3).file
+        otherLayout[28] = 16
+        let budget = Data([UInt8](p3) + [UInt8](repeating: 0, count: EmbeddedProfiles.budget + 1 - p3.count))
+        let rejected: [(String, Data)] = [
+            ("gray", bmpV5(profile: try profile(CGColorSpace.genericGrayGamma2_2)).file),
+            ("past the end", bmpV5(profile: p3, profileAt: 124 + rowBytes + 1).file),
+            ("in the header", bmpV5(profile: p3, profileAt: 40).file),
+            ("in the rows", overPixels),
+            ("beyond the budget", bmpV5(profile: budget).file),
+            ("linked", bmpV5(type: "LINK", profile: Data(link.utf8) + [0]).file),
+            ("16-bit", otherLayout),
+        ]
+        for (name, file) in rejected {
+            XCTAssertNil(EmbeddedProfiles.read(file, format: "bmp", count: 1), name)
+            XCTAssertThrowsError(try read(file, "bmp"), name)
+        }
+    }
+
     func testHeifReferencesAndItemIdsStayWithinTheirBoxes() throws {
         let p3 = try profile(CGColorSpace.displayP3)
         func box(_ type: String, _ payload: [UInt8]) -> [UInt8] {
