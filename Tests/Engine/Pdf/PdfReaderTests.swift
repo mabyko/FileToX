@@ -297,23 +297,85 @@ final class PdfReaderTests: XCTestCase {
             change(pdf, font)
         }
         let document = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: try pdf.save(FilePath.combine(dir, "states.pdf")))))
-        func signature(_ words: [PdfDocumentReader.PageWord]) -> [String] {
-            words.map { word in
-                "\(word.left) \(word.right) \(word.baseline) " + word.letters.map { letter in
-                    "\(letter.text) \(letter.box) \(letter.baseline) \(letter.size) \(letter.fontName) \(letter.bold) \(letter.italic) "
-                        + "\(letter.color?.components ?? []) \(letter.mode) \(letter.horizontal)"
-                }.joined(separator: "|")
-            }
-        }
         for (index, (name, uniform, _)) in changes.enumerated() {
             let page = try XCTUnwrap(document.page(at: index))
             let scan = PdfDocumentReader.scanContent(try XCTUnwrap(page.pageRef))
             XCTAssertEqual(scan.uniformText, uniform, name)
             let words = PdfDocumentReader.pageWords(page, scan: scan)
             scan.mixedText = true // the page's own attributed string
-            XCTAssertEqual(signature(words), signature(PdfDocumentReader.pageWords(page, scan: scan)), name)
+            XCTAssertTrue(Self.sameWords(words, PdfDocumentReader.pageWords(page, scan: scan)), name)
             XCTAssertGreaterThanOrEqual(words.count, 27, name)
         }
+    }
+
+    /// Default colour spaces change what g, rg, k and the device spaces paint: a page whose resources define one (or
+    /// inherit it from the page tree), or a form or nested form defining its own, keeps PDFKit's attributed string. The
+    /// same pages without them are in one state.
+    func testDefaultColourSpacesKeepThePagesAttributes() throws {
+        func stream(_ body: String, _ dictionary: String = "") -> String { "<< \(dictionary) /Length \(body.utf8.count) >>\nstream\n\(body)\nendstream" }
+        func text(_ y: Int, _ words: String, _ colour: String) -> String { "\(colour) BT /F1 11 Tf 50 \(y) Td (\(words)) Tj ET" }
+        let page = "/Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"
+        let form = "/Type /XObject /Subtype /Form /BBox [0 0 612 792]"
+        let calGray = "/DefaultGray [/CalGray << /WhitePoint [0.9505 1 1.089] /Gamma 2 >>]"
+        let calRGB = "/DefaultRGB [/CalRGB << /WhitePoint [0.9505 1 1.089] /Gamma [2 2 2] >>]"
+        let cases: [(String, (String) -> [Int: String])] = [
+            ("form", { spaces in [2: "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                                  3: "<< \(page) /Resources << /Font << /F1 9 0 R >> /XObject << /Fm 5 0 R >> >> >>",
+                                  4: stream(text(700, "Page words", "0.5 g") + " q /Fm Do Q"),
+                                  5: stream(text(500, "Form words", "0.5 g"), form + " /Resources << /Font << /F1 9 0 R >> /ColorSpace << \(spaces) >> >>")] }),
+            ("inherited", { spaces in [2: "<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /Font << /F1 9 0 R >> /ColorSpace << \(spaces) >> >> >>",
+                                       3: "<< \(page) >>",
+                                       4: stream(text(700, "Page words", "0.5 g") + " " + text(680, "More page words", "0.5 g"))] }),
+            ("nested form", { spaces in [2: "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                                         3: "<< \(page) /Resources << /Font << /F1 9 0 R >> /XObject << /Fa 5 0 R >> >> >>",
+                                         4: stream(text(700, "Page words", "0 0 1 rg") + " q /Fa Do Q"),
+                                         5: stream(text(600, "Outer words", "0 0 1 rg") + " q /Fb Do Q", form + " /Resources << /Font << /F1 9 0 R >> /XObject << /Fb 6 0 R >> >>"),
+                                         6: stream(text(500, "Inner words", "0 0 1 rg"), form + " /Resources << /Font << /F1 9 0 R >> /ColorSpace << \(spaces) >> >>")] }),
+        ]
+        for (name, objects) in cases {
+            for (spaces, uniform) in [(name == "nested form" ? calRGB : calGray, false), ("", true)] {
+                var all = objects(spaces)
+                all[1] = "<< /Type /Catalog /Pages 2 0 R >>"
+                all[9] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+                let label = "\(name) \(uniform ? "without" : "with") a default colour space"
+                let pdf = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: try Self.rawPdf(FilePath.combine(dir, "\(name)-\(uniform).pdf"), all))))
+                let page = try XCTUnwrap(pdf.page(at: 0))
+                let scan = PdfDocumentReader.scanContent(try XCTUnwrap(page.pageRef))
+                XCTAssertEqual(scan.uniformText, uniform, label)
+                let words = PdfDocumentReader.pageWords(page, scan: scan)
+                scan.mixedText = true
+                XCTAssertTrue(Self.sameWords(words, PdfDocumentReader.pageWords(page, scan: scan)), label)
+                XCTAssertGreaterThanOrEqual(words.count, 4, label)
+            }
+        }
+    }
+
+    /// Words with all letter attributes equal; colours compare as Core Graphics colours (colour space included).
+    private static func sameWords(_ a: [PdfDocumentReader.PageWord], _ b: [PdfDocumentReader.PageWord]) -> Bool {
+        a.count == b.count && zip(a, b).allSatisfy { x, y in
+            x.left == y.left && x.right == y.right && x.baseline == y.baseline && x.letters.count == y.letters.count
+                && zip(x.letters, y.letters).allSatisfy { p, q in
+                    p.text == q.text && p.box == q.box && p.baseline == q.baseline && p.size == q.size && p.fontName == q.fontName
+                        && p.bold == q.bold && p.italic == q.italic && p.mode == q.mode && p.horizontal == q.horizontal
+                        && (p.color == nil ? q.color == nil : q.color.map { CFEqual(p.color, $0) } ?? false)
+                }
+        }
+    }
+
+    /// A PDF of numbered objects (1: catalog), for what PdfBuilder doesn't write (forms, colour space resources).
+    private static func rawPdf(_ path: String, _ objects: [Int: String]) throws -> String {
+        var file = Data("%PDF-1.5\n".utf8)
+        var offsets: [Int: Int] = [:]
+        for number in objects.keys.sorted() {
+            offsets[number] = file.count
+            file += Data("\(number) 0 obj\n\(objects[number]!)\nendobj\n".utf8)
+        }
+        let count = objects.keys.max()! + 1, xref = file.count
+        var table = "xref\n0 \(count)\n0000000000 65535 f \n"
+        for number in 1..<count { table += String(format: "%010d 00000 %@ \n", offsets[number] ?? 0, offsets[number] == nil ? "f" : "n") }
+        file += Data((table + "trailer\n<< /Size \(count) /Root 1 0 R >>\nstartxref\n\(xref)\n%%EOF\n").utf8)
+        try file.write(to: URL(fileURLWithPath: path))
+        return path
     }
 
     func testParallelTextKeepsPageOrderRepeatedHeadersAndStyleChanges() async throws {

@@ -238,6 +238,9 @@ extension PdfDocumentReader {
 
         func scan(_ stream: CGPDFContentStreamRef, table: CGPDFOperatorTableRef) {
             streams.append(stream)
+            // Default colour spaces (also inherited, or a form's own) change what g, rg, k and the device spaces paint.
+            let defaults: [String] = ["DefaultGray", "DefaultRGB", "DefaultCMYK"]
+            if defaults.contains(where: { CGPDFContentStreamGetResource(stream, "ColorSpace", $0) != nil }) { result.mixedText = true }
             let scanner = CGPDFScannerCreate(stream, table, Unmanaged.passUnretained(self).toOpaque())
             CGPDFScannerScan(scanner)
             CGPDFScannerRelease(scanner)
