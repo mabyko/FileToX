@@ -113,7 +113,10 @@
     "modules/svg/include/SkSVGValue.h": "b0b6e6f41daf8ed0fa8d26aebcdcf02303e80bd1d96bc282ce4c99babbeed84c",
     "src/core/SkChecksum.h": "ea4fa1c5a87537626549bf6d2693289622c4d69e18deeef7c7fa38cee74e7d5a",
     "src/core/SkMathPriv.h": "784d519fdfd08137d44725fcfda5a39e34878dfe3aef6b61a59a26fd19c18df2",
-    "src/core/SkTHash.h": "ce6b4106c8e2bf3ce8f5fc81287ec1b6804ee39e6c69d3ed725adabd4a36de25"
+    "src/core/SkTHash.h": "ce6b4106c8e2bf3ce8f5fc81287ec1b6804ee39e6c69d3ed725adabd4a36de25",
+    "include/core/SkPicture.h": "7e7cc985bfa1ddbec3f5e103c108e1907180ba31dc16d6cde86e4da580c274ce",
+    "include/core/SkPictureRecorder.h": "78ccb04f36dc18fd056942b78bd2ccb118bf8f6d9b9657e02741d128a982e6a5",
+    "include/core/SkShader.h": "cfbebe377e0c6af054688a604df3fcd9ce63593b5dc413bb8e12ee6781621a5c"
   },
   "notices": {
     "Skia": "https://raw.githubusercontent.com/rust-skia/skia/m153-0.101.2/LICENSE",
@@ -133,8 +136,8 @@
   },
   "output": {
     "file": "lib/libFileToXSvg.a",
-    "sha256": "3f5579445b952c6915fbacd367661bcbaad405cc817b8da77410ddf21d03d4d8",
-    "bytes": 17849304,
+    "sha256": "f6e91acfd605153342b6ff0fd632ac89722209612a9c16a3ddafa6e01ec8a748",
+    "bytes": 17850664,
     "architectures": [
       "arm64"
     ],
@@ -142,13 +145,9 @@
       "_ftx_svg_render"
     ],
     "derivation": {
-      "operation": "lipo -thin arm64",
-      "sourceSha256": "99be2f3b5291a8944c4fd8d2c64cde544c2ad3f53db558c1287887b8b7111875",
-      "sourceBytes": 37790536,
-      "sourceArchitectures": [
-        "arm64",
-        "x86_64"
-      ]
+      "operation": "arm64 rebuild with cooperative SkPicture playback cancellation",
+      "previousOutputSha256": "3f5579445b952c6915fbacd367661bcbaad405cc817b8da77410ddf21d03d4d8",
+      "upstreamArchiveSha256": "fd6e2fb21947724e91a0d41880b9560bfa92907656c73e85e190ae91b75af5d7"
     }
   }
 }

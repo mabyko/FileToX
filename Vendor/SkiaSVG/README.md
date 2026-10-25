@@ -11,8 +11,9 @@ without replacing the complete SVG renderer.
 The caller owns a tightly packed RGBA8 premultiplied sRGB buffer. All pointers are
 borrowed synchronously; no memory or callback is retained. The bridge validates
 input/buffer/geometry limits, catches C++ exceptions, and checks cancellation
-before and after parsing and after drawing. A single draw cannot be interrupted;
-cancellation discards its result before any output is committed. The default null
+before and after parsing and between recorded drawing commands using SkPicture's
+abort callback. Parsing, recording and a single drawing command remain synchronous;
+cancellation discards the result before any output is committed. The default null
 resource provider cannot read network or local resources. Swift retains existing
 SVGZ decompression, viewport resolution, raster scaling/limits and fallback.
 

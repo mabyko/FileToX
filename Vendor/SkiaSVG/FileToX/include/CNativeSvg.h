@@ -6,7 +6,8 @@ extern "C" {
 #endif
 /* Synchronous RGBA8 premultiplied sRGB into caller-owned width*height*4 bytes.
    Width/height must equal ceil(viewport * scale). No pointers are retained. 0=success, 1=invalid bounds, 2=parse, 3=cancelled, 4=render/allocation.
-   Cancellation is checked before/after parse and after drawing; drawing itself is not interruptible. */
+   Cancellation is checked before/after parse and between recorded drawing commands.
+   Parsing, recording and an individual drawing command are synchronous. */
 int ftx_svg_render(const void *xml, size_t length, float viewport_width, float viewport_height,
                    float scale, int width, int height, void *pixels, size_t capacity,
                    int (*cancelled)(void *), void *context);

@@ -1,5 +1,7 @@
 #include "include/CNativeSvg.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkPictureRecorder.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkStream.h"
@@ -8,6 +10,19 @@
 #include <cstdint>
 #include <cstddef>
 #include <exception>
+class PlaybackCancellation final : public SkPicture::AbortCallback {
+public:
+    PlaybackCancellation(int (*callback)(void*), void* context) : callback_(callback), context_(context) {}
+    bool abort() override {
+        aborted_ = aborted_ || (callback_ && callback_(context_));
+        return aborted_;
+    }
+    bool wasAborted() const { return aborted_; }
+private:
+    int (*callback_)(void*);
+    void* context_;
+    bool aborted_ = false;
+};
 extern "C" int ftx_svg_render(const void* xml, size_t length, float viewport_width, float viewport_height,
                              float scale, int width, int height, void* pixels, size_t capacity,
                              int (*cancelled)(void*), void* context) {
@@ -34,8 +49,15 @@ extern "C" int ftx_svg_render(const void* xml, size_t length, float viewport_wid
         if (!surface) return 4;
         auto canvas = surface->getCanvas();
         canvas->clear(SK_ColorTRANSPARENT);
-        canvas->scale(scale, scale);
-        dom->render(canvas);
-        return is_cancelled() ? 3 : 0;
+        // Recorded playback provides a cooperative abort hook between drawing commands.
+        SkPictureRecorder recorder;
+        auto recording = recorder.beginRecording(width, height);
+        recording->scale(scale, scale);
+        dom->render(recording);
+        auto picture = recorder.finishRecordingAsPicture();
+        if (is_cancelled()) return 3;
+        PlaybackCancellation abort(cancelled, context);
+        picture->playback(canvas, &abort);
+        return abort.wasAborted() || is_cancelled() ? 3 : 0;
     } catch (...) { return 4; }
 }
