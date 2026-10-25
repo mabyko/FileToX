@@ -323,6 +323,13 @@ final class ImageParityTests: XCTestCase {
         func ztxt(_ name: String, _ value: [UInt8]) throws -> [UInt8] {
             chunk("zTXt", Array("Raw profile type \(name)".utf8) + [0, 0] + (try Deflate.deflate(Data(value), windowBits: 15)))
         }
+        // iTXt: compression flag and method, language tag and translated keyword, then the (possibly deflated) text.
+        func itxt(_ name: String, _ value: [UInt8], flag: UInt8 = 0, method: UInt8 = 0, language: String = "", translated: String = "",
+                  terminated: Bool = true) throws -> [UInt8] {
+            let text = flag == 1 ? [UInt8](try Deflate.deflate(Data(value), windowBits: 15)) : value
+            return chunk("iTXt", Array("Raw profile type \(name)".utf8) + [0, flag, method] + Array(language.utf8) + [0]
+                         + Array(translated.utf8) + (terminated ? [0] : []) + text)
+        }
         func png(_ chunks: [[UInt8]], afterImage: [[UInt8]] = []) -> Data {
             Data(base.prefix(33) + chunks.joined() + base.dropFirst(33).dropLast(12) + afterImage.joined() + base.suffix(12))
         }
@@ -347,6 +354,17 @@ final class ImageParityTests: XCTestCase {
             (png([text("8bim", badDigit)]), []),
             (png([badCrc]), []),
             (png([text("8bim", raw("8bim", iptc) + Array("zz\n".utf8))]), [iptc]),
+            // iTXt as libpng reads it: plain or deflated text after the language tag and translated keyword.
+            (png([try itxt("8bim", raw("8bim", iptc))]), [iptc]),
+            (png([try itxt("8bim", raw("8bim", iptc), flag: 1, language: "en", translated: "8BIM")]), [iptc]),
+            (png([], afterImage: [try itxt("iptc", raw("iptc", bare), flag: 1)]), [resource(0x0404, bare)]),
+            (png([try itxt("8bim", raw("8bim", iptc), method: 7)]), [iptc]), // the method of plain text is ignored
+            (png([try itxt("8bim", raw("8bim", iptc), flag: 1, method: 1)]), []),
+            (png([try itxt("8bim", raw("8bim", iptc), flag: 2)]), []),
+            (png([try itxt("8bim", raw("8bim", iptc), language: "en", terminated: false)]), []),
+            // Deflated iTXt shares the zTXt budget; plain iTXt still counts once it is spent.
+            (png([failing, failing, try itxt("iptc", raw("iptc", iim([(2, 5, "skipped")])), flag: 1),
+                  try itxt("iptc", raw("iptc", bare))]), [resource(0x0404, bare)]),
         ]
         for (index, (file, expected)) in cases.enumerated() {
             let frame = try read(file, format: "png")

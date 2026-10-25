@@ -159,7 +159,7 @@ enum PsdCodec {
         return blocks
     }
 
-    /// IPTC blocks of a PNG's raw profile tEXt/zTXt chunks with intact CRCs. Inflating shares one 16 MiB budget that
+    /// IPTC blocks of a PNG's raw profile tEXt/zTXt/iTXt chunks with intact CRCs. Inflating shares one 16 MiB budget that
     /// counts all output, also of streams that then fail; once it is spent no later chunk is inflated.
     private static func pngIptc(_ file: Data) -> [(id: Int, bytes: [UInt8])] {
         guard file.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) else { return [] }
@@ -172,14 +172,26 @@ enum PsdCodec {
             let type = String(decoding: chunk.prefix(4), as: UTF8.self), payload = chunk.dropFirst(4)
             i += 12 + length
             if type == "IEND" { break }
-            guard type == "tEXt" || type == "zTXt", let nul = payload.prefix(80).firstIndex(of: 0),
+            guard ["tEXt", "zTXt", "iTXt"].contains(type), let nul = payload.prefix(80).firstIndex(of: 0),
                   let name = ["Raw profile type 8bim": "8bim", "Raw profile type iptc": "iptc"][String(decoding: payload[..<nul], as: UTF8.self)],
                   stored == chunk.withUnsafeBytes({ zlib.crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) }) else { continue }
-            var text = Data(payload[(nul + 1)...])
-            if type == "zTXt" {
-                guard text.first == 0, budget > 0 else { continue }
+            var text = Data(payload[(nul + 1)...]), compressed = type == "zTXt"
+            if type == "iTXt" {
+                // As libpng reads it: a compression flag (1 needs method 0), then a NUL-terminated language tag and
+                // translated keyword before the text.
+                let flag = text.first, method = text.dropFirst().first
+                guard flag == 0 || (flag == 1 && method == 0), let language = text.dropFirst(2).firstIndex(of: 0),
+                      let translated = text[(language + 1)...].firstIndex(of: 0) else { continue }
+                compressed = flag == 1
+                text = Data(text[(translated + 1)...])
+            } else if compressed {
+                guard text.first == 0 else { continue } // zTXt's compression method
+                text = Data(text.dropFirst())
+            }
+            if compressed {
+                guard budget > 0 else { continue }
                 var inflated = Data()
-                let complete = (try? Deflate.inflate(text.dropFirst(), windowBits: 15) { output in
+                let complete = (try? Deflate.inflate(text, windowBits: 15) { output in
                     budget -= output.count
                     if budget < 0 { throw ConversionError("The PNG metadata is too large.") }
                     inflated += output
