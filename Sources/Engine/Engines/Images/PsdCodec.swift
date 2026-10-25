@@ -60,6 +60,8 @@ enum PsdCodec {
         if let dpi = frame.dpi, dpi.x > 0 {
             resources.resource(0x03ED, resolutionInfo(dpi))
         }
+        // The source's IPTC blocks, between resolution and profile as ImageMagick orders its resources.
+        if let iptc = frame.properties[ImageFrame.iptcKey] as? Data { resources.bytes([UInt8](iptc)) }
         if let icc = CodecPixels.colorProfile(frame, colorModel: cmyk ? .cmyk : gray ? .monochrome : .rgb) {
             resources.resource(0x040F, [UInt8](icc))
         }
@@ -107,6 +109,120 @@ enum PsdCodec {
             throw ConversionError("The picture's layer data is \(length) bytes; PSD files hold at most \(UInt32.max). Convert to PSB instead.")
         }
         return length
+    }
+
+    // ───────────────────────── IPTC ─────────────────────────
+
+    /// The IPTC resource blocks of a JPEG, PNG or PSD/PSB file for PSD/PSB targets: the IPTC-NAA record (0x0404) and
+    /// its digest (0x0425), byte for byte in file order. The writer makes its own resolution, profile and version info;
+    /// other Photoshop resources are not carried. JPEG: the Photoshop APP13 segments, joined (a block may continue in the
+    /// next one). PNG: ImageMagick's hex "Raw profile type 8bim", or its bare IIM "Raw profile type iptc" when no 8bim
+    /// profile holds an IPTC record. PSD/PSB: the image resources.
+    static func iptcResources(_ file: Data, format: String) -> Data {
+        var blocks: [(id: Int, bytes: [UInt8])] = []
+        switch format {
+        case "jpg":
+            let header = Data("Photoshop 3.0\0".utf8)
+            blocks = iptcBlocks(JpegEncoder.segments(file).filter { $0.0 == 0xED && $0.1.starts(with: header) }.flatMap { $0.1.dropFirst(header.count) })
+        case "png":
+            blocks = pngIptc(file)
+        case "psd", "psb":
+            func u32(_ at: Int) -> Int { file[at..<at + 4].reduce(0) { $0 << 8 | Int($1) } }
+            guard file.count >= 34, file.starts(with: Array("8BPS".utf8)) else { return Data() }
+            let resources = file.startIndex + 30 + u32(file.startIndex + 26)
+            guard file.endIndex - resources >= 4, u32(resources) <= file.endIndex - resources - 4 else { return Data() }
+            blocks = iptcBlocks(Array(file[resources + 4..<resources + 4 + u32(resources)]))
+        default:
+            break
+        }
+        return Data(blocks.flatMap(\.bytes))
+    }
+
+    /// Signatures of Photoshop resource blocks; only 8BIM blocks are copied, the others are stepped over.
+    private static let resourceSignatures: Set<[UInt8]> = Set(["8BIM", "MeSa", "PHUT", "AgHg", "DCSR"].map { Array($0.utf8) })
+
+    /// The complete IPTC blocks of a resource stream, each with its padding byte. Reading stops at the first block that
+    /// is malformed or runs past the stream.
+    private static func iptcBlocks(_ stream: [UInt8]) -> [(id: Int, bytes: [UInt8])] {
+        var blocks: [(id: Int, bytes: [UInt8])] = [], i = 0
+        while stream.count - i >= 12, resourceSignatures.contains(Array(stream[i..<i + 4])) {
+            let id = Int(stream[i + 4]) << 8 | Int(stream[i + 5])
+            let data = i + 6 + ((Int(stream[i + 6]) + 2) & ~1) // past the Pascal name, padded to an even length
+            guard stream.count - data >= 4 else { break }
+            let size = stream[data..<data + 4].reduce(0) { $0 << 8 | Int($1) }
+            guard size <= stream.count - data - 4 else { break }
+            if stream[i..<i + 4].elementsEqual("8BIM".utf8), id == 0x0404 || id == 0x0425 {
+                blocks.append((id, Array(stream[i..<data + 4 + size]) + (size % 2 == 1 ? [0] : [])))
+            }
+            i = data + 4 + size + size % 2
+        }
+        return blocks
+    }
+
+    /// IPTC blocks of a PNG's raw profile tEXt/zTXt chunks with intact CRCs. Inflating shares one 16 MiB budget that
+    /// counts all output, also of streams that then fail; once it is spent no later chunk is inflated.
+    private static func pngIptc(_ file: Data) -> [(id: Int, bytes: [UInt8])] {
+        guard file.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) else { return [] }
+        var photoshop: [(id: Int, bytes: [UInt8])] = [], bare: [(id: Int, bytes: [UInt8])] = []
+        var i = file.startIndex + 8, budget = 1 << 24
+        while file.endIndex - i >= 12 {
+            let length = file[i..<i + 4].reduce(0) { $0 << 8 | Int($1) }
+            guard length <= file.endIndex - i - 12, length <= Int32.max else { break }
+            let chunk = file[i + 4..<i + 8 + length], stored = file[i + 8 + length..<i + 12 + length].reduce(0) { $0 << 8 | UInt($1) }
+            let type = String(decoding: chunk.prefix(4), as: UTF8.self), payload = chunk.dropFirst(4)
+            i += 12 + length
+            if type == "IEND" { break }
+            guard type == "tEXt" || type == "zTXt", let nul = payload.prefix(80).firstIndex(of: 0),
+                  let name = ["Raw profile type 8bim": "8bim", "Raw profile type iptc": "iptc"][String(decoding: payload[..<nul], as: UTF8.self)],
+                  stored == chunk.withUnsafeBytes({ zlib.crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) }) else { continue }
+            var text = Data(payload[(nul + 1)...])
+            if type == "zTXt" {
+                guard text.first == 0, budget > 0 else { continue }
+                var inflated = Data()
+                let complete = (try? Deflate.inflate(text.dropFirst(), windowBits: 15) { output in
+                    budget -= output.count
+                    if budget < 0 { throw ConversionError("The PNG metadata is too large.") }
+                    inflated += output
+                }) != nil
+                guard complete else { continue }
+                text = inflated
+            }
+            guard let profile = rawProfile(text) else { continue }
+            if name == "8bim" {
+                photoshop += iptcBlocks(profile)
+            } else if profile.starts(with: Array("8BIM".utf8)) {
+                bare += iptcBlocks(profile)
+            } else if profile.first == 0x1C {
+                // ImageMagick's "iptc" profile is the bare IIM record.
+                var wrapped = BigEndianData()
+                wrapped.resource(0x0404, profile)
+                bare.append((0x0404, wrapped.data))
+            }
+        }
+        // ImageMagick writes the record of its 8bim profile again as "iptc".
+        return photoshop.contains { $0.id == 0x0404 } ? photoshop : photoshop + bare
+    }
+
+    /// The bytes of ImageMagick's raw profile text: "\n<name>\n<length>\n" and hex digits, whitespace between them. Nil
+    /// without a length or with too few or invalid digits; anything after them is ignored.
+    private static func rawProfile(_ text: Data) -> [UInt8]? {
+        let lines = text.split(separator: 10, maxSplits: 2)
+        guard lines.count == 3, let length = Int(String(decoding: lines[1], as: UTF8.self).trimmingCharacters(in: .whitespaces)),
+              length > 0, length <= lines[2].count / 2 else { return nil }
+        var bytes: [UInt8] = [], high: UInt8?
+        bytes.reserveCapacity(length)
+        for c in lines[2] where bytes.count < length {
+            let nibble: UInt8
+            switch c {
+            case UInt8(ascii: "0")...UInt8(ascii: "9"): nibble = c - UInt8(ascii: "0")
+            case UInt8(ascii: "a")...UInt8(ascii: "f"): nibble = c - UInt8(ascii: "a") + 10
+            case UInt8(ascii: "A")...UInt8(ascii: "F"): nibble = c - UInt8(ascii: "A") + 10
+            case 9, 10, 13, 32: continue
+            default: return nil
+            }
+            if let h = high { bytes.append(h << 4 | nibble); high = nil } else { high = nibble }
+        }
+        return bytes.count == length ? bytes : nil
     }
 
     private static func resolutionInfo(_ dpi: (x: Double, y: Double)) -> [UInt8] {

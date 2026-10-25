@@ -4,6 +4,7 @@ import CryptoKit
 import Foundation
 import ImageIO
 import XCTest
+import zlib
 @testable import FileToXEngineKit
 
 final class ImageParityTests: XCTestCase {
@@ -106,6 +107,254 @@ final class ImageParityTests: XCTestCase {
         for invalid in [Data(), Data([0xff, 0xd8, 0xff, 0xed, 0xff, 0xff]), Data([0xff, 0xd8, 0xff])] {
             XCTAssertTrue(JpegEncoder.preservedMarkers(invalid).isEmpty)
             XCTAssertNil(JpegEncoder.samplingFactors(invalid))
+        }
+    }
+
+    // ───────── IPTC into PSD/PSB ─────────
+
+    /// IPTC-NAA datasets (record, number, value) as an IIM record.
+    private func iim(_ datasets: [(UInt8, UInt8, String)]) -> [UInt8] {
+        datasets.flatMap { record, number, value -> [UInt8] in
+            let bytes = Array(value.utf8)
+            return [0x1C, record, number, UInt8(bytes.count >> 8), UInt8(bytes.count & 255)] + bytes
+        }
+    }
+
+    /// A Photoshop image resource block: signature, id, Pascal name and data, each padded to an even length.
+    private func resource(_ id: Int, _ data: [UInt8], name: String = "", signature: String = "8BIM") -> [UInt8] {
+        var bytes = Array(signature.utf8) + [UInt8(id >> 8), UInt8(id & 255), UInt8(name.utf8.count)] + Array(name.utf8)
+        if bytes.count % 2 == 1 { bytes.append(0) }
+        bytes += [24, 16, 8, 0].map { UInt8(data.count >> $0 & 255) } + data
+        if data.count % 2 == 1 { bytes.append(0) }
+        return bytes
+    }
+
+    /// Photoshop APP13 segments holding `stream`, split at `cuts`.
+    private func app13(_ stream: [UInt8], cuts: [Int] = []) -> [UInt8] {
+        let bounds = [0] + cuts + [stream.count]
+        return zip(bounds, bounds.dropFirst()).flatMap { start, end -> [UInt8] in
+            let payload = Array("Photoshop 3.0\0".utf8) + stream[start..<end]
+            return [0xFF, 0xED, UInt8((payload.count + 2) >> 8), UInt8((payload.count + 2) & 255)] + payload
+        }
+    }
+
+    /// A JPEG of `image` with `markers` after its JFIF header, read back by the image engine.
+    private func jpegSource(_ markers: [UInt8], _ image: CGImage? = nil, dpi: (x: Double, y: Double)? = nil) throws -> (data: Data, frame: ImageFrame) {
+        var frame = ImageFrame(image: image ?? pattern(3), dpi: dpi)
+        frame.properties[ImageFrame.jpegMarkersKey] = Data(markers)
+        let data = try JpegEncoder.encode(frame)
+        return (data, try read(data))
+    }
+
+    /// `frame` through the preset's options and the PSD/PSB writer, as the image engine converts it.
+    private func photoshop(_ frame: ImageFrame, _ format: String, _ options: ImageOptions = ImageOptions()) throws -> Data {
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let path = FilePath.combine(folder, "output." + format)
+        try ImageEncoder.save([try ImageEncoder.applyOptions(frame, options, targetFormat: format)], to: path, format: format)
+        return try Data(contentsOf: URL(fileURLWithPath: path))
+    }
+
+    /// The image resource blocks of a PSD/PSB file and everything after them (layers and composite).
+    private func resources(_ file: Data) -> (blocks: [(id: Int, bytes: [UInt8])], rest: [UInt8]) {
+        let bytes = [UInt8](file)
+        func number(_ at: Int, _ size: Int) -> Int { bytes[at..<at + size].reduce(0) { $0 << 8 | Int($1) } }
+        XCTAssertEqual(Array(bytes.prefix(4)), Array("8BPS".utf8))
+        var offset = 30 + number(26, 4)
+        let end = offset + 4 + number(offset, 4)
+        offset += 4
+        var blocks: [(id: Int, bytes: [UInt8])] = []
+        while offset < end {
+            let data = offset + 6 + (Int(bytes[offset + 6]) + 2) / 2 * 2
+            let next = data + 4 + (number(data, 4) + 1) / 2 * 2
+            guard Array(bytes[offset..<offset + 4]) == Array("8BIM".utf8), next <= end else { XCTFail("malformed resource at \(offset)"); break }
+            blocks.append((number(offset + 4, 2), Array(bytes[offset..<next])))
+            offset = next
+        }
+        return (blocks, Array(bytes[end...]))
+    }
+
+    /// The IPTC ImageIO reads from a file.
+    private func imageIOIptc(_ data: Data) -> NSDictionary? {
+        CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) as? [CFString: Any] }?[kCGImagePropertyIPTCDictionary] as? NSDictionary
+    }
+
+    func testJpegIptcResourcesReachPsdAndPsbExactlyBesideTheirOwnResolutionAndProfile() throws {
+        let caption = "한글 캡션 · café"
+        let record = iim([(1, 90, "\u{1B}%G"), (2, 5, "Object"), (2, 25, "alpha"), (2, 25, "beta"), (2, 25, "gamma"), (2, 120, caption)])
+        let iptc = resource(0x0404, record), digest = resource(0x0425, Array(Insecure.MD5.hash(data: record)))
+        // The writer makes resolution, profile and version blocks itself; a copyright flag is not IPTC.
+        let stream = resource(0x03ED, [0, 72, 0, 0, 0, 1, 0, 1, 0, 72, 0, 0, 0, 1, 0, 1]) + iptc + resource(0x040F, Array("not a profile".utf8))
+            + resource(0x0421, [0, 0, 0, 1, 0, 0, 0]) + digest + resource(0x040A, [1])
+        let p3 = try XCTUnwrap(CGColorSpace(name: CGColorSpace.displayP3))
+        let icc = try XCTUnwrap(p3.copyICCData() as Data?)
+        let source = try jpegSource(app13(stream), pattern(3).copy(colorSpace: p3), dpi: (300, 300))
+        let expectedIptc = try XCTUnwrap(imageIOIptc(source.data))
+        XCTAssertEqual(expectedIptc[kCGImagePropertyIPTCKeywords] as? [String], ["alpha", "beta", "gamma"])
+        XCTAssertEqual(expectedIptc[kCGImagePropertyIPTCCaptionAbstract] as? String, caption)
+        let resolution = resource(0x03ED, [0x01, 0x2C, 0, 0, 0, 1, 0, 1, 0x01, 0x2C, 0, 0, 0, 1, 0, 1])
+        for format in ["psd", "psb"] {
+            let file = try photoshop(source.frame, format)
+            let kept = resources(file)
+            XCTAssertEqual(kept.blocks.map(\.id), [0x03ED, 0x0404, 0x0425, 0x040F], format)
+            XCTAssertEqual(kept.blocks.map(\.bytes), [resolution, iptc, digest, resource(0x040F, [UInt8](icc))], format)
+            XCTAssertEqual(imageIOIptc(file), expectedIptc, format)
+            let decoded = try read(file, format: format)
+            XCTAssertEqual(decoded.image.colorSpace?.copyICCData() as Data?, icc)
+            XCTAssertEqual(ImagePixels.straight(decoded.image).samples, ImagePixels.straight(source.frame.image).samples)
+            // keepMetadata=false removes the IPTC alone: the profile, layers and composite stay byte for byte.
+            var options = ImageOptions()
+            options.keepMetadata = false
+            let stripped = resources(try photoshop(source.frame, format, options))
+            XCTAssertEqual(stripped.blocks.map(\.bytes), [resolution, resource(0x040F, [UInt8](icc))], format)
+            XCTAssertEqual(stripped.rest, kept.rest, format)
+        }
+    }
+
+    func testSplitDuplicateAndBrokenPhotoshopSegmentsCarryOnlyCompleteIptcBlocks() throws {
+        let first = resource(0x0404, iim([(2, 25, "one")])), second = resource(0x0404, iim([(2, 25, "two")]), name: "B")
+        let odd = resource(0x0404, iim([(2, 120, "odd!")]))
+        let mesa = resource(0x0401, [1, 2, 3], signature: "MeSa") // ImageReady's signature is stepped over
+        let other: [UInt8] = [0xFF, 0xED, 0, 12] + Array("Adobe_CM\0".utf8) + [1] // not a Photoshop segment
+        let truncated = Array(resource(0x0425, [UInt8](repeating: 7, count: 16)).prefix(20))
+        let cases: [([UInt8], [[UInt8]])] = [
+            // Blocks split between segments, a duplicate with a Pascal name, and a block running past the stream.
+            (app13(first + mesa + second, cuts: [5, first.count + 3]) + other + app13(truncated), [first, second]),
+            (app13(first + Array("XXXX".utf8) + second.dropFirst(4)), [first]),
+            // The last block's padding byte may be missing; the copy has it.
+            (app13(first + odd.dropLast()), [first, odd]),
+        ]
+        for (markers, expected) in cases {
+            let source = try jpegSource(markers)
+            for format in ["psd", "psb"] {
+                let file = try photoshop(source.frame, format)
+                XCTAssertEqual(resources(file).blocks.map(\.bytes), expected, format)
+                XCTAssertEqual(ImagePixels.straight(try read(file, format: format).image).samples, ImagePixels.straight(source.frame.image).samples)
+            }
+        }
+    }
+
+    func testMetadataFixtureGainsOnlyItsIptcBlockInPsdAndPsb() throws {
+        let frame = try read(Data(base64Encoded: Self.jpeg["metadata"]!)!)
+        // SHA-256 of the 808c076 engine's PSD/PSB of this conversion (Image parity preset), written without IPTC.
+        for (format, frozen) in [("psd", "6bf715fbb554669514c71998366ee8e05fdab116cfddeb6fe09f17f1a46cbd1c"),
+                                 ("psb", "addf490c63cfcdb5d29bdfb6fabd9aa96a608c6d40f361e93125859b17925c2b")] {
+            var options = ImageOptions()
+            options.quality = 75
+            let file = try photoshop(frame, format, options)
+            options.keepMetadata = false
+            let stripped = try photoshop(frame, format, options)
+            XCTAssertEqual(hash([UInt8](stripped)), frozen, format)
+            // ImageMagick's only resource for this source: the APP13's IPTC block, 30 bytes.
+            XCTAssertEqual(resources(file).blocks.map(\.bytes), [resource(0x0404, iim([(2, 5, "FileToX IPTC")]))], format)
+            XCTAssertEqual(file.count, stripped.count + 30)
+            XCTAssertEqual(file.prefix(30), stripped.prefix(30))
+            XCTAssertEqual(resources(file).rest, resources(stripped).rest)
+            XCTAssertEqual((imageIOIptc(file)?[kCGImagePropertyIPTCObjectName] as? String), "FileToX IPTC")
+        }
+    }
+
+    /// `psd` with `blocks` after its own image resources (its colour mode data is empty).
+    private func addingResources(_ psd: [UInt8], _ blocks: [UInt8]) -> Data {
+        let length = psd[30..<34].reduce(0) { $0 << 8 | Int($1) }, total = length + blocks.count
+        return Data(psd[0..<30] + [24, 16, 8, 0].map { UInt8(total >> $0 & 255) } + psd[34..<34 + length] + blocks + psd[(34 + length)...])
+    }
+
+    func testPsdSourcesKeepTheirIptcButNotTheirStructureResources() throws {
+        let iptc = resource(0x0404, iim([(2, 5, "From PSD"), (2, 25, "x"), (2, 25, "y")]))
+        let digest = resource(0x0425, [UInt8](repeating: 3, count: 16))
+        let layers: [GraphicsBuilders.PsdLayer] = [.init(left: 0, top: 0, width: 12, height: 8, r: 255, g: 0, b: 0),
+                                                   .init(left: 6, top: 2, width: 4, height: 3, r: 0, g: 0, b: 255)]
+        for realComposite in [true, false] {
+            // Without a real composite (its VersionInfo says so) the layers are composited; the copy never repeats that claim.
+            let built = GraphicsBuilders.layeredPsd(12, 8, composite: { x, y in (6..<10).contains(x) && (2..<5).contains(y) ? (0, 0, 255) : (255, 0, 0) },
+                                                    layers: layers, realComposite: realComposite)
+            let frame = try read(addingResources(built, iptc + resource(0x040C, [1, 2, 3, 4]) + digest), format: "psd")
+            for format in ["psd", "psb"] {
+                let file = try photoshop(frame, format)
+                XCTAssertEqual(resources(file).blocks.map(\.bytes), [iptc, digest], "\(realComposite) \(format)")
+                let decoded = try read(file, format: format)
+                XCTAssertEqual(ImagePixels.straight(decoded.image).samples, ImagePixels.straight(frame.image).samples)
+                XCTAssertEqual(resources(try photoshop(decoded, "psb")).blocks.map(\.bytes), [iptc, digest])
+            }
+        }
+        // A resource running past its section ends what is read of it; the earlier block still counts.
+        let broken = GraphicsBuilders.layeredPsd(12, 8, composite: { _, _ in (9, 9, 9) }, layers: layers)
+        let truncated = try read(addingResources(broken, iptc + Array(resource(0x0425, [UInt8](repeating: 3, count: 16)).prefix(14))), format: "psd")
+        XCTAssertEqual(resources(try photoshop(truncated, "psd")).blocks.map(\.bytes), [iptc])
+        // A transparent composite (read here, not by ImageIO) keeps the IPTC as well.
+        var transparent = ImageFrame(image: pattern(4))
+        transparent.properties[ImageFrame.jpegMarkersKey] = Data(app13(iptc))
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let png = FilePath.combine(folder, "transparent.png")
+        try ImageEncoder.save([transparent], to: png, format: "png")
+        let layered = try photoshop(try read(try Data(contentsOf: URL(fileURLWithPath: png)), format: "png"), "psd")
+        XCTAssertEqual(resources(layered).blocks.map(\.bytes), [iptc])
+        let composite = try read(layered, format: "psd")
+        XCTAssertTrue(ImagePixels.hasAlpha(composite.image))
+        XCTAssertEqual(resources(try photoshop(composite, "psb")).blocks.map(\.bytes), [iptc])
+    }
+
+    func testPngRawProfilesCarryIptcWithinOneInflationBudget() throws {
+        let record = iim([(2, 5, "From PNG"), (2, 25, "k1"), (2, 25, "k2")])
+        let iptc = resource(0x0404, record)
+        // FileToX's own PNG of a JPEG: "Raw profile type 8bim" with every Photoshop resource of its APP13.
+        let jpeg = try jpegSource(app13(resource(0x03ED, [0, 72, 0, 0, 0, 1, 0, 1, 0, 72, 0, 0, 0, 1, 0, 1]) + iptc + resource(0x0421, [0, 0, 0, 1, 0, 0, 0])))
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let own = FilePath.combine(folder, "own.png")
+        try ImageEncoder.save([jpeg.frame], to: own, format: "png")
+        let plain = FilePath.combine(folder, "plain.png")
+        try ImageEncoder.save([ImageFrame(image: pattern(3))], to: plain, format: "png")
+        let base = try Data(contentsOf: URL(fileURLWithPath: plain))
+        func chunk(_ type: String, _ payload: [UInt8]) -> [UInt8] {
+            let body = Array(type.utf8) + payload
+            let crc = Int(body.withUnsafeBytes { crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) })
+            return [24, 16, 8, 0].map { UInt8(payload.count >> $0 & 255) } + body + [24, 16, 8, 0].map { UInt8(crc >> $0 & 255) }
+        }
+        // ImageMagick's layout: "\n<name>\n<length>\n" and 36 bytes per line of lowercase hex.
+        func raw(_ name: String, _ bytes: [UInt8]) -> [UInt8] {
+            Array("\n\(name)\n\(String(format: "%8lu", bytes.count))".utf8) + stride(from: 0, to: bytes.count, by: 36).flatMap { start in
+                [10] + bytes[start..<min(start + 36, bytes.count)].flatMap { Array(String(format: "%02x", $0).utf8) }
+            } + [10]
+        }
+        func text(_ name: String, _ value: [UInt8]) -> [UInt8] { chunk("tEXt", Array("Raw profile type \(name)".utf8) + [0] + value) }
+        func ztxt(_ name: String, _ value: [UInt8]) throws -> [UInt8] {
+            chunk("zTXt", Array("Raw profile type \(name)".utf8) + [0, 0] + (try Deflate.deflate(Data(value), windowBits: 15)))
+        }
+        func png(_ chunks: [[UInt8]], afterImage: [[UInt8]] = []) -> Data {
+            Data(base.prefix(33) + chunks.joined() + base.dropFirst(33).dropLast(12) + afterImage.joined() + base.suffix(12))
+        }
+        let bare = iim([(2, 5, "Bare IIM")])
+        // A stream inflating to 9 MiB, cut short: it fails after handing out nearly all of it.
+        let large = [UInt8](try Deflate.deflate(Data(repeating: 0x30, count: 9 << 20), windowBits: 15))
+        let failing = chunk("zTXt", Array("Raw profile type 8bim".utf8) + [0, 0] + large.dropLast(8))
+        var badDigit = raw("8bim", iptc), badCrc = text("8bim", raw("8bim", iptc))
+        badDigit[badDigit.count - 2] = UInt8(ascii: "g")
+        badCrc[badCrc.count - 1] ^= 1
+        let cases: [(Data, [[UInt8]])] = [
+            (try Data(contentsOf: URL(fileURLWithPath: own)), [iptc]),
+            // ImageMagick writes both profiles; the IIM of the 8bim one is not doubled.
+            (png([try ztxt("8bim", raw("8bim", iptc)), text("iptc", raw("iptc", record))]), [iptc]),
+            // A bare IIM record (also after the image data) becomes an IPTC block.
+            (png([], afterImage: [try ztxt("iptc", raw("iptc", bare))]), [resource(0x0404, bare)]),
+            // Two failing streams exhaust the budget together; no later chunk is inflated, uncompressed text still counts.
+            (png([failing, failing, try ztxt("iptc", raw("iptc", bare))]), []),
+            (png([failing, failing, try ztxt("iptc", raw("iptc", iim([(2, 5, "skipped")]))), text("iptc", raw("iptc", bare))]), [resource(0x0404, bare)]),
+            // Too few or invalid hex digits and a bad CRC carry nothing; text after the declared length is ignored.
+            (png([text("8bim", Array(raw("8bim", iptc).dropLast(3)))]), []),
+            (png([text("8bim", badDigit)]), []),
+            (png([badCrc]), []),
+            (png([text("8bim", raw("8bim", iptc) + Array("zz\n".utf8))]), [iptc]),
+        ]
+        for (index, (file, expected)) in cases.enumerated() {
+            let frame = try read(file, format: "png")
+            for format in ["psd", "psb"] {
+                let output = try photoshop(frame, format)
+                XCTAssertEqual(resources(output).blocks.map(\.bytes), expected, "case \(index) \(format)")
+                XCTAssertEqual(ImagePixels.straight(try read(output, format: format).image).samples, ImagePixels.straight(frame.image).samples)
+            }
         }
     }
 

@@ -36,6 +36,9 @@ struct ImageFrame {
     static let jpegSamplingKey = "FileToXJpegSampling" as CFString
     /// Opaque JPEG COM and Photoshop APP13 marker segments, removed by keepMetadata=false.
     static let jpegMarkersKey = "FileToXJpegMarkers" as CFString
+    /// The source's Photoshop IPTC resource blocks as stored (`PsdCodec.iptcResources`), written into PSD/PSB; removed by
+    /// keepMetadata=false.
+    static let iptcKey = "FileToXIPTC" as CFString
     /// Exact ICC bytes of the JPEG (APP2) or PNG (iCCP) profile ImageIO decoded the frame with; empty when it used its
     /// untagged default. Absent for other sources, for colour ImageIO took from elsewhere and once the samples leave
     /// that colour space: the profile is then inferred from the image's current space.
@@ -169,6 +172,7 @@ enum ImageEncoder {
         if !options.keepMetadata {
             frame.properties[ImageFrame.metadataKey] = nil
             frame.properties[ImageFrame.jpegMarkersKey] = nil
+            frame.properties[ImageFrame.iptcKey] = nil
             if !options.keepColorProfile {
                 frame.image = ImagePixels.untagged(frame.image)
                 frame.properties[ImageFrame.iccKey] = Data()
@@ -463,7 +467,8 @@ enum ImageEncoder {
     }
 
     private static let privateKeys: Set<CFString> = [ImageFrame.metadataKey, ImageFrame.loopCountKey, ImageFrame.icoSizesKey, ImageFrame.losslessKey,
-                                                     ImageFrame.qualityKey, ImageFrame.jpegSamplingKey, ImageFrame.resolutionKey, ImageFrame.jpegMarkersKey, ImageFrame.iccKey, ImageFrame.icoPaletteKey]
+                                                     ImageFrame.qualityKey, ImageFrame.jpegSamplingKey, ImageFrame.resolutionKey, ImageFrame.jpegMarkersKey, ImageFrame.iccKey, ImageFrame.icoPaletteKey,
+                                                     ImageFrame.iptcKey]
 
     /// Sets the EXIF orientation of the frame and of its metadata.
     private static func setOrientation(_ frame: inout ImageFrame, _ orientation: Int) {
