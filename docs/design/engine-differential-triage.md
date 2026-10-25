@@ -1904,3 +1904,27 @@ Exact commands, environments, hashes, per-case results and remaining IDs are ret
 Swift/Xcode result files, Release audit/relocation proof, `image-validation/` and `replay-validation/`.
 Pre-review builds were deliberately cancelled when the PSD length issue was found; their partial logs remain
 under `pre-review-builds/` and are not counted as completed checks. The complete reruns above use `5f9486a`.
+
+
+## Bounded AVIF encoder investigation (2026-10-25, evening)
+
+The ImageIO quality option alone does not close the remaining AVIF metadata fixture gap. Eleven frozen-host
+encodes at qualities 25–100 completed; qualities 99 and 100 are byte-identical. The best reaches **29.5382 dB**
+source-relative RGBA PSNR versus the preserved C# output's **29.9389 dB**, while growing from 1,963 to 3,356 bytes
+relative to the current quality-75 output. No option remapping was retained.
+
+A scratch arm64 build of **libavif 1.4.2 + libaom 3.14.1** runs without .NET and links only libSystem. Its default
+quality-75 YUV444 candidate improves that fixture from **28.9715 to 31.6806 dB**, with 1,283 bytes, and improves
+the other two measured RGB/CMYK-managed matrix samples. However, **12 of 50** broader source/quality conditions
+regress: low-quality RGB and grayscale. All 50 conversions complete and their alpha planes are exact. Sixteen
+additional YUV420/YUV400 probes do not resolve those regressions. The larger RGB example also costs more time
+and bytes. These measurements do not justify replacing ImageIO globally, and **no AVIF dependency or encoder
+change is included in the application**.
+
+The official source archive SHA-256 is
+`2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d`; libaom is pinned to
+`03087864cf4bea6abb0d28f95cf7843511413d8f`. Commands, native binaries, source pins, 36 codec-setting probes,
+50 broader comparisons, 16 subsampling probes and per-case results are retained under
+`build/resume/until20-20261025/native-avif/`. The separate ImageIO option experiment is in `avif-options/` beside it.
+These are diagnostic source-relative quality comparisons, not an all-format visual-parity or production
+packaging/cancellation claim. Preserved C# outputs were read; the C# host was not executed.
