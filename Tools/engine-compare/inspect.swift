@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import ImageIO
 import CoreGraphics
 import PDFKit
@@ -112,6 +113,66 @@ func compareImages(_ left: String, _ right: String) throws -> [String: Any] {
         scores.append(pixelScores(p, q))
     }
     return ["sameGeometry": true, "frames": scores]
+}
+
+func documentInfo(_ path: String) throws -> [String: Any] {
+    let value = try NSAttributedString(url: URL(fileURLWithPath: path),
+        options: [.documentType: NSAttributedString.DocumentType.docFormat], documentAttributes: nil)
+    guard value.length <= 8 * 1024 * 1024 else { throw InspectError.invalid("DOC text limit") }
+    var runs = [[String: Any]](), pictures = [[String: Any]](), unknown = Set<String>(), failure: Error?
+    var imageBytes = 0
+    func color(_ color: NSColor) -> [CGFloat] {
+        guard let c = color.usingColorSpace(.sRGB) else { unknown.insert("unconvertible color"); return [] }
+        return [c.redComponent, c.greenComponent, c.blueComponent, c.alphaComponent]
+    }
+    value.enumerateAttributes(in: NSRange(location: 0, length: value.length)) { attrs, range, stop in
+        if runs.count >= 100_000 { failure = InspectError.invalid("DOC attribute run limit"); stop.pointee = true; return }
+        var fields: [String: Any] = ["range": [range.location, range.length]]
+        for (key, attribute) in attrs {
+            if let font = attribute as? NSFont {
+                fields[key.rawValue] = ["name": font.fontName, "size": font.pointSize, "traits": font.fontDescriptor.symbolicTraits.rawValue]
+            } else if let c = attribute as? NSColor {
+                fields[key.rawValue] = color(c)
+            } else if let paragraph = attribute as? NSParagraphStyle {
+                fields[key.rawValue] = ["alignment": paragraph.alignment.rawValue, "firstIndent": paragraph.firstLineHeadIndent,
+                    "headIndent": paragraph.headIndent, "tailIndent": paragraph.tailIndent, "lineSpacing": paragraph.lineSpacing,
+                    "spacing": paragraph.paragraphSpacing, "spacingBefore": paragraph.paragraphSpacingBefore,
+                    "minLineHeight": paragraph.minimumLineHeight, "maxLineHeight": paragraph.maximumLineHeight,
+                    "lineHeightMultiple": paragraph.lineHeightMultiple, "direction": paragraph.baseWritingDirection.rawValue,
+                    "defaultTabInterval": paragraph.defaultTabInterval, "lineBreakMode": paragraph.lineBreakMode.rawValue,
+                    "hyphenation": paragraph.hyphenationFactor, "tightening": paragraph.tighteningFactorForTruncation,
+                    "tabs": paragraph.tabStops.map { ["alignment": $0.alignment.rawValue, "location": $0.location] },
+                    "lists": paragraph.textLists.map { ["format": $0.markerFormat.rawValue, "start": $0.startingItemNumber] },
+                    "tables": paragraph.textBlocks.compactMap { block -> [String: Any]? in
+                        guard let b = block as? NSTextTableBlock else { unknown.insert("non-table text block"); return nil }
+                        return ["row": b.startingRow, "column": b.startingColumn, "rowSpan": b.rowSpan, "columnSpan": b.columnSpan,
+                                "columns": b.table.numberOfColumns, "layout": b.table.layoutAlgorithm.rawValue,
+                                "background": b.backgroundColor.map(color) ?? []]
+                    }]
+            } else if let attachment = attribute as? NSTextAttachment {
+                let name = "attachment:\(pictures.count)"
+                guard pictures.count < 4096, let data = attachment.fileWrapper?.regularFileContents ?? attachment.image?.tiffRepresentation else {
+                    failure = InspectError.invalid("Unreadable or over-limit DOC attachment"); stop.pointee = true; return
+                }
+                imageBytes += data.count
+                guard imageBytes <= 64 * 1024 * 1024,
+                      let src = CGImageSourceCreateWithData(data as CFData, nil), let type = CGImageSourceGetType(src) else {
+                    failure = InspectError.invalid("Unsupported or over-limit DOC image attachment"); stop.pointee = true; return
+                }
+                pictures.append(["name": name, "mediaType": type as String, "data": data.base64EncodedString()])
+                fields[key.rawValue] = name
+            } else if let url = attribute as? URL { fields[key.rawValue] = url.absoluteString
+            } else if let text = attribute as? String { fields[key.rawValue] = text
+            } else if let number = attribute as? NSNumber { fields[key.rawValue] = number
+            } else { unknown.insert(key.rawValue) }
+        }
+        runs.append(fields)
+    }
+    if let failure { throw failure }
+    return ["reader": "Apple-AppKit-DOC-importer", "coverage": ["text", "imported attribute runs and exposed links/tables/lists", "decoded image attachments"],
+            "textParts": ["document": value.string], "structure": ["runs": runs], "pictures": pictures, "opaqueParts": [:],
+            "uninspected": unknown.sorted(),
+            "limits": ["No Word pagination/rendering, macros or legacy drawing/form fidelity proof; importer may not expose every DOC feature."] + unknown.sorted().map { "Unexposed native attribute: \($0)" }]
 }
 
 func pdfInfo(_ path: String) throws -> [String: Any] {
@@ -356,6 +417,7 @@ do {
     let result: [String: Any]
     switch args[1] {
     case "image": result = try imageInfo(args[2])
+    case "doc": result = try documentInfo(args[2])
     case "pdf": result = try pdfInfo(args[2])
     case "pdf-annotations": result = try pdfAnnotations(args[2])
     case "ocr": result = ["text": try recognizedText(args[2])]

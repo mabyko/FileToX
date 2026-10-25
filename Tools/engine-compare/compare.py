@@ -14,6 +14,7 @@ from functools import lru_cache
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fingerprint import native, normalized, sha256, command, decode
 from hostwire import write_json
+from readback import FORMATS as READBACK_FORMATS, readback
 from semantic import xml_text, document_text, tar_entries, generated_calibre_cover, rst_dimensions, read_tcr_payload, document_image_references
 
 
@@ -28,14 +29,14 @@ def entries_equal(a, b):
 
 
 @lru_cache(maxsize=128)
-def picture_scores(left, right):
-    if left == right:
+def picture_scores(left, right, strict=False):
+    if left == right and not strict:
         return {"sameGeometry": True, "frames": [{"psnr": 99, "ssim": 1}]}
     with tempfile.TemporaryDirectory(prefix="filetox-picture-compare-") as folder:
         paths = [Path(folder) / name for name in ("left", "right")]
         for path, data in zip(paths, (left, right)): path.write_bytes(data)
         scores = native("compare", *paths)
-        if generated_calibre_cover(left) and generated_calibre_cover(right) and scores.get("sameGeometry"):
+        if not strict and generated_calibre_cover(left) and generated_calibre_cover(right) and scores.get("sameGeometry"):
             # Calibre chooses a random theme/layout when it generates a cover.
             # Require the same recognized title/author, not merely the COM marker.
             a, b = (native("ocr", p)["text"] for p in paths)
@@ -49,16 +50,25 @@ def picture_below_threshold(scores, thresholds):
         f["psnr"] < thresholds["psnr"] or f["ssim"] < thresholds["ssim"] for f in scores["frames"])
 
 
-def pictures_equal(left, right, thresholds, metrics):
-    if len(left) != len(right): return "Embedded picture count changed"
-    for index, (a, b) in enumerate(zip(left, right)):
-        if a[0] != b[0]: return "Embedded picture media type changed"
-        scores = picture_scores(a[1], b[1])
+def pictures_equal(left, right, thresholds, metrics, strict=False):
+    problems = []
+    if len(left) != len(right):
+        if not strict: return "Embedded picture count changed"
+        problems.append("Embedded picture count changed")
+    for index in range(max(len(left), len(right)) if strict else len(left)):
+        a = left[index] if index < len(left) else right[index]
+        b = right[index] if index < len(right) else left[index]
+        if a[0] != b[0]:
+            if not strict: return "Embedded picture media type changed"
+            problems.append("Embedded picture media type changed")
+        scores = picture_scores(a[1], b[1], strict)
         metrics[str(index + 1)] = scores
-        if not scores.get("sameGeometry"): return "Embedded picture geometry changed"
-        if picture_below_threshold(scores, thresholds):
-            return "Embedded picture similarity below threshold"
-    return None
+        problem = ("Embedded picture geometry changed" if not scores.get("sameGeometry") else
+                   "Embedded picture similarity below threshold" if picture_below_threshold(scores, thresholds) else None)
+        if problem:
+            if not strict: return problem
+            problems.append(problem)
+    return "; ".join(dict.fromkeys(problems)) or None
 
 
 def media_packets(path):
@@ -75,10 +85,60 @@ def media_packets(path):
     return result
 
 
+def compare_readback(left, right, thresholds):
+    decoded, errors = {}, {}
+    for side, path in (("baseline", left), ("candidate", right)):
+        try:
+            value = readback(path, thresholds.get("semanticTools"))
+            if "error" in value: errors[side] = value["error"]
+            else: decoded[side] = value
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            errors[side] = {"kind": "unavailable", "message": str(error)}
+    metrics = {"readback": {"version": 1, "errors": errors, "readers": {}, "limits": {}, "coverage": {}}}
+    for side, value in decoded.items():
+        for key in ("reader", "limits", "coverage", "uninspected"):
+            if key not in value: continue
+            metrics["readback"].setdefault("readers" if key == "reader" else key, {})[side] = value[key]
+        metrics["readback"].setdefault("sizes", {})[side] = {
+            "textCharacters": sum(len(t) for t in value["textParts"].values()), "pictures": len(value["pictures"]),
+            "opaqueParts": len(value["opaqueParts"])}
+    if errors:
+        level = "FAIL" if errors.get("candidate", {}).get("kind") == "invalid" else "WARN"
+        return level, ["Binary semantic readback " + side + " " + e["kind"] + ": " + e["message"] for side, e in errors.items()], metrics
+    a, b = decoded["baseline"], decoded["candidate"]
+    reasons = []
+    if a["textParts"].keys() != b["textParts"].keys(): reasons.append("Decoded document text part names/count changed")
+    scores = {name: ratio(a["textParts"][name], b["textParts"][name]) for name in sorted(a["textParts"].keys() & b["textParts"].keys())}
+    metrics["readback"]["textRatios"] = scores
+    if a["structure"] != b["structure"]:
+        reasons.append("Decoded document structure or metadata changed")
+        metrics["readback"]["structure"] = {"baseline": a["structure"], "candidate": b["structure"]}
+    if any(score < thresholds["text"] for score in scores.values()): reasons.append("Decoded document text similarity below threshold")
+    if a["opaqueParts"] != b["opaqueParts"]:
+        reasons.append("Decoded non-text resource/index bytes changed; no equivalence waiver")
+        metrics["readback"]["opaqueParts"] = {"baseline": a["opaqueParts"], "candidate": b["opaqueParts"]}
+    if [p["name"] for p in a["pictures"]] != [p["name"] for p in b["pictures"]]: reasons.append("Decoded picture names/order/count changed")
+    import base64
+    pictures = lambda value: [(p["mediaType"], base64.b64decode(p["data"], validate=True)) for p in value["pictures"]]
+    try:
+        problem = pictures_equal(pictures(a), pictures(b), thresholds, metrics.setdefault("pictures", {}), strict=True)
+        if problem: reasons.append(problem)
+    except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+        return ("FAIL" if reasons else "WARN"), reasons + ["Decoded image inspection unavailable: " + str(error)], metrics
+    if reasons: return "FAIL", reasons, metrics
+    if a.get("uninspected") or b.get("uninspected"):
+        return "WARN", ["Known content inspected; listed unsupported fields remain uninspected"], metrics
+    if any(s != 1 for s in scores.values()) or any(f["psnr"] != 99 or f["ssim"] != 1 for p in metrics.get("pictures", {}).values() for f in p["frames"]):
+        return "WARN", ["Decoded text/images are within unchanged thresholds; bytes differ"], metrics
+    return "PASS", [], metrics
+
+
 def compare_output(a, b, left, right, thresholds):
     reasons, metrics = [], {}
     if a["kind"] != b["kind"]: return "FAIL", ["Output type changed"], metrics
     kind = a["kind"]
+    if kind == "binary" and left and right and left.suffix.lower() == right.suffix.lower() and left.suffix.lower() in READBACK_FORMATS:
+        return compare_readback(left, right, thresholds)
     if kind == "binary" and left and right and left.suffix.lower() == right.suffix.lower() == ".tcr":
         decoded, errors = {}, {}
         for name, path in (("baseline", left), ("candidate", right)):
@@ -298,6 +358,8 @@ def main():
     parser.add_argument("--ssim", type=float, default=0.95)
     parser.add_argument("--text-ratio", type=float, default=0.95)
     parser.add_argument("--pdf-render", action="store_true", help="Also compare PDF media-box page content rendered at 144 DPI")
+    parser.add_argument("--semantic-tools", type=Path, help="JSON mapping convertlit/dwgread to absolute path and sha256 pins")
+    parser.add_argument("--case", dest="case_ids", action="append", help="Inspect only this retained case ID (repeatable); missing IDs fail")
     args = parser.parse_args()
     roots = [args.baseline.resolve(strict=True), args.candidate.resolve(strict=True)]
     runs = [json.loads((r / "run.json").read_text()) for r in roots]
@@ -305,11 +367,13 @@ def main():
     if any(len(m) != len(run["results"]) for m, run in zip(mapped, runs)):
         raise ValueError("Duplicate case IDs in run")
     thresholds = {"psnr": args.psnr, "ssim": args.ssim, "text": args.text_ratio}
+    if args.semantic_tools: thresholds["semanticTools"] = json.loads(args.semantic_tools.read_text())
     if args.pdf_render: thresholds["pdfRender"] = True
     results = []
     plans = [json.loads((r / "cases.json").read_text()) for r in roots]
     plan_maps = [{c["id"]: c for c in p} for p in plans]
     all_ids = mapped[0].keys() | mapped[1].keys() | plan_maps[0].keys() | plan_maps[1].keys()
+    if args.case_ids: all_ids = set(args.case_ids)
     for identifier in sorted(all_ids):
         a, b = (m.get(identifier) for m in mapped)
         if a is None or b is None:
@@ -331,11 +395,15 @@ def main():
                  "Empty-text PDF page content compares geometry only; annotation appearance is not rendered. ")
     pdf_limit += "Annotation objects/actions/form values are compared, including hidden annotations; rendering uses normal screen appearance without interaction/scripts. "
     report = {"schema": 1, "baseline": str(roots[0]), "candidate": str(roots[1]), "thresholds": thresholds,
+              "selectedCaseIDs": sorted(args.case_ids) if args.case_ids else None,
               "inspectionPolicy": {"tcr": "exact-decoded-bytes", "imageReferences": "diagnostic-only",
+                                   "binaryReadbackVersion": 1, "binaryReadbackFormats": sorted(READBACK_FORMATS),
                                    "pdfAnnotationVersion": 1, "pdfAnnotationRasterVersion": 1 if args.pdf_render else None,
                                    "pdfRasterDpi": 144 if args.pdf_render else None, "pdfRasterVersion": 2 if args.pdf_render else None},
               "summary": dict(Counter(r["status"] for r in results)), "groups": summaries, "cases": results,
-              "limits": "Engine groups are inferred. Media compares structure/duration, fonts compare table tags/glyph count. " + pdf_limit + "Unsupported decoders produce WARN when bytes differ."}
+              "limits": "Engine groups are inferred. Media compares structure/duration, fonts compare table tags/glyph count. " + pdf_limit +
+                        "Listed binary formats are independently inspected even when bytes match; per-output coverage/limits apply. " +
+                        "Binary image checks use unchanged pixel thresholds without generated-cover exemptions. Unsupported readback produces WARN, invalid candidate parsing produces FAIL."}
     write_json(args.out / "report.json", report)
     lines = ["# Engine differential report", "", " · ".join(f"{k}: {v}" for k, v in sorted(report["summary"].items())),
              "", f"Thresholds: PSNR ≥ {args.psnr} dB; global luminance SSIM-like ≥ {args.ssim}; text ratio ≥ {args.text_ratio}; PDF sizes ±1pt; media duration ±2%.", "", report["limits"], ""]
