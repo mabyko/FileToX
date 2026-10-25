@@ -13,7 +13,7 @@ final class EngineHostTests: XCTestCase {
         XCTAssertTrue(rules.isEmpty)
         await host.shutdown()
         let methods = try String(contentsOf: fixture.root.appendingPathComponent("methods.log"), encoding: .utf8).split(separator: "\n")
-        XCTAssertEqual(methods, ["watch.status", "watch.stop", "EOF"])
+        XCTAssertEqual(methods, ["watch.status", "watch.stop", "engine.install.stop", "engine.packages", "EOF"])
     }
     func testJSONDraftPreservesUnknownFieldsNullsAndArrayOrder() throws {
         let data = Data(#"{"dpi":null,"future":{"custom":true},"icoSizes":[256,32,16],"name":"Original"}"#.utf8)
@@ -229,6 +229,7 @@ final class EngineHostTests: XCTestCase {
             if method=="library.get":result={"revision":1,"settings":{},"presets":[],"profiles":[]}
             if method=="watch.status":result={"rules":[]}
             if method=="history.get":result={"entries":[last_history] if last_history else []}
+            if method=="engine.packages":result={"packages":[]}
             if method=="selection.resolve":
                 result={"profileId":"mixed","formats":[],"unknown":request["params"]["paths"],"rejected":[],"targets":[],"slices":[{"presetId":"zip-all","displayName":"ZIP","targetFormat":"zip","available":True,"runnableCount":1,"canDownload":False}]}
             if method=="job.start":

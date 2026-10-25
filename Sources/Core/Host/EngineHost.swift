@@ -344,6 +344,24 @@ public actor EngineHost {
     }
 
     public func catalog() async throws -> HostCatalog { try await request(HostCatalog.self, method: "catalog.get") }
+    public func enginePackages() async throws -> [HostEnginePackage] {
+        struct Packages: Decodable, Sendable { let packages: [HostEnginePackage] }
+        return try await request(Packages.self, method: "engine.packages").packages
+    }
+    public func installEngine(packageId: String) async throws -> HostEnginePackage {
+        try await request(HostEnginePackage.self, method: "engine.install", params: ["packageId": .string(packageId)])
+    }
+    public func cancelEngineInstall(packageId: String) async throws -> HostEnginePackage {
+        try await request(HostEnginePackage.self, method: "engine.install.cancel", params: ["packageId": .string(packageId)])
+    }
+    public func stopEngineInstalls() async throws {
+        guard process != nil else { return }
+        _ = try await request(JSONValue.self, method: "engine.install.stop")
+        // Each RPC is short; disk image cleanup can outlive the usual request/shutdown timeout.
+        while try await enginePackages().contains(where: \.isActive) {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+    }
     public func resolve(paths: [String]) async throws -> HostSelection {
         try await request(HostSelection.self, method: "selection.resolve", params: ["paths": .array(paths.map(JSONValue.string))])
     }
@@ -389,7 +407,10 @@ public actor EngineHost {
         try await request(HostLibrary.self, method: "settings.save", params: ["baseRevision": .number(Double(baseRevision)), "settings": settings])
     }
     public func shutdown() async {
-        if !shuttingDown { try? await stopWatching() }
+        if !shuttingDown {
+            try? await stopWatching()
+            try? await stopEngineInstalls()
+        }
         shuttingDown = true
         restartTask?.cancel(); restartTask = nil
         try? input?.close(); input = nil

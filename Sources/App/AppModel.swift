@@ -8,6 +8,9 @@ final class AppModel {
     let host: EngineHost
     let applicationPreferences: ApplicationPreferences
     private(set) var catalog: HostCatalog?
+    private(set) var enginePackages: [HostEnginePackage] = []
+    private(set) var pendingEngineActions: Set<String> = []
+    var engineInstallError: String?
     private(set) var library: HostLibrary? {
         didSet { Localization.shared.language = AppLanguage.supported(library?.settings["language"]?.string) }
     }
@@ -47,6 +50,8 @@ final class AppModel {
     @ObservationIgnored private var deliveredJobIDs: Set<String> = []
     @ObservationIgnored private var radialHandOffTask: Task<Void, Never>?
     @ObservationIgnored private var eventTask: Task<Void, Never>?
+    @ObservationIgnored private var engineInstallPoll: Task<Void, Never>?
+    @ObservationIgnored private var engineInstallPollID = UUID()
     @ObservationIgnored private var selectionGeneration = 0
     @ObservationIgnored private var completedRadialTask: Task<Void, Never>?
     @ObservationIgnored private let defaults: UserDefaults
@@ -122,6 +127,9 @@ final class AppModel {
             catalog = try await fetchedCatalog
             library = try await fetchedLibrary
             historyEntries = Array(try await fetchedHistory.prefix(200))
+            enginePackages = try await host.enginePackages()
+            engineInstallError = nil
+            pollEngineInstalls()
             isConnected = true
             statusMessage = L("파일을 놓으면 원형 툴바에서 변환을 선택할 수 있습니다.")
         } catch { report(error) }
@@ -291,9 +299,13 @@ final class AppModel {
         isShuttingDown = true
         do { try await host.stopWatching() }
         catch { await host.shutdown(); return }
+        async let engineCleanup: Void = host.stopEngineInstalls()
         while isStarting { try? await Task.sleep(for: .milliseconds(50)) }
         await cancelAll()
         while isConverting { try? await Task.sleep(for: .milliseconds(50)) }
+        do { try await engineCleanup }
+        catch { report(error) }
+        engineInstallPoll?.cancel(); engineInstallPoll = nil
         await host.shutdown()
     }
 
@@ -322,6 +334,8 @@ final class AppModel {
             if firstDelivery { onJobFinished?(job) }
             deliveredJobIDs.formIntersection(jobs.map(\.jobId))
         case .fatal(let message), .interrupted(let message):
+            engineInstallPoll?.cancel(); engineInstallPoll = nil
+            enginePackages = []; pendingEngineActions = []
             interruptedJobIDs.formUnion(activeJobs.map(\.jobId))
             cancellingJobIDs = []
             pendingJobIDs = []
@@ -382,8 +396,66 @@ final class AppModel {
     }
 
     func refreshLibrary() async {
-        do { library = try await host.library(); catalog = try await host.catalog() }
+        do {
+            library = try await host.library()
+            try await refreshEngineAvailability()
+            enginePackages = try await host.enginePackages()
+            engineInstallError = nil
+            pollEngineInstalls(restart: true)
+        }
         catch { report(error) }
+    }
+
+    func installEngine(_ id: String) async {
+        guard isConnected, !isShuttingDown, pendingEngineActions.insert(id).inserted else { return }
+        defer { pendingEngineActions.remove(id) }
+        engineInstallError = nil
+        do {
+            let status = try await host.installEngine(packageId: id)
+            enginePackages.removeAll { $0.id == id }; enginePackages.append(status)
+            pollEngineInstalls(restart: true)
+        } catch { engineInstallError = error.localizedDescription }
+    }
+
+    func cancelEngineInstall(_ id: String) async {
+        guard pendingEngineActions.insert(id).inserted else { return }
+        defer { pendingEngineActions.remove(id) }
+        do {
+            let status = try await host.cancelEngineInstall(packageId: id)
+            enginePackages.removeAll { $0.id == id }; enginePackages.append(status)
+        } catch { engineInstallError = error.localizedDescription }
+    }
+
+    private func pollEngineInstalls(restart: Bool = false) {
+        if restart { engineInstallPoll?.cancel(); engineInstallPoll = nil }
+        guard engineInstallPoll == nil, enginePackages.contains(where: \.isActive) else { return }
+        let pollID = UUID(); engineInstallPollID = pollID
+        engineInstallPoll = Task { [weak self] in
+            defer { if self?.engineInstallPollID == pollID { self?.engineInstallPoll = nil } }
+            do {
+                while let self, !Task.isCancelled {
+                    try await Task.sleep(for: .milliseconds(400))
+                    let previous = enginePackages
+                    let refreshed = try await host.enginePackages()
+                    guard !Task.isCancelled, engineInstallPollID == pollID else { return }
+                    enginePackages = refreshed
+                    if enginePackages.contains(where: { package in
+                        package.state == "installed" && previous.first(where: { $0.id == package.id })?.state != "installed"
+                    }) { try await refreshEngineAvailability() }
+                    if !enginePackages.contains(where: \.isActive) { return }
+                }
+            } catch is CancellationError { }
+            catch { if !Task.isCancelled { self?.engineInstallError = error.localizedDescription } }
+        }
+    }
+
+    private func refreshEngineAvailability() async throws {
+        catalog = try await host.catalog()
+        let generation = selectionGeneration, paths = selectedFiles.map(\.path)
+        if !paths.isEmpty {
+            let resolved = try await host.resolve(paths: paths)
+            if generation == selectionGeneration { selection = resolved }
+        }
     }
 
     @discardableResult

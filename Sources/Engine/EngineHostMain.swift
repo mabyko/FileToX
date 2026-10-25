@@ -59,7 +59,9 @@ public enum EngineHostMain {
         }
         let done = DispatchSemaphore(value: 0)
         Task { await host.cancelAll(5); done.signal() }
-        _ = done.wait(timeout: .now() + 5.1)
+        while done.wait(timeout: .now() + 5.1) == .timedOut {
+            if !host.hasActiveEngineInstalls { break }
+        }
         wire.complete(2)
         return 0
     }

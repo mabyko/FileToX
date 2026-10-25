@@ -15,12 +15,14 @@ final class Host: @unchecked Sendable {
     private var watchStopped = false, watchStarted = false, watchGeneration = 0
     private var watchStatuses: [[String: Any]]
     private let outputIsDirectory: (String) -> Bool
-    init(_ wire: WireWriter, _ store: UserDataStore, _ converters: [Converter], _ loc: Localizer, languageFixed: Bool, watcher: WatchFolderMonitor? = nil, beforeOutputCommit: ((String) throws -> Void)? = nil, outputIsDirectory: @escaping (String) -> Bool = { FileManager.default.directoryExists($0) }, onStaging: @escaping (String) throws -> Void) {
+    private let engineInstaller: ManagedEngineInstaller
+    init(_ wire: WireWriter, _ store: UserDataStore, _ converters: [Converter], _ loc: Localizer, languageFixed: Bool, watcher: WatchFolderMonitor? = nil, beforeOutputCommit: ((String) throws -> Void)? = nil, outputIsDirectory: @escaping (String) -> Bool = { FileManager.default.directoryExists($0) }, engineInstaller: ManagedEngineInstaller? = nil, onStaging: @escaping (String) throws -> Void) {
         self.wire = wire; self.store = store; self.loc = loc; self.languageFixed = languageFixed
         catalog = ConverterCatalog(converters); catalog.priority = store.settings.enginePriority
         EngineEnvironment.ownCopies = store.settings.engineOwnCopies
         queue = JobQueue(catalog, pdfMerger: EngineRegistry.findPdfMerger(converters), combiner: EngineRegistry.findFileCombiner(converters), tiffMerger: EngineRegistry.findTiffMerger(converters), beforeOutputCommit: beforeOutputCommit, onStaging: onStaging)
         self.outputIsDirectory = outputIsDirectory
+        self.engineInstaller = engineInstaller ?? ManagedEngineInstaller()
         flush = DispatchSource.makeTimerSource(queue: .global())
         self.watcher = watcher ?? WatchFolderMonitor(excluding: [store.directory, EngineEnvironment.downloadRoot, ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()])
         watchStatuses = Self.initialWatchStatus(store.settings.watchFolders)
@@ -65,6 +67,12 @@ final class Host: @unchecked Sendable {
         case "settings.save": return try saveSettings(p)
         case "watch.status": return gate.withLock { ["rules": watchStatuses] }
         case "watch.stop": stopWatching(); return [String: Any]()
+        case "engine.packages": return ["packages": try WireJson.toNode(engineInstaller.snapshot())]
+        case "engine.install", "engine.install.cancel":
+            guard Set(p.keys) == ["packageId"] else { throw WireException("bad_request", "Give only packageId; URLs and paths are not accepted.") }
+            let package = try Self.text(p, "packageId")
+            return try WireJson.toNode(method == "engine.install" ? engineInstaller.start(package) : engineInstaller.cancel(package))
+        case "engine.install.stop": engineInstaller.stop(); return [String: Any]()
         default: throw WireException("unknown_method", "Unknown method \(method).")
         }
     }
@@ -100,9 +108,11 @@ final class Host: @unchecked Sendable {
             wire.response(id, ["jobId": job.id])
         }
     }
+    var hasActiveEngineInstalls: Bool { engineInstaller.isActive }
     func cancelAll(_ timeout: TimeInterval) async {
         stopWatching()
         gate.withLock { stopping = true; for t in jobs.values { t.job.cancel() } }
+        await engineInstaller.shutdown()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if gate.withLock({ jobs.isEmpty }) { break }

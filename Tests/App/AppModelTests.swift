@@ -5,6 +5,29 @@ import XCTest
 
 final class AppModelTests: XCTestCase {
     @MainActor
+    func testManagedEngineInstallRefreshesAvailabilityAndCanCancelAndRetry() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
+        let model = AppModel(host: host)
+        await model.connect()
+        XCTAssertTrue(model.isConnected)
+        XCTAssertEqual(model.enginePackages.first?.state, "idle")
+        await model.resolve([URL(fileURLWithPath: "/tmp/managed.rst")], showRadial: false)
+        XCTAssertEqual(model.catalog?.engines.first?.available, false)
+        await model.installEngine("pandoc")
+        XCTAssertTrue(model.enginePackages.first?.isActive == true)
+        await model.cancelEngineInstall("pandoc")
+        XCTAssertEqual(model.enginePackages.first?.state, "cancelled")
+        await model.installEngine("pandoc")
+        try await wait { model.enginePackages.first?.state == "installed" && model.catalog?.engines.first?.available == true }
+        XCTAssertEqual(model.selection?.unknown, ["/tmp/managed.rst"])
+        XCTAssertNil(model.engineInstallError)
+        XCTAssertTrue(model.pendingEngineActions.isEmpty)
+        await model.shutDown()
+    }
+
+    @MainActor
     func testFileActionsCopyURLsAndPathsWithoutChangingSourcesAndRejectMissingFiles() async throws {
         let fixture = try makeFixture()
         let suite = "filetox-actions-\(UUID().uuidString)"
@@ -332,17 +355,34 @@ final class AppModelTests: XCTestCase {
         os.setpgid(0,0)
         lock=threading.Lock()
         configured=False
+        install_state="idle"
+        install_polls=0
         settings={}
         revision=1
         def send(value):
             with lock:print(json.dumps(value),flush=True)
         def response(request,result):send({"v":1,"id":request["id"],"result":result})
+        def package():return {"id":"pandoc","version":"3.12","downloadSize":100,"installedSize":200,"canDownload":True,"state":install_state,"bytesReceived":100 if install_state=="installed" else 0}
         send({"v":1,"event":"hello","data":{"protocol":1,"hostVersion":"test","fileeCommit":"21fdd05ef7181b032ed83ec895cc9bbc4b198985","rid":"osx-arm64","dataDir":"/tmp/data"}})
         for line in sys.stdin:
             r=json.loads(line);m=r["method"]
             if m=="catalog.get":response(r,{"formats":[],"engines":[{"id":"ffmpeg","displayName":"FFmpeg","available":configured}]})
             elif m=="library.get":threading.Timer(.1,response,args=(r,{"revision":revision,"settings":settings,"presets":[{"id":"zip-all","name":"ZIP"},{"id":"custom","name":"Custom"},{"id":"unavailable","name":"Unavailable"}],"profiles":[]})).start()
             elif m=="history.get":response(r,{"entries":[]})
+            elif m=="engine.packages":
+                if install_state=="downloading":
+                    install_polls+=1
+                    if install_polls>=2:install_state="installed";configured=True
+                response(r,{"packages":[package()]})
+            elif m=="engine.install":
+                install_state="downloading";install_polls=0
+                response(r,package())
+            elif m=="engine.install.cancel":
+                install_state="cancelled"
+                response(r,package())
+            elif m=="engine.install.stop":
+                if install_state=="downloading":install_state="cancelled"
+                response(r,{})
             elif m=="settings.save":
                 if r["params"]["baseRevision"]!=revision:
                     send({"v":1,"id":r["id"],"error":{"code":"revision_conflict","message":"Settings changed"}})

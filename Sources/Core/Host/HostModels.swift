@@ -64,6 +64,21 @@ public struct HostEngine: Codable, Sendable, Identifiable {
     public let version: String?
 }
 
+public struct HostEnginePackage: Codable, Sendable, Identifiable {
+    public let id: String
+    public let version: String?
+    public let downloadSize: Int64
+    public let installedSize: Int64
+    public let canDownload: Bool
+    public let guidanceKey: String?
+    public let state: String
+    public let bytesReceived: Int64
+    public let errorKey: String?
+    public let errorDetail: String?
+    public var isActive: Bool { ["queued", "downloading", "verifying", "installing", "cancelling"].contains(state) }
+    public var progress: Double { downloadSize > 0 ? min(1, max(0, Double(bytesReceived) / Double(downloadSize))) : 0 }
+}
+
 public struct HostSelection: Codable, Sendable {
     public let profileId: String?
     public let formats: [String]
