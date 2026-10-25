@@ -214,8 +214,12 @@ enum ImageEncoder {
             break
         }
         // Source ICC bytes describe the samples only in the space they were decoded in (an indexed picture resized or
-        // turned upright is sRGB now); otherwise the profile is inferred from the current space.
-        if let space = frame.image.colorSpace, let decodedSpace, !CFEqual(space, decodedSpace) { frame.properties[ImageFrame.iccKey] = nil }
+        // turned upright is sRGB now); otherwise the profile is inferred from the current space. No operation adds a
+        // profile, so an untagged (or stripped) picture stays untagged.
+        if let space = frame.image.colorSpace, let decodedSpace, !CFEqual(space, decodedSpace),
+           (frame.properties[ImageFrame.iccKey] as? Data)?.isEmpty != true {
+            frame.properties[ImageFrame.iccKey] = nil
+        }
         return frame
     }
 
@@ -303,6 +307,12 @@ enum ImageEncoder {
                 guard let converted = context.makeImage() else { throw ConversionError("Could not convert the image to sRGB for TGA.") }
                 image = converted
             }
+            // ImageIO's TIFF writer embeds the profile of sRGB and Generic Gray too; an untagged source (or a stripped
+            // profile) is written in the device space of its model, which it stores without one.
+            if format == "tiff", (frame.properties[ImageFrame.iccKey] as? Data)?.isEmpty == true,
+               let device = image.colorSpace.flatMap(deviceSpace), let untagged = image.copy(colorSpace: device) {
+                image = untagged
+            }
             var properties = frame.properties.filter { !privateKeys.contains($0.key) }
             if let dpi = frame.dpi, dpi.x > 0, dpi.y > 0 {
                 properties[kCGImagePropertyDPIWidth] = dpi.x
@@ -347,6 +357,16 @@ enum ImageEncoder {
             encoded = zeroingBmpPadding(encoded)
         }
         try FileManager.default.writeFile(path, encoded)
+    }
+
+    /// The device space of a colour space's model (gray, RGB or CMYK).
+    private static func deviceSpace(_ space: CGColorSpace) -> CGColorSpace? {
+        switch space.model {
+        case .monochrome: CGColorSpaceCreateDeviceGray()
+        case .rgb: CGColorSpaceCreateDeviceRGB()
+        case .cmyk: CGColorSpaceCreateDeviceCMYK()
+        default: nil
+        }
     }
 
     /// A BMP header at all: the signature, the file's own length and pixel data after the smallest header.

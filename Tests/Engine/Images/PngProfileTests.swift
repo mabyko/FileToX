@@ -410,6 +410,29 @@ final class PngProfileTests: XCTestCase {
         }
     }
 
+    func testTiffOfUntaggedOrStrippedPicturesHasNoProfile() throws {
+        let p3 = try profile(CGColorSpace.displayP3)
+        var strip = ImageOptions()
+        strip.keepMetadata = false
+        strip.keepColorProfile = false
+        let cmyk = ImagePixels.make((0..<6 * 4 * 4).map { UInt8($0 * 13 & 255) }, 6, 4, components: 4, space: CGColorSpaceCreateDeviceCMYK(), alpha: false)
+        let cases: [(String, CGImage, ImageOptions, Data?)] = [
+            ("gray", pattern(CGColorSpaceCreateDeviceGray()), ImageOptions(), nil), ("rgb", pattern(CGColorSpaceCreateDeviceRGB()), ImageOptions(), nil),
+            ("cmyk", cmyk, ImageOptions(), nil), ("p3", pattern(try XCTUnwrap(CGColorSpace(iccData: p3 as CFData))), ImageOptions(), p3),
+            ("p3 stripped", pattern(try XCTUnwrap(CGColorSpace(iccData: p3 as CFData))), strip, nil),
+        ]
+        for (name, image, options, expected) in cases {
+            let frame = try read(try JpegEncoder.encode(ImageFrame(image: image)), "jpg")
+            let tiff = try write(frame, "tiff", options: options)
+            let properties = try XCTUnwrap(CGImageSourceCreateWithData(tiff as CFData, nil).flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) as? [CFString: Any] })
+            XCTAssertEqual(properties[kCGImagePropertyProfileName] != nil, expected != nil, name)
+            if let expected { XCTAssertNotNil(tiff.range(of: expected), name) }
+            for invented in [try profile(CGColorSpace.sRGB), try profile(CGColorSpace.genericGrayGamma2_2)] { XCTAssertNil(tiff.range(of: invented), name) }
+            let decoded = try XCTUnwrap(CGImageSourceCreateWithData(tiff as CFData, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) })
+            XCTAssertEqual(ImagePixels.straight(decoded).samples, ImagePixels.straight(frame.image).samples, name)
+        }
+    }
+
     func testHeifReferencesAndItemIdsStayWithinTheirBoxes() throws {
         let p3 = try profile(CGColorSpace.displayP3)
         func box(_ type: String, _ payload: [UInt8]) -> [UInt8] {
