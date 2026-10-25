@@ -337,3 +337,23 @@
 "settings.excluded.invalid" = "有効なバンドル識別子を持つアプリを選択してください。";
 "settings.excluded.help" = "変更はすぐに適用されます。これらのアプリで開始したドラッグでは円形メニューを表示しません。FileToX内でファイルを選択して変換する機能は引き続き利用できます。";
 "app.version" = "バージョン %@（%@）";
+
+/* Watch folders */
+"watch.title" = "監視フォルダ";
+"watch.help" = "FileToXを開いている間、新規・変更されたファイルを変換します。有効にした時点で存在するファイルは変換しません。保存して適用し、ホームで進行状況の確認やキャンセルができます。";
+"watch.add" = "監視フォルダを追加";
+"watch.enabled" = "保存後に有効化";
+"watch.folder" = "入力フォルダ";
+"watch.choosePreset" = "既存のプリセットを選択";
+"watch.subfolders" = "サブフォルダを含める";
+"watch.output" = "出力フォルダ（空欄：convertedサブフォルダ）";
+"watch.include" = "対象パターンを1行に1つ（空欄：全形式）";
+"watch.originals" = "変換成功後";
+"watch.keep" = "元ファイルを保持";
+"watch.move" = "変更のない元ファイルをoriginalsサブフォルダへ移動";
+"watch.savedStatus" = "保存済みルールの状態";
+"watch.state.disabled" = "無効";
+"watch.state.watching" = "監視中";
+"watch.state.running" = "変換中";
+"watch.state.error" = "確認が必要";
+"watch.ruleHelp" = "ファイルが3秒以上変更されていない場合に変換します。隠しファイル、一時ダウンロード、シンボリックリンク、出力とoriginalsサブフォルダは対象外です。大きいファイルや書き込みが遅いファイルは、完了後に入力フォルダへ移動してください。既存の名前変更ルールは保持されます。";

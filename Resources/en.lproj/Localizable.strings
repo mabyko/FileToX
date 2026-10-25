@@ -337,3 +337,23 @@
 "settings.excluded.invalid" = "Choose an application with a valid bundle identifier.";
 "settings.excluded.help" = "Changes apply immediately. The radial menu stays hidden for drags started in these apps. File selection and conversion inside FileToX remain available.";
 "app.version" = "Version %@ (%@)";
+
+/* Watch folders */
+"watch.title" = "Watch folders";
+"watch.help" = "Convert new and changed files while FileToX is open. Files already present when a rule is enabled are left untouched. Save to apply changes; use Home to see progress or cancel jobs.";
+"watch.add" = "Add watch folder";
+"watch.enabled" = "Enable after saving";
+"watch.folder" = "Input folder";
+"watch.choosePreset" = "Choose an existing preset";
+"watch.subfolders" = "Include subfolders";
+"watch.output" = "Output folder (blank: converted subfolder)";
+"watch.include" = "Include patterns, one per line (blank: all formats)";
+"watch.originals" = "After successful conversion";
+"watch.keep" = "Keep originals";
+"watch.move" = "Move unchanged originals to originals subfolder";
+"watch.savedStatus" = "Saved rule status";
+"watch.state.disabled" = "Disabled";
+"watch.state.watching" = "Watching";
+"watch.state.running" = "Converting";
+"watch.state.error" = "Needs attention";
+"watch.ruleHelp" = "Files must stay unchanged for at least 3 seconds. Hidden files, temporary downloads, symbolic links, outputs and originals subfolders are excluded. For large or slowly written files, move the completed file into the folder. Existing rename rules are preserved.";

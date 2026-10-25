@@ -44,14 +44,25 @@ enum Validation {
         if s.language != "auto" && !Localizer.languages.contains(s.language) { throw invalid("Unknown language \(s.language).") }
         if s.defaultOutput.location == .default { throw invalid("settings.defaultOutput.location can't be default.") }
         if !s.defaultOutput.customFolder.isEmpty && !FilePath.isFullyQualified(s.defaultOutput.customFolder) { throw invalid("settings.defaultOutput.customFolder must be an absolute path.") }
-        for r in s.watchFolders {
-            if !r.folder.isEmpty && !FilePath.isFullyQualified(r.folder) { throw invalid("A watch folder must be an absolute path.") }
-            if !r.outputFolder.isEmpty && !FilePath.isFullyQualified(r.outputFolder) { throw invalid("A watch folder's output folder must be an absolute path.") }
-            try renames(r.renames, "Watch folder")
-        }
+        try unique(s.watchFolders.map(\.id), "watch rule")
+        for rule in s.watchFolders { try watchRule(rule) }
         for path in s.engineOwnCopies.values where !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if !FilePath.isFullyQualified(path) { throw invalid("settings.engineOwnCopies must hold absolute paths.") }
         }
+    }
+    static func watchRule(_ rule: WatchRule) throws {
+        if rule.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw invalid("A watch rule needs an id.") }
+        if rule.enabled && (rule.folder.isEmpty || rule.presetId.isEmpty) { throw invalid("Choose a folder and preset for an enabled watch rule.") }
+        for path in [rule.folder, rule.outputFolder] where !path.isEmpty {
+            if !FilePath.isFullyQualified(path) || path.contains("\0") { throw invalid("Watch folders must be absolute paths without null characters.") }
+        }
+        if !rule.folder.isEmpty && WatchFolderMonitor.contains(WatchFolderMonitor.canonical(rule.resolvedOutputFolder), WatchFolderMonitor.canonical(rule.folder)) {
+            throw invalid("A watch output folder cannot be the input folder or its parent.")
+        }
+        for pattern in rule.include {
+            if let error = FileNameFilter.validate(pattern) { throw invalid("Watch folder: invalid include pattern: \(error)") }
+        }
+        try renames(rule.renames, "Watch folder")
     }
     private static func unique(_ ids: [String], _ what: String) throws { var seen = Set<String>(); for id in ids where !seen.insert(id).inserted { throw invalid("Duplicate \(what) id \(id).") } }
     private static func invalid(_ message: String) -> WireException { WireException("invalid_input", message) }

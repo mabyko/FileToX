@@ -1,23 +1,31 @@
 import Foundation
 
 final class Host: @unchecked Sendable {
-    private struct Tracked { let job: ConversionJob; var dirty = true }
+    private struct Tracked { let job: ConversionJob; var dirty = true; var watch: WatchFolderMonitor.Batch? }
     private let gate = NSRecursiveLock()
     private var jobs: [String: Tracked] = [:], jobOrder: [String] = []
     private let wire: WireWriter, store: UserDataStore, catalog: ConverterCatalog, queue: JobQueue, loc: Localizer
     private let languageFixed: Bool
     private var revision = 1
     private let flush: DispatchSourceTimer
+    private let watchTimer: DispatchSourceTimer
+    private let watcher: WatchFolderMonitor
+    private var stopping = false
     init(_ wire: WireWriter, _ store: UserDataStore, _ converters: [Converter], _ loc: Localizer, languageFixed: Bool, onStaging: @escaping (String) throws -> Void) {
         self.wire = wire; self.store = store; self.loc = loc; self.languageFixed = languageFixed
         catalog = ConverterCatalog(converters); catalog.priority = store.settings.enginePriority
         EngineEnvironment.ownCopies = store.settings.engineOwnCopies
         queue = JobQueue(catalog, pdfMerger: EngineRegistry.findPdfMerger(converters), combiner: EngineRegistry.findFileCombiner(converters), tiffMerger: EngineRegistry.findTiffMerger(converters), onStaging: onStaging)
         flush = DispatchSource.makeTimerSource(queue: .global())
+        watcher = WatchFolderMonitor(excluding: [store.directory, EngineEnvironment.downloadRoot, ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()])
+        watchTimer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "filetox.watch", qos: .utility))
         queue.jobUpdated = { [weak self] job in self?.gate.withLock { if self?.jobs[job.id] != nil { self?.jobs[job.id]?.dirty = true } } }
         queue.jobFinished = { [weak self] job in self?.onJobFinished(job) }
         flush.schedule(deadline: .now() + 0.1, repeating: 0.1)
         flush.setEventHandler { [weak self] in self?.flushUpdates() }; flush.resume()
+        pollWatchFolders()
+        watchTimer.schedule(deadline: .now() + 1, repeating: 1)
+        watchTimer.setEventHandler { [weak self] in self?.pollWatchFolders() }; watchTimer.resume()
     }
     /// nil means job.start already queued its response under the event gate.
     func handle(_ id: String?, _ method: String, _ p: [String: Any]) throws -> Any? {
@@ -34,6 +42,7 @@ final class Host: @unchecked Sendable {
         case "library.get": return try gate.withLock { try libraryData() }
         case "library.save": return try gate.withLock { try saveLibrary(p) }
         case "settings.save": return try saveSettings(p)
+        case "watch.status": return gate.withLock { ["rules": watcher.statuses] }
         default: throw WireException("unknown_method", "Unknown method \(method).")
         }
     }
@@ -70,7 +79,8 @@ final class Host: @unchecked Sendable {
         }
     }
     func cancelAll(_ timeout: TimeInterval) async {
-        gate.withLock { for t in jobs.values { t.job.cancel() } }
+        watchTimer.cancel()
+        gate.withLock { stopping = true; for t in jobs.values { t.job.cancel() } }
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if gate.withLock({ jobs.isEmpty }) { break }
@@ -94,6 +104,10 @@ final class Host: @unchecked Sendable {
             do {
                 let state = stateOf(job)
                 var entry = HistoryEntry.from(job); entry.state = state
+                if let batch = jobs[job.id]?.watch {
+                    entry.watchRuleId = batch.rule.id
+                    watcher.complete(batch, job: job, currentRules: store.settings.watchFolders)
+                }
                 var retry: [String]?
                 if !entry.failures.isEmpty { retry = entry.failures.map(\.source) }
                 else if state == .failed || state == .cancelled { retry = job.sources; entry.preset = job.preset }
@@ -133,13 +147,30 @@ final class Host: @unchecked Sendable {
             try checkRevision(p)
             var settings = try WireJson.readStrict(AppSettings.self, p["settings"], "settings"); try Validation.settings(settings)
             settings.engineOwnCopies = settings.engineOwnCopies.filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            store.settings = settings; try store.saveSettings(); revision += 1
+            let previous = store.settings
+            store.settings = settings
+            do { try store.saveSettings() }
+            catch { store.settings = previous; throw error }
+            revision += 1
+            for tracked in jobs.values {
+                if let batch = tracked.watch, !settings.watchFolders.contains(batch.rule) { tracked.job.cancel() }
+            }
             catalog.priority = settings.enginePriority; EngineEnvironment.ownCopies = settings.engineOwnCopies; EngineEnvironment.forgetSystemCopies()
             if !languageFixed { loc.setLanguage(settings.language) }
             return try libraryData()
         }
-        catalog.refresh(); return result
+        catalog.refresh(); pollWatchFolders(); return result
     }
+    private func pollWatchFolders() {
+        gate.withLock {
+            guard !stopping else { return }
+            for batch in watcher.scan(store.settings.watchFolders, presets: store.presets) {
+                let job = queue.enqueue(batch.files.keys.sorted(), store.settings.withDefaultOutput(batch.preset), loc.displayName(batch.preset))
+                jobs[job.id] = Tracked(job: job, watch: batch); jobOrder.append(job.id)
+            }
+        }
+    }
+    deinit { watchTimer.cancel(); flush.cancel() }
     private func checkRevision(_ p: [String: Any]) throws {
         guard let base = WireJson.integer(p["baseRevision"]) else { throw WireException("bad_request", "baseRevision must be an integer.") }
         if base != revision { throw WireException("conflict", "The library changed (revision \(revision), not \(base)).") }

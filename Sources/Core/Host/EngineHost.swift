@@ -329,6 +329,10 @@ public actor EngineHost {
     }
     public func clearHistory() async throws { _ = try await request(JSONValue.self, method: "history.clear") }
     public func library() async throws -> HostLibrary { try await request(HostLibrary.self, method: "library.get") }
+    public func watchStatus() async throws -> [JSONValue] {
+        struct Status: Decodable, Sendable { let rules: [JSONValue] }
+        return try await request(Status.self, method: "watch.status").rules
+    }
     public func saveLibrary(baseRevision: Int, presets: [JSONValue], profiles: [JSONValue]) async throws -> HostLibrary {
         try await request(HostLibrary.self, method: "library.save", params: ["baseRevision": .number(Double(baseRevision)), "presets": .array(presets), "profiles": .array(profiles)])
     }

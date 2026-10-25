@@ -64,6 +64,7 @@ struct SettingsJSONEditor: View {
 
     @ViewBuilder private var sections: some View {
         switch section {
+        case "watchFolders": WatchRulesEditor(model: model, settings: $draft)
         case "general":
             ApplicationSettingsSections(preferences: model.applicationPreferences)
             Section {

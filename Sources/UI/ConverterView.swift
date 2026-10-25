@@ -7,6 +7,7 @@ struct ConverterView: View {
         ("home", L("홈"), "arrow.down.doc"), ("general", L("일반"), "gearshape"),
         ("triggers", L("호출 키"), "keyboard"), ("toolbar", L("원형 툴바"), "circle.circle"),
         ("presets", L("프리셋"), "slider.horizontal.3"), ("theme", L("테마"), "paintpalette"),
+        ("watchFolders", L("watch.title"), "folder.badge.gearshape"),
         ("engines", L("변환 엔진"), "cpu"), ("about", L("정보"), "info.circle")
     ] }
 
@@ -22,9 +23,9 @@ struct ConverterView: View {
                 row(pages[0])
                 Text(L("설정")).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                     .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 4).accessibilityAddTraits(.isHeader)
-                ForEach(pages[1..<7], id: \.0) { row($0) }
+                ForEach(pages.dropFirst().dropLast(), id: \.0) { row($0) }
                 Spacer().frame(height: 14)
-                row(pages[7])
+                row(pages[pages.count - 1])
                 Spacer()
             }
             .padding(.horizontal, 10).padding(.top, 22)
@@ -108,7 +109,7 @@ struct ConverterView: View {
         case "presets": PresetsView(model: model).padding(.bottom, 20)
         case "toolbar": ToolbarProfilesView(model: model).padding(.bottom, 20)
         case "engines": EnginesView(model: model)
-        case "general", "theme", "triggers": SettingsView(model: model, section: model.selectedPage)
+        case "general", "theme", "triggers", "watchFolders": SettingsView(model: model, section: model.selectedPage)
         default: AboutView()
         }
     }
