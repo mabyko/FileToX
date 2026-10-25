@@ -410,6 +410,30 @@ final class PngProfileTests: XCTestCase {
         }
     }
 
+    func testHeifReferencesAndItemIdsStayWithinTheirBoxes() throws {
+        let p3 = try profile(CGColorSpace.displayP3)
+        func box(_ type: String, _ payload: [UInt8]) -> [UInt8] {
+            [24, 16, 8, 0].map { UInt8((payload.count + 8) >> $0 & 255) } + Array(type.utf8) + payload
+        }
+        func heif(_ meta: [UInt8]) -> (profiles: [[Data]], declared: Bool)? {
+            EmbeddedProfiles.read(Data(box("ftyp", Array("heic".utf8) + [0, 0, 0, 0]) + box("meta", [0, 0, 0, 0] + meta)), format: "heic", count: 1)
+        }
+        let colr = box("ipco", box("colr", Array("prof".utf8) + [UInt8](p3)))
+        // Item 2 (a tile of the primary, or not) has the profile.
+        let tile = box("iprp", colr + box("ipma", [0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 1, 0x81]))
+        let pitm = box("pitm", [0, 0, 0, 0, 0, 1])
+        XCTAssertEqual(heif(pitm + box("iref", [0, 0, 0, 0] + box("dimg", [0, 1, 0, 1, 0, 2])) + tile)?.profiles, [[p3]])
+        // A reference claiming more items than it holds names none, whatever the boxes after it hold.
+        let after = box("thmb", [0, 2, 0, 1, 0, 2])
+        XCTAssertEqual(heif(pitm + box("iref", [0, 0, 0, 0] + box("dimg", [0, 1, 0xFF, 0xFF]) + after) + tile)?.profiles, [[]])
+        // A primary item box without its item: the next box's bytes are no item.
+        let unnamed = box("iprp", colr + box("ipma", [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0x81]))
+        XCTAssertNil(heif(box("pitm", [0, 0, 0, 0]) + unnamed))
+        // Associations that run past their box are not read from the next one.
+        let cut = box("iprp", colr + box("ipma", [0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 2, 0x81]) + box("free", [0x81, 0x81]))
+        XCTAssertEqual(heif(pitm + cut)?.profiles, [[]])
+    }
+
     func testEmbeddedProfileReadersRejectMalformedOrOversizedFiles() throws {
         let icc = try profile(CGColorSpace.displayP3)
         let tiff = try imageIO([pattern(try XCTUnwrap(CGColorSpace(iccData: icc as CFData)))], "public.tiff")

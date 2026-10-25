@@ -132,30 +132,37 @@ enum EmbeddedProfiles {
     /// "rICC" hold a profile, "nclx" declares colour by code points.
     private static func heif(_ file: Data) -> (profiles: [[Data]], declared: Bool)? {
         guard let meta = boxes(file, file.startIndex, file.endIndex).first(where: { $0.type == "meta" })?.payload, meta.count >= 4 else { return nil }
-        func number(_ at: Int, _ size: Int) -> Int? { at >= file.startIndex && size <= file.endIndex - at ? file[at..<at + size].reduce(0) { $0 << 8 | Int($1) } : nil }
+        // Every value is read from inside the box it belongs to.
+        func number(_ at: Int, _ size: Int, in box: Range<Int>) -> Int? {
+            at >= box.lowerBound && size <= box.upperBound - at ? file[at..<at + size].reduce(0) { $0 << 8 | Int($1) } : nil
+        }
         var primary: Int?, sources: [Int: [Int]] = [:], properties: [(type: String, payload: Range<Int>)] = [], associations: [Int: [Int]] = [:]
         for box in boxes(file, meta.lowerBound + 4, meta.upperBound) {
             let version = box.payload.isEmpty ? 0 : Int(file[box.payload.lowerBound])
             switch box.type {
             case "pitm":
-                primary = number(box.payload.lowerBound + 4, version == 0 ? 2 : 4)
+                primary = number(box.payload.lowerBound + 4, version == 0 ? 2 : 4, in: box.payload)
             case "iref":
                 for reference in boxes(file, box.payload.lowerBound + 4, box.payload.upperBound) where reference.type == "dimg" {
-                    let id = version == 0 ? 2 : 4
-                    guard let from = number(reference.payload.lowerBound, id), let count = number(reference.payload.lowerBound + id, 2) else { continue }
-                    sources[from, default: []] += (0..<count).compactMap { number(reference.payload.lowerBound + id + 2 + id * $0, id) }
+                    let id = version == 0 ? 2 : 4, ids = reference.payload
+                    guard let from = number(ids.lowerBound, id, in: ids), let count = number(ids.lowerBound + id, 2, in: ids),
+                          count <= (ids.count - id - 2) / id else { continue }
+                    sources[from, default: []] += (0..<count).compactMap { number(ids.lowerBound + id + 2 + id * $0, id, in: ids) }
                 }
             case "iprp":
                 for child in boxes(file, box.payload.lowerBound, box.payload.upperBound) {
                     if child.type == "ipco" { properties = boxes(file, child.payload.lowerBound, child.payload.upperBound) }
-                    guard child.type == "ipma", child.payload.count >= 8, let entries = number(child.payload.lowerBound + 4, 4) else { continue }
+                    guard child.type == "ipma", child.payload.count >= 8, let entries = number(child.payload.lowerBound + 4, 4, in: child.payload) else { continue }
                     let childVersion = Int(file[child.payload.lowerBound]), wide = file[child.payload.lowerBound + 3] & 1 == 1
                     var at = child.payload.lowerBound + 8
                     for _ in 0..<min(entries, child.payload.count) {
                         let id = childVersion < 1 ? 2 : 4
-                        guard let item = number(at, id), let count = number(at + id, 1), at + id + 1 + count * (wide ? 2 : 1) <= child.payload.upperBound else { break }
+                        guard let item = number(at, id, in: child.payload), let count = number(at + id, 1, in: child.payload),
+                              at + id + 1 + count * (wide ? 2 : 1) <= child.payload.upperBound else { break }
                         at += id + 1
-                        associations[item, default: []] += (0..<count).compactMap { number(at + $0 * (wide ? 2 : 1), wide ? 2 : 1).map { $0 & (wide ? 0x7FFF : 0x7F) } }
+                        associations[item, default: []] += (0..<count).compactMap {
+                            number(at + $0 * (wide ? 2 : 1), wide ? 2 : 1, in: child.payload).map { $0 & (wide ? 0x7FFF : 0x7F) }
+                        }
                         at += count * (wide ? 2 : 1)
                     }
                 }
