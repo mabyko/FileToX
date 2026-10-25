@@ -46,6 +46,8 @@ final class WatchFolderMonitor {
     private var active = Set<String>()
     private var errors: [String: String] = [:]
     private(set) var statuses: [[String: Any]] = []
+    // A previous batch's error must not invalidate another healthy batch.
+    private(set) var invalidRuleIDs = Set<String>()
     private let excluded: [String]
     private let reader: ((WatchRule, String, [String]) throws -> Contents)?
     private let clock: () -> TimeInterval
@@ -55,6 +57,7 @@ final class WatchFolderMonitor {
 
     func scan(_ rules: [WatchRule], presets: [Preset], now: TimeInterval? = nil) -> [Batch] {
         let now = now ?? clock()
+        invalidRuleIDs.removeAll()
         snapshots = snapshots.filter { id, _ in rules.contains { $0.id == id && $0.enabled } }
         let outputRoots = rules.filter { !$0.folder.isEmpty }.flatMap { [Self.canonical($0.resolvedOutputFolder), Self.canonical($0.originalsFolder)] } + excluded.map(Self.canonical)
         var batches: [Batch] = []
@@ -95,7 +98,7 @@ final class WatchFolderMonitor {
                 }
                 status["state"] = files.keys.contains(where: active.contains) ? "running" : "watching"
                 if let error = errors[rule.id] { status["state"] = "error"; status["detail"] = error }
-            } catch { status["state"] = "error"; status["detail"] = error.localizedDescription }
+            } catch { invalidRuleIDs.insert(rule.id); status["state"] = "error"; status["detail"] = error.localizedDescription }
             return status
         }
         return batches

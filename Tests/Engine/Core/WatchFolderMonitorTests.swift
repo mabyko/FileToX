@@ -3,6 +3,29 @@ import PDFKit
 @testable import FileToXEngineKit
 
 final class WatchFolderMonitorTests: XCTestCase {
+    func testRememberedMoveErrorIsDisplayOnlyAndCurrentInvalidationResetsEachScan() throws {
+        let d = CoreTempDir(), monitor = WatchFolderMonitor()
+        var r = rule(d.path); r.originals = .moveToOriginals
+        _ = monitor.scan([r], presets: [preset], now: 0)
+        _ = try d.file("input.txt")
+        _ = monitor.scan([r], presets: [preset], now: 0)
+        let batch = try XCTUnwrap(monitor.scan([r], presets: [preset], now: 4).first)
+        let job = ConversionJob(batch.files.keys.sorted(), batch.preset, "move")
+        job.files[0].state = .done; job.files[0].outputs = [try d.file("converted/input.md")]
+        _ = try d.file("originals", "blocked by file")
+        monitor.complete(batch, job: job, currentRules: [r])
+        _ = monitor.scan([r], presets: [preset], now: 5)
+        XCTAssertEqual(monitor.statuses.first?["state"] as? String, "error")
+        XCTAssertTrue(monitor.invalidRuleIDs.isEmpty)
+        r.outputFolder = r.originalsFolder
+        _ = monitor.scan([r], presets: [preset], now: 6)
+        XCTAssertEqual(monitor.invalidRuleIDs, [r.id])
+        r.outputFolder = ""
+        _ = monitor.scan([r], presets: [preset], now: 7)
+        XCTAssertTrue(monitor.invalidRuleIDs.isEmpty)
+        XCTAssertEqual(monitor.statuses.first?["state"] as? String, "error", "Remembered move failure is still displayed after current validation recovers")
+        XCTAssertEqual(try d.read("originals"), "blocked by file")
+    }
     func testQueuedAliasRetargetIsRejectedAtAllocationWithoutAnotherScan() async throws {
         let d = CoreTempDir(), monitor = WatchFolderMonitor(), started = expectation(description: "blocking job"), finished = expectation(description: "two jobs finished")
         finished.expectedFulfillmentCount = 2

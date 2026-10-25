@@ -214,7 +214,7 @@ final class Host: @unchecked Sendable {
         let accepted = gate.withLock { () -> Bool in
             guard !stopping, !watchStopped, generation == watchGeneration, settings == store.settings, presets == store.presets else { return false }
             watchStatuses = watcher.statuses
-            let invalid = Set(watchStatuses.filter { $0["state"] as? String == "error" }.compactMap { $0["id"] as? String })
+            let invalid = watcher.invalidRuleIDs
             for tracked in jobs.values { if let batch = tracked.watch, invalid.contains(batch.rule.id) { tracked.job.cancel() } }
             for batch in batches {
                 let job = queue.enqueue(batch.files.keys.sorted(), settings.withDefaultOutput(batch.preset), loc.displayName(batch.preset), validateOutput: { [weak self] path in

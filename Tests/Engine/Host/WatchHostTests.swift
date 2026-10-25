@@ -2,6 +2,84 @@ import XCTest
 @testable import FileToXEngineKit
 
 final class WatchHostTests: XCTestCase {
+    func testHistoricalBatchFailureDoesNotCancelHealthyQueuedBatchForSameRule() async throws {
+        let d = CoreTempDir(), lock = NSLock()
+        let observedA = expectation(description: "A observed"), observedB = expectation(description: "B observed")
+        let startedA = expectation(description: "A running"), startedB = expectation(description: "B running")
+        var elapsed = 0.0, files: [String: WatchFolderMonitor.Stamp] = [:]
+        var sawA = false, sawB = false, failA = false, finishB = false
+        let store = UserDataStore(d.path + "/core"); try store.load()
+        var preset = corePreset("md"); preset.id = "watch-preset"; store.presets.append(preset)
+        var rule = WatchRule(); rule.folder = d.path + "/inbox"; rule.presetId = preset.id
+        try FileManager.default.createDirectoryIfNeeded(rule.folder)
+        let a = WatchFolderMonitor.canonical(rule.folder) + "/a.txt", b = WatchFolderMonitor.canonical(rule.folder) + "/b.txt"
+        store.settings.watchFolders = [rule]
+        let monitor = WatchFolderMonitor(clock: { lock.withLock { elapsed } }, reader: { _, _, _ in
+            let snapshot = lock.withLock { () -> ([String: WatchFolderMonitor.Stamp], Bool, Bool) in
+                let notifyA = files[a] != nil && !sawA, notifyB = files[b] != nil && !sawB
+                sawA = sawA || notifyA; sawB = sawB || notifyB
+                return (files, notifyA, notifyB)
+            }
+            if snapshot.1 { observedA.fulfill() }; if snapshot.2 { observedB.fulfill() }
+            return .init(identity: .init(device: 1, inode: 1), files: snapshot.0)
+        })
+        let converter = CoreFakeConverter(edges: [ConversionEdge("txt", "md")]) { step in
+            if step.inputPath == a {
+                startedA.fulfill()
+                while !lock.withLock({ failA }) { try await Task.sleep(nanoseconds: 10_000_000) }
+                throw ConversionError("batch A conversion failed")
+            }
+            XCTAssertEqual(step.inputPath, b); startedB.fulfill()
+            while !lock.withLock({ finishB }) { try await Task.sleep(nanoseconds: 10_000_000) }
+            try Task.checkCancellation()
+            guard let output = try step.output.allocate("md") else { return [] }
+            try Data("healthy B output".utf8).write(to: URL(fileURLWithPath: output)); return [output]
+        }
+        let log = try d.file("wire.jsonl", ""), output = try FileHandle(forWritingTo: URL(fileURLWithPath: log))
+        defer { try? output.close() }
+        let wire = WireWriter(output.fileDescriptor)
+        let host = Host(wire, store, [converter], Localizer("en"), languageFixed: true, watcher: monitor, onStaging: { _ in })
+        host.startWatching(); try await waitForWatch(host, state: "watching")
+        try Data("source A".utf8).write(to: URL(fileURLWithPath: a))
+        let stampA = try XCTUnwrap(WatchFolderMonitor.Stamp.read(a)); lock.withLock { files[a] = stampA }
+        await fulfillment(of: [observedA], timeout: 3)
+        lock.withLock { elapsed = 4 }
+        await fulfillment(of: [startedA], timeout: 3)
+        try Data("source B".utf8).write(to: URL(fileURLWithPath: b))
+        let stampB = try XCTUnwrap(WatchFolderMonitor.Stamp.read(b)); lock.withLock { files[b] = stampB }
+        await fulfillment(of: [observedB], timeout: 3)
+        lock.withLock { elapsed = 8 }
+        func queuedB() -> Bool {
+            Self.messages(log).contains {
+                let data = hostObject($0["data"])
+                return $0["event"] as? String == "job.updated" && data["state"] as? String == "queued" && hostObjects(data["files"]).contains { $0["source"] as? String == b }
+            }
+        }
+        let queuedDeadline = Date().addingTimeInterval(3)
+        while !queuedB(), Date() < queuedDeadline { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(queuedB(), "B must be a separate queued batch before A fails")
+        lock.withLock { failA = true }
+        await fulfillment(of: [startedB], timeout: 3)
+        try await waitForWatch(host, state: "error")
+        let status = hostObjects(hostObject(try host.handle("error", "watch.status", [:]))["rules"]).first
+        XCTAssertTrue((status?["detail"] as? String)?.contains("batch A conversion failed") == true, "Historical failure must remain visible while B runs")
+        lock.withLock { finishB = true }
+        var historyB: [String: Any]?
+        let finishedDeadline = Date().addingTimeInterval(3)
+        while Date() < finishedDeadline {
+            let entries = hostObjects(hostObject(try host.handle("history", "history.get", [:]))["entries"])
+            historyB = entries.first { ($0["sources"] as? [String]) == [b] }
+            if historyB != nil { break }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(historyB?["state"] as? String, "completed")
+        if historyB?["state"] as? String == "completed" { XCTAssertEqual(try d.read("inbox/converted/b.md"), "healthy B output") }
+        XCTAssertEqual(try String(contentsOfFile: a, encoding: .utf8), "source A")
+        XCTAssertEqual(try String(contentsOfFile: b, encoding: .utf8), "source B")
+        await host.cancelAll(2); wire.complete(1)
+        XCTAssertEqual(store.history.count, 2)
+    }
+
     func testBlockedCommitAndFinishedOutputKindDoNotBlockStatusStopSettingsOrCancel() async throws {
         for blockKind in [false, true] {
             let d = CoreTempDir(), blocked = expectation(description: blockKind ? "output kind blocked" : "commit blocked"), responded = expectation(description: "RPCs responsive")
