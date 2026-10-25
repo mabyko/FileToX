@@ -300,7 +300,9 @@ final class WatchHostTests: XCTestCase {
         defer { try? FileManager.default.removeItem(atPath: rule.folder) }
         store.settings.watchFolders = [rule]
         let pipe = Pipe(), wire = WireWriter(pipe.fileHandleForWriting.fileDescriptor)
-        let host = Host(wire, store, [converter], Localizer("en"), languageFixed: true, onStaging: { _ in })
+        // The real helper sets an app-specific TMPDIR; this fixture may run with the whole /tmp as TMPDIR.
+        let watcher = WatchFolderMonitor(excluding: [store.directory, EngineEnvironment.downloadRoot])
+        let host = Host(wire, store, [converter], Localizer("en"), languageFixed: true, watcher: watcher, onStaging: { _ in })
         host.startWatching()
         try await waitForWatch(host, state: "watching")
         let source = try d.file("blocking.txt")
@@ -379,7 +381,8 @@ final class WatchHostTests: XCTestCase {
             if hostObjects(hostObject(try host.handle("state", "watch.status", [:]))["rules"]).first?["state"] as? String == state { return }
             try await Task.sleep(nanoseconds: 20_000_000)
         }
-        XCTFail("Watch status did not become \(state)")
+        let last = hostObjects(hostObject(try host.handle("state", "watch.status", [:]))["rules"]).first
+        XCTFail("Watch status did not become \(state); last status: \(String(describing: last))")
     }
     private func waitForWatch(_ child: HostChild, state: String) throws {
         let deadline = Date().addingTimeInterval(4)
