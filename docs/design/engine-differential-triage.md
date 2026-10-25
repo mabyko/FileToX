@@ -1928,3 +1928,19 @@ The official source archive SHA-256 is
 `build/resume/until20-20261025/native-avif/`. The separate ImageIO option experiment is in `avif-options/` beside it.
 These are diagnostic source-relative quality comparisons, not an all-format visual-parity or production
 packaging/cancellation claim. Preserved C# outputs were read; the C# host was not executed.
+
+
+The follow-up calibration reads actual AV1 headers: ImageIO uses quality-dependent quantizers without the
+prototype's default IQ tuning, quantization matrices or chroma delta-q. Explicit `tune=ssim` removes the examined
+RGB regressions, but four gray-square cases still lose 0.42–0.96 dB after matching quantizers. The broader candidate
+also changes size tradeoffs (median 1.52× file bytes); its absent metadata must not be mistaken for compression
+savings. The calibration report records 95 additional encodes and distinguishes original IQ timings from the new
+SSIM timings (`seconds`, not the inherited `nativeSeconds` field).
+
+A further isolated candidate investigation retained no production change. One 24-megapixel probe took 2.79 s
+with two native threads versus 0.47 s through ImageIO/sips, with measured peak memory of 859 MB versus 441 MB.
+The native encode cannot be interrupted internally. A separate RGBA probe with lossless alpha grew about 9× at
+quality 50 and 3.6× at quality 75. These are single diagnostic runs under shared load, not accepted performance
+benchmarks. Correct metadata/orientation handling, alpha policy and symbol isolation also remain necessary before
+shipping. Reports are in `native-avif/calibration/` above and
+`worktrees/t3-40b9a46e/build/avif-proto/REPORT.md`.
