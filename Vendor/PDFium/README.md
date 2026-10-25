@@ -32,8 +32,8 @@ Checked-in dylib SHA-256: `e09fa5c6c9ac1baa56b6e8b25257eb402f644312d983d3e23b714
 Both macOS arm64 and x86_64 slices are retained. The pinned upstream universal archive stays an
 unmodified original; the prepared dylib has only the install-name/signature adjustment above. The app,
 helper and tests use `ARCHS: arm64` with macOS 15 deployment (`project.yml`) and link the arm64 slice.
-The pinned Skia upstream archives and prepared universal static SVG library are also retained; their
-x86_64 slices do not imply Intel support. No PDFium downloads or generation occur at build time.
+The Skia static bridge and its rebuild now retain arm64 only, with provenance from the prior universal output.
+Distribution staging extracts arm64 from PDFium and signs the extracted copy; the source dylib above stays intact. No PDFium downloads or generation occur at build time.
 
 ## Build and embedding
 

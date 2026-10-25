@@ -13,7 +13,7 @@
 FileToX.app/Contents/Helpers/FileToXEngine.app/Contents/
   MacOS/FileToXEngine                  # Swift helper, host-wire-v1 NDJSON
   MacOS/engines/{rhwp,7zip}/...         # osx-arm64 pinned 실행 파일
-  Frameworks/libpdfium.dylib           # universal vendor dylib, helper는 arm64 링크
+  Frameworks/libpdfium.dylib           # arm64 추출 후 서명한 배포 사본
   Resources/FileToX_FileToXEngineKit.bundle/... # 엔진 카탈로그·번역·템플릿·Skia 고지
   Resources/Notices/...                # Filee, rhwp/7-Zip, LibRaw, PDFium 고지
 ```
@@ -22,7 +22,7 @@ PDF → 래스터는 C# PDFtoImage 5.2.1과 같은 PDFium을 사용한다. PDFiu
 prebuilt dylib·공개 헤더·버전·빌드 설정을 `Vendor/PDFium`에 체크인했다. 원본 release asset의
 SHA-256을 GitHub release digest와 대조했으며, arm64 실행 코드는 설치된 C# helper와 같다.
 출처·해시·갱신 절차·실제 렌더 플래그는 [Vendor README](../../Vendor/PDFium/README.md)에 있다.
-Pinned upstream PDFium·Skia archive는 수정하지 않은 원본으로 보존한다. PDFium의 준비된 dylib는 install name·서명 조정이 기록돼 있고, Skia는 자체 bridge를 포함한 universal 정적 라이브러리다. 이 vendor 자산의 arm64/x86_64 slice를 유지하는 것과 앱의 지원 아키텍처는 별개다. 앱·helper는 arm64에 링크하며 원본 archive를 arm64 전용으로 다시 만들지 않는다. Skia는 정적 링크하므로 별도 dylib 내장·서명이 없고 고지는 엔진 리소스 번들에 들어간다. 출처·해시는 [Skia README](../../Vendor/SkiaSVG/README.md)와 provenance를 따른다.
+PDFium·Skia의 업스트림 버전·원본 해시·headers·고지는 보존한다. PDFium은 검증된 universal 소스 사본을 유지하고 배포 시 arm64만 추출한다. Skia bridge의 현재 정적 라이브러리와 재빌드는 arm64 전용이며 이전 universal 출력에서 추출한 경위를 provenance에 기록했다. 원본 고지나 C/C++ 소스를 줄이지 않는다.
 PDFium을 받기 위한 빌드 중 네트워크 요청은 없다. PDFium은 BSD-3, 배포 패키징은 MIT이며,
 번들 third-party 고지를 포함한 `docs/upstream/PDFium.*`를 staging script가 `Resources/Notices`에 넣는다.
 
@@ -45,6 +45,8 @@ rhwp/7-Zip은 pinned archive 캐시가 없을 때 staging script가 내려받는
 Swift package 의존성 빌드에도 적용되도록 Xcode 명령에 destination의 `arch=arm64`와 `ARCHS=arm64`를 함께 지정한다.
 PDFium의 43건 비교 수치와 검증 결과는 [differential triage](engine-differential-triage.md#pdfkit-versus-pdfiumskia-rasterization)에 있다.
 앱 내부는 서명 후 읽기 전용으로 유지한다. 설정·선택 엔진·임시/결과 경로의 기존 경계를 바꾸지 않는다.
+
+Intel 정리 후 staging은 PDFium·번들 도구의 arm64만 추출하고 다시 서명한다. Skia 정적 bridge·재빌드도 arm64 전용이다. 검증된 PDFium·도구 원본과 고지는 그대로 두며 배포 앱의 Mach-O 5개는 모두 arm64임을 확인했다. [후속 검증](engine-differential-triage.md#intel-support-cleanup-2026-10-25)을 따른다.
 
 ## 현재 서명·데이터 경계와 검증 상태
 

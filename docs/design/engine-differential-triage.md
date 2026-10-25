@@ -1648,3 +1648,43 @@ codec/renderer matches quality and options; blanket replacements that changed te
 Remaining work includes the unwaived strict/WARN differences, general SVG text shaping, non-JPEG ICC and
 container fidelity, PDF/Markdown speed targets, native cancellation latency during synchronous computation,
 and separate hardware/OS/distribution verification. No conversion route was removed to obtain these results.
+
+
+## Intel support cleanup (2026-10-25)
+
+Following the M1+ support decision, `d61299a` retains an arm64-only Skia bridge and `0b2a6c7` removes
+Intel runtime/download selection. Skia's active download/rebuild/self-check no longer contains x86 work.
+The current static archive is **17,849,304 bytes**, down from 37,790,536; its SHA-256 is
+`3f5579445b952c6915fbacd367661bcbaad405cc817b8da77410ddf21d03d4d8`.
+Its selected arm64 archive bytes are identical to the prior universal archive's arm64 slice. The single
+export, 99 header pins, notices and C adapter stay intact; native C self-check and six mocked builder checks pass.
+
+`Tools/stage-bundled-engines.sh` now copies, selects arm64 if necessary, and signs code before helper signing.
+It also replaces the framework-embed phase's PDFium copy with an arm64 derivative and signs it again.
+Pinned PDFium/rhwp/7-Zip source copies and notices stay unchanged. The new staging regression checks all
+three outputs' architectures, ARM instruction bytes, file modes, signatures and original source hashes;
+it also checks x64 CLI rejection. Both existing archive self-tests pass. The independent review found no
+introduced actionable defect in RID callers, build-phase order, source isolation or the native bridge.
+
+Actual SDK-denied development-certificate Xcode Release passes. **All five packaged Mach-O files are arm64
+only**, share the current signing team, and pass deep/strict signing with no helper library-validation exception.
+No .NET or Homebrew load dependency is present. The relocated app passes **22 checks** with checkout and
+SDK access denied. Focused SDK-denied PDFium/SVG tests pass **37 tests, three Ghostscript skips, zero failures**.
+The Release helper SHA-256 is `75d104714902068d54fd53d58396d27cd27a1ac04052b95cf89a2f0a46af3a04`.
+
+Measured app file bytes decrease **78,264,615 → 69,236,908**, saving **9,027,707 bytes (8.61 MiB)**.
+The smaller static Skia archive reduces the checkout by **19,941,232 bytes (19.02 MiB)**; its discarded x86
+slice was already absent from arm64 executable linkage, so this is not additional app-size savings.
+The explicitly scoped inactive Intel SwiftPM cache (1,237,688 KiB) and 12 Intel object folders in two completed
+DerivedData builds (222,860 KiB) were removed. Source caches, ARM products, original baselines, historical
+reports, user SDK folders and installed reference apps were preserved. This is cache-size removal, not a claim
+about exact physical free-space gain on a filesystem with shared extents.
+
+Evidence: `build/resume/intel-trim-20261025/` contains staging test logs, exact focused/Release commands and
+results, `release-final-audit.json`, relocation proof, size comparison and cleanup manifests.
+Full 849 replay and speed measurements were not repeated for byte-equivalent ARM selection; the preceding
+849 captures and sequential measurements remain their original evidence. No format, preset or user-data logic
+changed. Existing strict failures, non-JPEG ICC/container fidelity, SVG text limitations, PDF/Markdown speed goals,
+native cancellation latency, physical M1/macOS 15/separate-OS execution and distribution notarization remain open.
+Generic upstream C/C++ portability code and immutable cross-platform manifest metadata remain as provenance,
+not active Intel application support. No push, deployment or installed-app replacement occurred.

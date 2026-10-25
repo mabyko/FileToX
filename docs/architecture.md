@@ -15,7 +15,7 @@ FileToX는 Filee에서 영감을 받은 Mac 전용 파일 변환 앱이다. **Ap
 - `Package.swift`: Core·EngineKit·helper 실행 제품, 네이티브 라이브러리·리소스·패키지 테스트의 공통 정의.
 - `project.yml`: 로컬 Swift 패키지를 사용하는 앱·helper 번들, 내장 라이브러리·도구·리소스, 서명·Xcode 테스트. 공통 `ARCHS: arm64`를 사용하고 bundled-engine staging도 다른 아키텍처를 거부한다.
 
-PDFium과 Skia의 pinned upstream archive는 원본 그대로 보존한다. 준비된 universal vendor 라이브러리는 유지하되 앱·helper는 arm64 slice에 링크한다. PDFium dylib의 install name·서명 조정과 Skia의 자체 bridge/정적 링크는 각 Vendor provenance에 별도로 기록돼 있다. universal 자산의 x86_64 slice는 앱의 Intel 지원을 뜻하지 않는다. 상세 배치는 [패키징](design/macos-packaging.md)을 따른다.
+PDFium의 검증된 universal 원본과 upstream 출처·고지는 보존한다. Skia 정적 bridge는 기존 arm64 부분과 바이트가 같은 arm64 전용 파일로 줄였으며 빌드·다운로드도 arm64만 사용한다. 배포 staging은 PDFium·번들 도구에서 arm64만 추출한 뒤 서명한다. 앱·helper·번들 도구·배포 PDFium 모두 arm64이며, 원본 라이브러리의 보존은 Intel 지원을 뜻하지 않는다. 상세 배치는 [패키징](design/macos-packaging.md)을 따른다.
 
 ## 형식과 변환 엔진
 

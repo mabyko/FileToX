@@ -8,7 +8,7 @@
 
 내장 엔진은 Swift 코드·macOS 프레임워크·네이티브 라이브러리를 사용하고 rhwp·7-Zip은 번들 실행 파일을 사용한다. FFmpeg·Ghostscript·Pandoc·LibreOffice·Calibre는 시스템 설치나 사용자 지정 사본을 사용한다. 아래 초기 계획의 JPEG 2000 품질 제한 수용, SVG 렌더링 범위와 CMYK 처리 설명은 당시 결정이다. 이후 JPEG 2000 쓰기는 OpenJPEG를 사용하고, 제한된 SVG 기본 도형은 정적 Skia bridge로 처리하며 나머지 SVG 기능과 벡터 PDF는 CoreSVG를 유지한다. 현재 색상 처리·비교 한계는 [이전 단계 최종 통합 기록](engine-differential-triage.md#final-native-quality-integration-2026-10-24)에서 확인한다.
 
-PDFium·Skia의 pinned upstream archive는 원본 그대로 보존한다. 준비된 universal vendor 라이브러리의 arm64/x86_64 slice는 유지하고 앱은 arm64에 링크한다. PDFium install name·서명 조정과 Skia 자체 bridge·정적 링크는 각 Vendor provenance에 기록한다. 보존된 x86_64 slice와 과거 x86_64 교차 빌드 증거는 Intel 지원이나 추가 검증 의무를 뜻하지 않는다. 라이선스와 고지는 계속 보존한다.
+PDFium·Skia의 업스트림 버전·원본 해시·고지는 보존한다. 현재 Skia 정적 bridge·재빌드·다운로드는 arm64 전용이고 배포 staging은 PDFium·번들 도구에서도 arm64만 남겨 서명한다. 검증용 PDFium universal 원본은 변경하지 않는다. 이전 universal 출력의 경위와 과거 Intel 검증 기록은 보존하지만 현재 지원·추가 검증 의무는 아니다.
 
 이전 단계에서 SDK 접근 차단 빌드·테스트, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사와 재배치한 앱의 변환 검증을 통과했다. 이는 Developer ID 서명·공증 검증이 아니다. 위 기록의 이전 최종 비교 결과와 WARN·FAIL 한계도 그대로 유지하며 새 검증 결과로 재사용하지 않는다.
 

@@ -4,7 +4,7 @@ Filee에서 영감을 받아 Mac 전용 화면과 동작을 구현한다. 홈에
 
 ## 현재 지원·검증 상태 (2026-10-25)
 
-Apple Silicon M1 이상(arm64), macOS 15 이상을 지원한다. Intel·Rosetta 실행과 그 검증은 지원 범위에 포함하지 않는다. 앱·helper·테스트는 arm64 설정을 사용하며 universal PDFium·Skia vendor 자산의 보존과 앱의 arm64 링크를 구분한다.
+Apple Silicon M1 이상(arm64), macOS 15 이상을 지원한다. Intel·Rosetta 실행과 그 검증은 지원 범위에 포함하지 않는다. 앱·helper·테스트는 arm64 설정을 사용하며 Skia·배포 바이너리는 arm64 전용이다. PDFium의 검증된 universal 원본 보존과 배포 사본의 arm64 추출을 구분한다.
 
 실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [최신 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다. 아래 날짜별 UI 검증은 당시 결과이며 새 arm64 검증 수치가 아니다.
 
