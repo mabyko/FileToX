@@ -5,6 +5,78 @@ import XCTest
 
 final class AppModelTests: XCTestCase {
     @MainActor
+    func testInstallPollingSurvivesSelectionRefreshFailureAndTracksCancellation() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        model.selectFiles((0...10_000).map { URL(fileURLWithPath: "/tmp/selection-\($0).rst") })
+        await model.installEngine("pandoc")
+        await model.installEngine("ffmpeg")
+        let next = fixture.root.appendingPathComponent("next.json")
+        try #"{"pandoc":"installed","ffmpeg":"downloading","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { model.engineInstallError != nil }
+        XCTAssertEqual(model.engineInstallError, L("한 번에 선택한 파일이 너무 많습니다."))
+        XCTAssertEqual(model.catalog?.engines.first?.available, true)
+        try #"{"pandoc":"installed","ffmpeg":"downloading","bytes":75}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { model.enginePackages.first(where: { $0.id == "ffmpeg" })?.bytesReceived == 75 }
+        await model.cancelEngineInstall("ffmpeg")
+        try await wait { model.enginePackages.first(where: { $0.id == "ffmpeg" })?.state == "cancelled" }
+        await model.shutDown()
+    }
+
+    @MainActor
+    func testCancelRestartsPollingAfterPackageStatusFailure() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        await model.installEngine("ffmpeg")
+        try Data().write(to: fixture.root.appendingPathComponent("fail-status"))
+        try await wait { model.engineInstallError != nil }
+        XCTAssertEqual(model.engineInstallError, L("변환 엔진 연결이 끊겼습니다. 실행 중인 작업을 다시 확인하세요."))
+        await model.cancelEngineInstall("ffmpeg")
+        try await wait { model.enginePackages.first(where: { $0.id == "ffmpeg" })?.state == "cancelled" }
+        await model.shutDown()
+    }
+
+    @MainActor
+    func testCancelRefreshesAvailabilityWhenInstallationAlreadyCommitted() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        await model.installEngine("pandoc")
+        try Data().write(to: fixture.root.appendingPathComponent("finish-on-cancel"))
+        await model.cancelEngineInstall("pandoc")
+        XCTAssertEqual(model.enginePackages.first(where: { $0.id == "pandoc" })?.state, "installed")
+        XCTAssertEqual(model.catalog?.engines.first?.available, true)
+        await model.shutDown()
+    }
+
+    @MainActor
+    func testLibraryRefreshReadsPackagesBeforeAvailabilityAndPollsDespiteInvalidSelection() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        let next = fixture.root.appendingPathComponent("next.json")
+        try #"{"pandoc":"installed","ffmpeg":"idle","bytes":100}"#.write(to: next, atomically: true, encoding: .utf8)
+        await model.refreshLibrary()
+        XCTAssertEqual(model.enginePackages.first(where: { $0.id == "pandoc" })?.state, "installed")
+        XCTAssertEqual(model.catalog?.engines.first?.available, true)
+        model.selectFiles((0...10_000).map { URL(fileURLWithPath: "/tmp/selection-\($0).rst") })
+        try #"{"pandoc":"installed","ffmpeg":"downloading","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        await model.refreshLibrary()
+        XCTAssertEqual(model.statusMessage, L("한 번에 선택한 파일이 너무 많습니다."))
+        XCTAssertEqual(model.enginePackages.first(where: { $0.id == "ffmpeg" })?.state, "downloading")
+        XCTAssertEqual(model.catalog?.engines.first?.available, true)
+        try #"{"pandoc":"installed","ffmpeg":"installed","bytes":100}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { model.enginePackages.allSatisfy { $0.state == "installed" } && model.catalog?.engines.allSatisfy(\.available) == true }
+        await model.shutDown()
+    }
+
+    @MainActor
     func testManagedEngineInstallRefreshesAvailabilityAndCanCancelAndRetry() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -343,6 +415,57 @@ final class AppModelTests: XCTestCase {
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         while !predicate() && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertTrue(predicate())
+    }
+
+    private func makeInstallFixture() throws -> (root: URL, executable: URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("filetox-install-model-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let executable = root.appendingPathComponent("host.py")
+        let script = #"""
+        #!/usr/bin/env python3
+        import json,sys,os
+        os.setpgid(0,0)
+        root=os.path.dirname(__file__)
+        states={"pandoc":"idle","ffmpeg":"idle"}
+        received=0
+        def send(value):print(json.dumps(value),flush=True)
+        def response(r,result):send({"v":1,"id":r["id"],"result":result})
+        def error(r,message):send({"v":1,"id":r["id"],"error":{"code":"fixture","message":message}})
+        def package(key):return {"id":key,"version":"1","downloadSize":100,"installedSize":200,"canDownload":True,"state":states[key],"bytesReceived":received}
+        send({"v":1,"event":"hello","data":{"protocol":1,"hostVersion":"test","fileeCommit":"21fdd05ef7181b032ed83ec895cc9bbc4b198985","rid":"osx-arm64","dataDir":"/tmp/data"}})
+        for line in sys.stdin:
+            r=json.loads(line);m=r["method"]
+            if m=="catalog.get":response(r,{"formats":[],"engines":[{"id":k,"displayName":k,"available":s=="installed"} for k,s in states.items()]})
+            elif m=="library.get":response(r,{"revision":1,"settings":{},"presets":[],"profiles":[]})
+            elif m=="history.get":response(r,{"entries":[]})
+            elif m=="engine.packages":
+                failure=os.path.join(root,"fail-status")
+                if os.path.exists(failure):
+                    os.unlink(failure)
+                    error(r,"변환 엔진 연결이 끊겼습니다. 실행 중인 작업을 다시 확인하세요.")
+                    continue
+                next=os.path.join(root,"next.json")
+                if os.path.exists(next):
+                    with open(next) as f:updates=json.load(f)
+                    os.unlink(next)
+                    received=updates.pop("bytes")
+                    states.update(updates)
+                states={k:"cancelled" if s=="cancelling" else s for k,s in states.items()}
+                response(r,{"packages":[package(k) for k in states]})
+            elif m in ("engine.install","engine.install.cancel"):
+                key=r["params"]["packageId"]
+                states[key]="downloading" if m=="engine.install" else "cancelling"
+                if m=="engine.install.cancel" and os.path.exists(os.path.join(root,"finish-on-cancel")):
+                    states[key]="installed"
+                response(r,package(key))
+            elif m=="selection.resolve":
+                assert len(r["params"]["paths"])>10000
+                error(r,"한 번에 선택한 파일이 너무 많습니다.")
+            else:response(r,{})
+        """#
+        try script.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        return (root, executable)
     }
 
     private func makeFixture() throws -> (root: URL, executable: URL) {

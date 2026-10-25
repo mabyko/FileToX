@@ -398,10 +398,10 @@ final class AppModel {
     func refreshLibrary() async {
         do {
             library = try await host.library()
-            try await refreshEngineAvailability()
             enginePackages = try await host.enginePackages()
             engineInstallError = nil
-            pollEngineInstalls(restart: true)
+            defer { pollEngineInstalls(restart: true) }
+            try await refreshEngineAvailability()
         }
         catch { report(error) }
     }
@@ -414,7 +414,7 @@ final class AppModel {
             let status = try await host.installEngine(packageId: id)
             enginePackages.removeAll { $0.id == id }; enginePackages.append(status)
             pollEngineInstalls(restart: true)
-        } catch { engineInstallError = error.localizedDescription }
+        } catch { engineInstallError = L(error.localizedDescription) }
     }
 
     func cancelEngineInstall(_ id: String) async {
@@ -423,7 +423,9 @@ final class AppModel {
         do {
             let status = try await host.cancelEngineInstall(packageId: id)
             enginePackages.removeAll { $0.id == id }; enginePackages.append(status)
-        } catch { engineInstallError = error.localizedDescription }
+            pollEngineInstalls()
+            if status.state == "installed" { try await refreshEngineAvailability() }
+        } catch { engineInstallError = L(error.localizedDescription) }
     }
 
     private func pollEngineInstalls(restart: Bool = false) {
@@ -441,11 +443,14 @@ final class AppModel {
                     enginePackages = refreshed
                     if enginePackages.contains(where: { package in
                         package.state == "installed" && previous.first(where: { $0.id == package.id })?.state != "installed"
-                    }) { try await refreshEngineAvailability() }
+                    }) {
+                        do { try await refreshEngineAvailability() }
+                        catch { engineInstallError = L(error.localizedDescription) }
+                    }
                     if !enginePackages.contains(where: \.isActive) { return }
                 }
             } catch is CancellationError { }
-            catch { if !Task.isCancelled { self?.engineInstallError = error.localizedDescription } }
+            catch { if !Task.isCancelled { self?.engineInstallError = L(error.localizedDescription) } }
         }
     }
 
