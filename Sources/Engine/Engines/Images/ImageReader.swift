@@ -56,9 +56,10 @@ enum ImageReader {
         let jpeg = format == "jpg" ? try Data(contentsOf: URL(fileURLWithPath: path)) : nil
         let sampling = jpeg.flatMap(JpegEncoder.samplingFactors)
         let markers = jpeg.map(JpegEncoder.preservedMarkers)
-        // Photoshop's IPTC as the file stores it, for PSD/PSB targets (ImageIO reads none from PNG text).
-        let iptc = try ["jpg", "png", "psd", "psb"].contains(format)
-            ? PsdCodec.iptcResources(jpeg ?? Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped), format: format) : Data()
+        // Photoshop's IPTC and other metadata resources as the file stores them, for PSD/PSB targets (ImageIO reads none
+        // from PNG text).
+        let photoshop = try ["jpg", "png", "psd", "psb"].contains(format)
+            ? PsdCodec.metadataResources(jpeg ?? Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped), format: format) : Data()
         // Embedded profiles, matched below with the space ImageIO decoded each frame in: its colour space alone can't tell
         // a source profile from the default it assigns.
         var profiles = jpeg.map { (profiles: [JpegEncoder.embeddedProfile($0)].compactMap { $0 }, declared: false) }
@@ -74,7 +75,7 @@ enum ImageReader {
             // With transparency, ImageMagick unblends the white matte Photoshop puts under the composite.
             if var composite = try PsdCodec.layerComposite(path) ?? PsdCodec.transparentComposite(path) {
                 if let metadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil) { composite.properties[ImageFrame.metadataKey] = metadata }
-                if !iptc.isEmpty { composite.properties[ImageFrame.iptcKey] = iptc }
+                if !photoshop.isEmpty { composite.properties[ImageFrame.photoshopKey] = photoshop }
                 return [composite]
             }
         }
@@ -103,7 +104,7 @@ enum ImageReader {
             }
             if let sampling { frame.properties[ImageFrame.jpegSamplingKey] = sampling }
             if let markers, !markers.isEmpty { frame.properties[ImageFrame.jpegMarkersKey] = markers }
-            if !iptc.isEmpty { frame.properties[ImageFrame.iptcKey] = iptc }
+            if !photoshop.isEmpty { frame.properties[ImageFrame.photoshopKey] = photoshop }
             if let orientation = properties[kCGImagePropertyOrientation] as? NSNumber, orientation.intValue != 1 {
                 frame.properties[kCGImagePropertyOrientation] = orientation.intValue
             }

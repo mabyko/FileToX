@@ -60,11 +60,13 @@ enum PsdCodec {
         if let dpi = frame.dpi, dpi.x > 0 {
             resources.resource(0x03ED, resolutionInfo(dpi))
         }
-        // The source's IPTC blocks, between resolution and profile as ImageMagick orders its resources.
-        if let iptc = frame.properties[ImageFrame.iptcKey] as? Data { resources.bytes([UInt8](iptc)) }
-        if let icc = CodecPixels.colorProfile(frame, colorModel: cmyk ? .cmyk : gray ? .monochrome : .rgb) {
-            resources.resource(0x040F, [UInt8](icc))
-        }
+        // The source's metadata blocks, between resolution and profile as ImageMagick orders its resources.
+        if let blocks = frame.properties[ImageFrame.photoshopKey] as? Data { resources.bytes([UInt8](blocks)) }
+        let metadata = CodecPixels.metadataBlobs(frame, colorModel: cmyk ? .cmyk : gray ? .monochrome : .rgb)
+        if let icc = metadata.icc { resources.resource(0x040F, [UInt8](icc)) }
+        // EXIF and XMP as Photoshop stores them: TIFF-structured "EXIF data 1" and the XMP packet.
+        if let exif = metadata.exif { resources.resource(0x0422, [UInt8](exif)) }
+        if let xmp = metadata.xmp { resources.resource(0x0424, [UInt8](xmp)) }
         out.u32(resources.data.count)
         out.bytes(resources.data)
 
@@ -111,27 +113,32 @@ enum PsdCodec {
         return length
     }
 
-    // ───────────────────────── IPTC ─────────────────────────
+    // ───────────────────────── Metadata resources ─────────────────────────
 
-    /// The IPTC resource blocks of a JPEG, PNG or PSD/PSB file for PSD/PSB targets: the IPTC-NAA record (0x0404) and
-    /// its digest (0x0425), byte for byte in file order. The writer makes its own resolution, profile and version info;
-    /// other Photoshop resources are not carried. JPEG: the Photoshop APP13 segments, joined (a block may continue in the
-    /// next one). PNG: ImageMagick's hex "Raw profile type 8bim", or its bare IIM "Raw profile type iptc" when no 8bim
-    /// profile holds an IPTC record. PSD/PSB: the image resources.
-    static func iptcResources(_ file: Data, format: String) -> Data {
+    /// Resources that only describe the document, true of any picture written from it: caption (0x03F0), IPTC-NAA
+    /// record (0x0404), copyright flag (0x040A), URL (0x040B) and the IPTC digest (0x0425). The writer makes its own
+    /// resolution, profile, EXIF and XMP; the rest describe the source's layers, channels, paths, slices, guides,
+    /// thumbnails, colour mode or print setup, which the flattened, possibly resized or converted copy doesn't have.
+    private static let metadataIds: Set<Int> = [0x03F0, 0x0404, 0x040A, 0x040B, 0x0425]
+
+    /// The metadata resource blocks (`metadataIds`) of a JPEG, PNG or PSD/PSB file for PSD/PSB targets, byte for byte
+    /// in file order. JPEG: the Photoshop APP13 segments, joined (a block may continue in the next one). PNG:
+    /// ImageMagick's hex "Raw profile type 8bim", or its bare IIM "Raw profile type iptc" when no 8bim profile holds an
+    /// IPTC record. PSD/PSB: the image resources.
+    static func metadataResources(_ file: Data, format: String) -> Data {
         var blocks: [(id: Int, bytes: [UInt8])] = []
         switch format {
         case "jpg":
             let header = Data("Photoshop 3.0\0".utf8)
-            blocks = iptcBlocks(JpegEncoder.segments(file).filter { $0.0 == 0xED && $0.1.starts(with: header) }.flatMap { $0.1.dropFirst(header.count) })
+            blocks = metadataBlocks(JpegEncoder.segments(file).filter { $0.0 == 0xED && $0.1.starts(with: header) }.flatMap { $0.1.dropFirst(header.count) })
         case "png":
-            blocks = pngIptc(file)
+            blocks = pngMetadata(file)
         case "psd", "psb":
             func u32(_ at: Int) -> Int { file[at..<at + 4].reduce(0) { $0 << 8 | Int($1) } }
             guard file.count >= 34, file.starts(with: Array("8BPS".utf8)) else { return Data() }
             let resources = file.startIndex + 30 + u32(file.startIndex + 26)
             guard file.endIndex - resources >= 4, u32(resources) <= file.endIndex - resources - 4 else { return Data() }
-            blocks = iptcBlocks(Array(file[resources + 4..<resources + 4 + u32(resources)]))
+            blocks = metadataBlocks(Array(file[resources + 4..<resources + 4 + u32(resources)]))
         default:
             break
         }
@@ -141,9 +148,9 @@ enum PsdCodec {
     /// Signatures of Photoshop resource blocks; only 8BIM blocks are copied, the others are stepped over.
     private static let resourceSignatures: Set<[UInt8]> = Set(["8BIM", "MeSa", "PHUT", "AgHg", "DCSR"].map { Array($0.utf8) })
 
-    /// The complete IPTC blocks of a resource stream, each with its padding byte. Reading stops at the first block that
-    /// is malformed or runs past the stream.
-    private static func iptcBlocks(_ stream: [UInt8]) -> [(id: Int, bytes: [UInt8])] {
+    /// The complete metadata blocks of a resource stream, each with its padding byte. Reading stops at the first block
+    /// that is malformed or runs past the stream.
+    private static func metadataBlocks(_ stream: [UInt8]) -> [(id: Int, bytes: [UInt8])] {
         var blocks: [(id: Int, bytes: [UInt8])] = [], i = 0
         while stream.count - i >= 12, resourceSignatures.contains(Array(stream[i..<i + 4])) {
             let id = Int(stream[i + 4]) << 8 | Int(stream[i + 5])
@@ -151,7 +158,7 @@ enum PsdCodec {
             guard stream.count - data >= 4 else { break }
             let size = stream[data..<data + 4].reduce(0) { $0 << 8 | Int($1) }
             guard size <= stream.count - data - 4 else { break }
-            if stream[i..<i + 4].elementsEqual("8BIM".utf8), id == 0x0404 || id == 0x0425 {
+            if stream[i..<i + 4].elementsEqual("8BIM".utf8), metadataIds.contains(id) {
                 blocks.append((id, Array(stream[i..<data + 4 + size]) + (size % 2 == 1 ? [0] : [])))
             }
             i = data + 4 + size + size % 2
@@ -159,9 +166,9 @@ enum PsdCodec {
         return blocks
     }
 
-    /// IPTC blocks of a PNG's raw profile tEXt/zTXt/iTXt chunks with intact CRCs. Inflating shares one 16 MiB budget that
-    /// counts all output, also of streams that then fail; once it is spent no later chunk is inflated.
-    private static func pngIptc(_ file: Data) -> [(id: Int, bytes: [UInt8])] {
+    /// Metadata blocks of a PNG's raw profile tEXt/zTXt/iTXt chunks with intact CRCs. Inflating shares one 16 MiB budget
+    /// that counts all output, also of streams that then fail; once it is spent no later chunk is inflated.
+    private static func pngMetadata(_ file: Data) -> [(id: Int, bytes: [UInt8])] {
         guard file.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) else { return [] }
         var photoshop: [(id: Int, bytes: [UInt8])] = [], bare: [(id: Int, bytes: [UInt8])] = []
         var i = file.startIndex + 8, budget = 1 << 24
@@ -201,9 +208,9 @@ enum PsdCodec {
             }
             guard let profile = rawProfile(text) else { continue }
             if name == "8bim" {
-                photoshop += iptcBlocks(profile)
+                photoshop += metadataBlocks(profile)
             } else if profile.starts(with: Array("8BIM".utf8)) {
-                bare += iptcBlocks(profile)
+                bare += metadataBlocks(profile)
             } else if profile.first == 0x1C {
                 // ImageMagick's "iptc" profile is the bare IIM record.
                 var wrapped = BigEndianData()

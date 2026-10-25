@@ -179,11 +179,18 @@ final class ImageParityTests: XCTestCase {
         CGImageSourceCreateWithData(data as CFData, nil).flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) as? [CFString: Any] }?[kCGImagePropertyIPTCDictionary] as? NSDictionary
     }
 
+    /// The XMP packet the JPEG writer stores for `frame`: the payload of its "http://ns.adobe.com/xap/1.0/" APP1.
+    private func jpegXmp(_ frame: ImageFrame) throws -> [UInt8] {
+        let jpeg = try JpegEncoder.encode(try ImageEncoder.applyOptions(frame, ImageOptions(), targetFormat: "jpg"))
+        let header = Data("http://ns.adobe.com/xap/1.0/\0".utf8)
+        return Array(try XCTUnwrap(JpegEncoder.segments(jpeg).first { $0.0 == 0xE1 && $0.1.starts(with: header) }).1.dropFirst(header.count))
+    }
+
     func testJpegIptcResourcesReachPsdAndPsbExactlyBesideTheirOwnResolutionAndProfile() throws {
         let caption = "한글 캡션 · café"
         let record = iim([(1, 90, "\u{1B}%G"), (2, 5, "Object"), (2, 25, "alpha"), (2, 25, "beta"), (2, 25, "gamma"), (2, 120, caption)])
         let iptc = resource(0x0404, record), digest = resource(0x0425, Array(Insecure.MD5.hash(data: record)))
-        // The writer makes resolution, profile and version blocks itself; a copyright flag is not IPTC.
+        // The writer makes resolution, profile and version blocks itself; the copyright flag is document metadata.
         let stream = resource(0x03ED, [0, 72, 0, 0, 0, 1, 0, 1, 0, 72, 0, 0, 0, 1, 0, 1]) + iptc + resource(0x040F, Array("not a profile".utf8))
             + resource(0x0421, [0, 0, 0, 1, 0, 0, 0]) + digest + resource(0x040A, [1])
         let p3 = try XCTUnwrap(CGColorSpace(name: CGColorSpace.displayP3))
@@ -196,8 +203,9 @@ final class ImageParityTests: XCTestCase {
         for format in ["psd", "psb"] {
             let file = try photoshop(source.frame, format)
             let kept = resources(file)
-            XCTAssertEqual(kept.blocks.map(\.id), [0x03ED, 0x0404, 0x0425, 0x040F], format)
-            XCTAssertEqual(kept.blocks.map(\.bytes), [resolution, iptc, digest, resource(0x040F, [UInt8](icc))], format)
+            XCTAssertEqual(kept.blocks.map(\.id), [0x03ED, 0x0404, 0x0425, 0x040A, 0x040F, 0x0424], format)
+            XCTAssertEqual(kept.blocks.map(\.bytes), [resolution, iptc, digest, resource(0x040A, [1]), resource(0x040F, [UInt8](icc)),
+                                                       resource(0x0424, try jpegXmp(source.frame))], format)
             XCTAssertEqual(imageIOIptc(file), expectedIptc, format)
             let decoded = try read(file, format: format)
             XCTAssertEqual(decoded.image.colorSpace?.copyICCData() as Data?, icc)
@@ -228,13 +236,13 @@ final class ImageParityTests: XCTestCase {
             let source = try jpegSource(markers)
             for format in ["psd", "psb"] {
                 let file = try photoshop(source.frame, format)
-                XCTAssertEqual(resources(file).blocks.map(\.bytes), expected, format)
+                XCTAssertEqual(resources(file).blocks.filter { $0.id != 0x0424 }.map(\.bytes), expected, format)
                 XCTAssertEqual(ImagePixels.straight(try read(file, format: format).image).samples, ImagePixels.straight(source.frame.image).samples)
             }
         }
     }
 
-    func testMetadataFixtureGainsOnlyItsIptcBlockInPsdAndPsb() throws {
+    func testMetadataFixtureGainsOnlyItsIptcAndXmpInPsdAndPsb() throws {
         let frame = try read(Data(base64Encoded: Self.jpeg["metadata"]!)!)
         // SHA-256 of the 808c076 engine's PSD/PSB of this conversion (Image parity preset), written without IPTC.
         for (format, frozen) in [("psd", "6bf715fbb554669514c71998366ee8e05fdab116cfddeb6fe09f17f1a46cbd1c"),
@@ -245,9 +253,11 @@ final class ImageParityTests: XCTestCase {
             options.keepMetadata = false
             let stripped = try photoshop(frame, format, options)
             XCTAssertEqual(hash([UInt8](stripped)), frozen, format)
-            // ImageMagick's only resource for this source: the APP13's IPTC block, 30 bytes.
-            XCTAssertEqual(resources(file).blocks.map(\.bytes), [resource(0x0404, iim([(2, 5, "FileToX IPTC")]))], format)
-            XCTAssertEqual(file.count, stripped.count + 30)
+            // ImageMagick's only resource for this source, the APP13's IPTC block (30 bytes), and the XMP the JPEG writer
+            // stores for it too.
+            let xmp = resource(0x0424, try jpegXmp(frame))
+            XCTAssertEqual(resources(file).blocks.map(\.bytes), [resource(0x0404, iim([(2, 5, "FileToX IPTC")])), xmp], format)
+            XCTAssertEqual(file.count, stripped.count + 30 + xmp.count)
             XCTAssertEqual(file.prefix(30), stripped.prefix(30))
             XCTAssertEqual(resources(file).rest, resources(stripped).rest)
             XCTAssertEqual((imageIOIptc(file)?[kCGImagePropertyIPTCObjectName] as? String), "FileToX IPTC")
@@ -272,16 +282,18 @@ final class ImageParityTests: XCTestCase {
             let frame = try read(addingResources(built, iptc + resource(0x040C, [1, 2, 3, 4]) + digest), format: "psd")
             for format in ["psd", "psb"] {
                 let file = try photoshop(frame, format)
-                XCTAssertEqual(resources(file).blocks.map(\.bytes), [iptc, digest], "\(realComposite) \(format)")
+                let blocks = resources(file).blocks
+                XCTAssertEqual(blocks.filter { $0.id != 0x0424 }.map(\.bytes), [iptc, digest], "\(realComposite) \(format)")
                 let decoded = try read(file, format: format)
                 XCTAssertEqual(ImagePixels.straight(decoded.image).samples, ImagePixels.straight(frame.image).samples)
-                XCTAssertEqual(resources(try photoshop(decoded, "psb")).blocks.map(\.bytes), [iptc, digest])
+                // Read back, the XMP the copy gained is written the same again.
+                XCTAssertEqual(resources(try photoshop(decoded, "psb")).blocks.map(\.bytes), blocks.map(\.bytes))
             }
         }
         // A resource running past its section ends what is read of it; the earlier block still counts.
         let broken = GraphicsBuilders.layeredPsd(12, 8, composite: { _, _ in (9, 9, 9) }, layers: layers)
         let truncated = try read(addingResources(broken, iptc + Array(resource(0x0425, [UInt8](repeating: 3, count: 16)).prefix(14))), format: "psd")
-        XCTAssertEqual(resources(try photoshop(truncated, "psd")).blocks.map(\.bytes), [iptc])
+        XCTAssertEqual(resources(try photoshop(truncated, "psd")).blocks.filter { $0.id != 0x0424 }.map(\.bytes), [iptc])
         // A transparent composite (read here, not by ImageIO) keeps the IPTC as well.
         var transparent = ImageFrame(image: pattern(4))
         transparent.properties[ImageFrame.jpegMarkersKey] = Data(app13(iptc))
@@ -290,10 +302,11 @@ final class ImageParityTests: XCTestCase {
         let png = FilePath.combine(folder, "transparent.png")
         try ImageEncoder.save([transparent], to: png, format: "png")
         let layered = try photoshop(try read(try Data(contentsOf: URL(fileURLWithPath: png)), format: "png"), "psd")
-        XCTAssertEqual(resources(layered).blocks.map(\.bytes), [iptc])
+        // ImageIO's PNG also has eXIf, which comes along as EXIF.
+        XCTAssertEqual(resources(layered).blocks.filter { ![0x0422, 0x0424].contains($0.id) }.map(\.bytes), [iptc])
         let composite = try read(layered, format: "psd")
         XCTAssertTrue(ImagePixels.hasAlpha(composite.image))
-        XCTAssertEqual(resources(try photoshop(composite, "psb")).blocks.map(\.bytes), [iptc])
+        XCTAssertEqual(resources(try photoshop(composite, "psb")).blocks.filter { ![0x0422, 0x0424].contains($0.id) }.map(\.bytes), [iptc])
     }
 
     func testPngRawProfilesCarryIptcWithinOneInflationBudget() throws {
@@ -370,9 +383,99 @@ final class ImageParityTests: XCTestCase {
             let frame = try read(file, format: "png")
             for format in ["psd", "psb"] {
                 let output = try photoshop(frame, format)
-                XCTAssertEqual(resources(output).blocks.map(\.bytes), expected, "case \(index) \(format)")
+                // ImageIO's own PNGs carry eXIf (and XMP for IPTC): written as EXIF/XMP resources, checked elsewhere.
+                XCTAssertEqual(resources(output).blocks.filter { ![0x0422, 0x0424].contains($0.id) }.map(\.bytes), expected, "case \(index) \(format)")
                 XCTAssertEqual(ImagePixels.straight(try read(output, format: format).image).samples, ImagePixels.straight(frame.image).samples)
             }
+        }
+    }
+
+    /// Every property of an XMP packet as "path=value", read by ImageIO (without its own "iio" reading markers), so
+    /// packets compare regardless of order.
+    private func xmpValues(_ packet: [UInt8]) -> Set<String> {
+        guard let metadata = CGImageMetadataCreateFromXMPData(Data(packet) as CFData) else { return [] }
+        var values = Set<String>()
+        func add(_ tag: CGImageMetadataTag, _ path: String) {
+            let name = path + ((CGImageMetadataTagCopyPrefix(tag) as String?).map { $0 + ":" } ?? "") + ((CGImageMetadataTagCopyName(tag) as String?) ?? "")
+            if let items = CGImageMetadataTagCopyValue(tag) as? [CGImageMetadataTag] {
+                items.forEach { add($0, name + "/") }
+            } else {
+                values.insert(name + "=" + (CGImageMetadataTagCopyValue(tag).map { "\($0)" } ?? ""))
+            }
+        }
+        for tag in (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? [] where CGImageMetadataTagCopyPrefix(tag) as String? != "iio" {
+            add(tag, "")
+        }
+        return values
+    }
+
+    func testPsdAndPsbKeepExifXmpAndDocumentResourcesButHaveNoPlaceForComments() throws {
+        let caption = resource(0x03F0, [5] + Array("Notes".utf8)), iptc = resource(0x0404, iim([(2, 5, "Resources"), (2, 25, "kw")]))
+        let copyright = resource(0x040A, [1]), url = resource(0x040B, Array("https://example.com/a".utf8))
+        let digest = resource(0x0425, [UInt8](repeating: 9, count: 16))
+        // Version info, thumbnail, slices, guides, channel names and the slices' URL list describe the source document.
+        let structure = [resource(0x0421, [0, 0, 0, 1, 0]), resource(0x040C, [1, 2, 3]), resource(0x041A, [0, 0, 0, 6]),
+                         resource(0x0408, [0, 0, 0, 1]), resource(0x03EE, [5] + Array("Alpha".utf8)), resource(0x041E, [0, 0, 0, 0])]
+        let metadata = CGImageMetadataCreateMutable()
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFModel, "TestPhone" as CFString)
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFOrientation, 6 as CFNumber)
+        CGImageMetadataRegisterNamespaceForPrefix(metadata, "http://ns.example.com/ftx/1.0/" as CFString, "ftx" as CFString, nil)
+        XCTAssertTrue(CGImageMetadataSetValueWithPath(metadata, nil, "ftx:Custom" as CFString, "custom value" as CFString))
+        var original = ImageFrame(image: pattern(3, width: 31, height: 17))
+        original.properties[ImageFrame.metadataKey] = metadata
+        original.properties[kCGImagePropertyOrientation] = 6
+        original.properties[ImageFrame.jpegMarkersKey] = Data([0xFF, 0xFE, 0, 17] + Array("FileToX comment".utf8)
+            + app13(caption + structure[0] + iptc + copyright + structure.dropFirst().joined() + url + digest))
+        let source = try read(try JpegEncoder.encode(original))
+        XCTAssertEqual((source.properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue, 6)
+        for format in ["psd", "psb"] {
+            let file = try photoshop(source, format)
+            let kept = resources(file)
+            // No resolution or profile: the source has neither.
+            XCTAssertEqual(kept.blocks.map(\.id), [0x03F0, 0x0404, 0x040A, 0x040B, 0x0425, 0x0422, 0x0424], format)
+            guard kept.blocks.count == 7 else { continue }
+            XCTAssertEqual(kept.blocks.prefix(5).map(\.bytes), [caption, iptc, copyright, url, digest], format)
+            // EXIF data 1 is TIFF-structured, upright like the pixels, with their size.
+            let exif = Array(kept.blocks[5].bytes.dropFirst(12))
+            XCTAssertTrue(exif.starts(with: [0x4D, 0x4D, 0, 42]) || exif.starts(with: [0x49, 0x49, 42, 0]), format)
+            let entries = exifEntries(exif)
+            XCTAssertNotNil(entries[0x0110], format)
+            XCTAssertEqual(entries[0x0112]?.value, 1, format)
+            XCTAssertEqual(entries[0xA002]?.value, 17, format)
+            XCTAssertEqual(entries[0xA003]?.value, 31, format)
+            let xmp = String(decoding: kept.blocks[6].bytes.dropFirst(12), as: UTF8.self)
+            XCTAssertTrue(xmp.contains("custom value"), format)
+            XCTAssertFalse(xmp.contains("ns.apple.com/ImageIO"), format) // ImageIO's private reading markers stay out
+            // A JPEG comment is free text without a Photoshop resource; the caption resource is a different field.
+            XCTAssertNil(file.range(of: Data("FileToX comment".utf8)), format)
+            // ImageIO reads all of it back from the Photoshop file.
+            let decoded = try read(file, format: format)
+            let back = try XCTUnwrap(CGImageSourceCreateWithData(file as CFData, nil))
+            let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(back, 0, nil) as? [CFString: Any])
+            XCTAssertEqual((properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any])?[kCGImagePropertyTIFFModel] as? String, "TestPhone")
+            XCTAssertEqual((properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1, 1)
+            XCTAssertEqual(imageIOIptc(file)?[kCGImagePropertyIPTCObjectName] as? String, "Resources")
+            let readMetadata = try XCTUnwrap(decoded.properties[ImageFrame.metadataKey].map { $0 as! CGImageMetadata })
+            XCTAssertEqual(CGImageMetadataCopyStringValueWithPath(readMetadata, nil, "ftx:Custom" as CFString) as String?, "custom value")
+            XCTAssertEqual(ImagePixels.straight(decoded.image).samples, ImagePixels.straight(ImagePixels.oriented(source.image, 6)).samples)
+            // Written again from the Photoshop file, the same blocks (ImageIO may order the XMP properties differently);
+            // JPEG keeps its EXIF and XMP.
+            let again = resources(try photoshop(decoded, format == "psd" ? "psb" : "psd")).blocks
+            XCTAssertEqual(again.dropLast().map(\.bytes), kept.blocks.dropLast().map(\.bytes), format)
+            XCTAssertEqual(xmpValues(Array(again.last?.bytes.dropFirst(12) ?? [])), xmpValues(Array(kept.blocks[6].bytes.dropFirst(12))), format)
+            XCTAssertEqual(xmpValues(Array(kept.blocks[6].bytes.dropFirst(12))), ["ftx:Custom=custom value", "dc:subject/dc:[0]=kw",
+                                                                                   "dc:title/dc:[0]=Resources"], format)
+            let jpeg = try XCTUnwrap(CGImageSourceCreateWithData(try JpegEncoder.encode(try ImageEncoder.applyOptions(decoded, ImageOptions(), targetFormat: "jpg")) as CFData, nil))
+            XCTAssertEqual((CGImageSourceCopyPropertiesAtIndex(jpeg, 0, nil) as? [CFString: Any])?[kCGImagePropertyTIFFDictionary]
+                .flatMap { ($0 as? [CFString: Any])?[kCGImagePropertyTIFFModel] as? String }, "TestPhone")
+            XCTAssertEqual(CGImageSourceCopyMetadataAtIndex(jpeg, 0, nil).flatMap { CGImageMetadataCopyStringValueWithPath($0, nil, "ftx:Custom" as CFString) } as String?,
+                           "custom value")
+            // keepMetadata=false removes every metadata block; layers and composite stay byte for byte.
+            var options = ImageOptions()
+            options.keepMetadata = false
+            let stripped = resources(try photoshop(source, format, options))
+            XCTAssertTrue(stripped.blocks.isEmpty, format)
+            XCTAssertEqual(stripped.rest, kept.rest, format)
         }
     }
 
