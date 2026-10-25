@@ -22,15 +22,6 @@ struct WatchRulesEditor: View {
             }
             if let statusError { Text(statusError).foregroundStyle(.red).textSelection(.enabled) }
         }
-        ForEach(rules, id: \.identity) { rule in
-            WatchRuleEditor(model: model, rule: Binding(get: {
-                rules.first { $0.identity == rule.identity } ?? rule
-            }, set: { changed in
-                settings["watchFolders"] = .array(rules.map { $0.identity == changed.identity ? changed : $0 })
-            }), status: statuses.first { $0.identity == rule.identity }) {
-                settings["watchFolders"] = .array(rules.filter { $0.identity != rule.identity })
-            }
-        }
         .task {
             while !Task.isCancelled {
                 if model.isConnected {
@@ -38,6 +29,15 @@ struct WatchRulesEditor: View {
                     catch { statusError = error.localizedDescription }
                 } else { statuses = [] }
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            }
+        }
+        ForEach(rules, id: \.identity) { rule in
+            WatchRuleEditor(model: model, rule: Binding(get: {
+                rules.first { $0.identity == rule.identity } ?? rule
+            }, set: { changed in
+                settings["watchFolders"] = .array(rules.map { $0.identity == changed.identity ? changed : $0 })
+            }), status: statuses.first { $0.identity == rule.identity }) {
+                settings["watchFolders"] = .array(rules.filter { $0.identity != rule.identity })
             }
         }
     }

@@ -333,6 +333,10 @@ public actor EngineHost {
         struct Status: Decodable, Sendable { let rules: [JSONValue] }
         return try await request(Status.self, method: "watch.status").rules
     }
+    public func stopWatching() async throws {
+        guard process != nil else { return }
+        _ = try await request(JSONValue.self, method: "watch.stop")
+    }
     public func saveLibrary(baseRevision: Int, presets: [JSONValue], profiles: [JSONValue]) async throws -> HostLibrary {
         try await request(HostLibrary.self, method: "library.save", params: ["baseRevision": .number(Double(baseRevision)), "presets": .array(presets), "profiles": .array(profiles)])
     }
@@ -340,6 +344,7 @@ public actor EngineHost {
         try await request(HostLibrary.self, method: "settings.save", params: ["baseRevision": .number(Double(baseRevision)), "settings": settings])
     }
     public func shutdown() async {
+        if !shuttingDown { try? await stopWatching() }
         shuttingDown = true
         restartTask?.cancel(); restartTask = nil
         try? input?.close(); input = nil

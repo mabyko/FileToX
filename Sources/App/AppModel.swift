@@ -289,6 +289,8 @@ final class AppModel {
 
     func shutDown() async {
         isShuttingDown = true
+        do { try await host.stopWatching() }
+        catch { await host.shutdown(); return }
         while isStarting { try? await Task.sleep(for: .milliseconds(50)) }
         await cancelAll()
         while isConverting { try? await Task.sleep(for: .milliseconds(50)) }

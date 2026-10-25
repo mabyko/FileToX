@@ -4,6 +4,17 @@ import XCTest
 @testable import FileToXCore
 
 final class EngineHostTests: XCTestCase {
+    func testShutdownStopsWatchBeforeClosingHostInput() async throws {
+        let fixture = try makeFixture(mode: "normal")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
+        _ = try await host.start()
+        let rules = try await host.watchStatus()
+        XCTAssertTrue(rules.isEmpty)
+        await host.shutdown()
+        let methods = try String(contentsOf: fixture.root.appendingPathComponent("methods.log"), encoding: .utf8).split(separator: "\n")
+        XCTAssertEqual(methods, ["watch.status", "watch.stop", "EOF"])
+    }
     func testJSONDraftPreservesUnknownFieldsNullsAndArrayOrder() throws {
         let data = Data(#"{"dpi":null,"future":{"custom":true},"icoSizes":[256,32,16],"name":"Original"}"#.utf8)
         var draft = try JSONDecoder().decode(JSONValue.self, from: data)
@@ -144,6 +155,7 @@ final class EngineHostTests: XCTestCase {
         send({"v":1,"event":"hello","data":{"protocol":1,"hostVersion":"test","fileeCommit":"wrong" if mode=="version" else "21fdd05ef7181b032ed83ec895cc9bbc4b198985","rid":"osx-arm64","dataDir":"/tmp/data"}})
         for line in sys.stdin:
             request=json.loads(line)
+            with open(os.path.join(os.path.dirname(__file__),"methods.log"),"a") as f:f.write(request["method"]+"\\n")
             if mode=="malformed":
                 send({"v":1,"id":request["id"]})
                 continue
@@ -153,6 +165,7 @@ final class EngineHostTests: XCTestCase {
                 with open(\(resourceLiteral)) as f:formats=json.load(f)["formats"]
                 result={"formats":formats,"engines":[]}
             if method=="library.get":result={"revision":1,"settings":{},"presets":[],"profiles":[]}
+            if method=="watch.status":result={"rules":[]}
             if method=="selection.resolve":
                 result={"profileId":"mixed","formats":[],"unknown":request["params"]["paths"],"rejected":[],"targets":[],"slices":[{"presetId":"zip-all","displayName":"ZIP","targetFormat":"zip","available":True,"runnableCount":1,"canDownload":False}]}
             if method=="job.start":
@@ -166,6 +179,7 @@ final class EngineHostTests: XCTestCase {
                 sys.stderr.flush()
                 history={"jobId":"instant","finishedAt":"2026-10-11T16:05:10.1234567+09:00","presetId":"zip-all","presetName":"ZIP","state":"completed","sources":["/tmp/input.unknown"],"outputs":["/tmp/result.zip","/tmp/sidecar"],"failures":[],"preset":{"dpi":None}}
                 send({"v":1,"event":"job.finished","data":{"jobId":"instant","state":"completed","progress":1,"presetName":"ZIP","files":[{"source":"/tmp/input.unknown","state":"done","progress":1,"outputs":[{"path":"/tmp/result.zip","isDirectory":False},{"path":"/tmp/sidecar","isDirectory":True}]}],"historyEntry":history}})
+        with open(os.path.join(os.path.dirname(__file__),"methods.log"),"a") as f:f.write("EOF\\n")
         """
         try script.write(to: executable, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)

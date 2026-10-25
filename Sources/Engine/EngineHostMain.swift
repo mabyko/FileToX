@@ -48,6 +48,7 @@ public enum EngineHostMain {
         let stop = HostStopFlag()
         wire.broken = { stop.set() }
         wire.event("hello", ["protocol": 1, "hostVersion": EngineVersions.hostVersion, "fileeCommit": fileeCommit, "rid": EngineEnvironment.runtimeIdentifier, "dataDir": data])
+        host.startWatching()
         let reader = WireReader(input); reader.shouldStop = { stop.value }
         while !stop.value, let line = try reader.readLine() {
             switch line {

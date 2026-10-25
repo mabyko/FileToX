@@ -56,7 +56,7 @@ enum Validation {
         for path in [rule.folder, rule.outputFolder] where !path.isEmpty {
             if !FilePath.isFullyQualified(path) || path.contains("\0") { throw invalid("Watch folders must be absolute paths without null characters.") }
         }
-        if !rule.folder.isEmpty && WatchFolderMonitor.contains(WatchFolderMonitor.canonical(rule.resolvedOutputFolder), WatchFolderMonitor.canonical(rule.folder)) {
+        if !rule.folder.isEmpty && WatchFolderMonitor.contains(FilePath.trimEndingSeparator(FilePath.fullPath(rule.resolvedOutputFolder)), FilePath.trimEndingSeparator(FilePath.fullPath(rule.folder))) {
             throw invalid("A watch output folder cannot be the input folder or its parent.")
         }
         for pattern in rule.include {

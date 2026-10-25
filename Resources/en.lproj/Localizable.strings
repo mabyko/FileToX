@@ -340,7 +340,7 @@
 
 /* Watch folders */
 "watch.title" = "Watch folders";
-"watch.help" = "Convert new and changed files while FileToX is open. Files already present when a rule is enabled are left untouched. Save to apply changes; use Home to see progress or cancel jobs.";
+"watch.help" = "Convert new and changed files while FileToX is open. Save to apply changes, then wait for Watching before adding files. Files present during the initial scan are left untouched. Use Home to see progress or cancel jobs.";
 "watch.add" = "Add watch folder";
 "watch.enabled" = "Enable after saving";
 "watch.folder" = "Input folder";
@@ -357,3 +357,5 @@
 "watch.state.running" = "Converting";
 "watch.state.error" = "Needs attention";
 "watch.ruleHelp" = "Files must stay unchanged for at least 3 seconds. Hidden files, temporary downloads, symbolic links, outputs and originals subfolders are excluded. For large or slowly written files, move the completed file into the folder. Existing rename rules are preserved.";
+"watch.state.starting" = "Starting initial scan";
+"watch.state.stopped" = "Stopped for this session";
