@@ -678,12 +678,15 @@ extension VectorTests {
     func testVerticalAliasesInheritanceAndOrientationKeepTheirGeometry() throws {
         let reference = try verticalPaths("<text x='60' y='15' writing-mode='tb'>e&#x301; 한글</text>")
         XCTAssertFalse(reference.isEmpty)
-        for mode in ["tb-rl", "vertical-rl", "vertical-lr"] {
+        for mode in ["tb-rl", "vertical-rl", "vertical-lr", "TB", "VERTICAL-RL"] {
             XCTAssertEqual(reference, try verticalPaths("<g style='writing-mode:\(mode)'><text x='60' y='15'>e&#x301; 한글</text></g>"))
         }
         for (legacy, modern) in [("0", "upright"), ("90", "sideways")] {
             XCTAssertEqual(try verticalPaths("<text x='60' y='15' writing-mode='tb' glyph-orientation-vertical='\(legacy)'>AB한</text>"),
                            try verticalPaths("<text x='60' y='15' writing-mode='tb' style='text-orientation:\(modern)'>AB한</text>"))
+            let css = "writing-mode:vertical-rl;text-orientation:\(modern);direction:rtl"
+            XCTAssertEqual(try verticalPaths("<text x='60' y='80' style='\(css)'>AB한</text>"),
+                           try verticalPaths("<text x='60' y='80' style='\(css.uppercased())'>AB한</text>"))
         }
         let horizontal = "<text x='10' y='30'>A<tspan font-weight='bold'>B</tspan>C</text>"
         XCTAssertEqual(try verticalPaths(horizontal), try verticalPaths(horizontal.replacingOccurrences(of: "<tspan", with: "<tspan writing-mode='vertical-rl'")),

@@ -365,11 +365,11 @@ enum SvgNormalizer {
             return style
         }
 
-        var vertical: Bool { ["tb", "tb-rl", "vertical-rl", "vertical-lr"].contains(values["writing-mode"] ?? "") }
+        var vertical: Bool { ["tb", "tb-rl", "vertical-rl", "vertical-lr"].contains((values["writing-mode"] ?? "").lowercased()) }
 
         var verticalOrientation: String {
-            if let value = values["text-orientation"] { return value }
-            switch values["glyph-orientation-vertical"] {
+            if let value = values["text-orientation"] { return value.lowercased() }
+            switch values["glyph-orientation-vertical"]?.lowercased() {
             case "0", "0deg": return "upright"
             case "90", "90deg": return "sideways"
             default: return "mixed"
@@ -465,7 +465,7 @@ enum SvgNormalizer {
         private func collect(_ node: XElement, _ inherited: TextStyle, isRoot: Bool) {
             let style = isRoot ? inherited : inherited.adding(node)
             if !isRoot && node.attributeValue("display") == "none" { return }
-            // Mixed inline writing modes in vertical text retain the existing CoreSVG fallback.
+            // shortcut: mixed vertical/horizontal inlines stay with CoreSVG until orthogonal inline layout is implemented.
             if self.style.vertical && !style.vertical { unsupported = true }
             let size = style.fontSize
             // Positions of the element apply to its first characters.
@@ -537,7 +537,7 @@ enum SvgNormalizer {
                         run.y = penY
                     }
                     run.anchor = style.values["text-anchor"] ?? "start"
-                    if run.vertical && style.verticalOrientation != "upright" && style.values["direction"] == "rtl" {
+                    if run.vertical && style.verticalOrientation != "upright" && style.values["direction"]?.lowercased() == "rtl" {
                         if run.anchor == "start" { run.anchor = "end" } else if run.anchor == "end" { run.anchor = "start" }
                     }
                     runs.append(run)
@@ -634,7 +634,7 @@ enum SvgNormalizer {
         }
         guard vertical else { return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes)) }
         let attributed = NSMutableAttributedString(string: text, attributes: attributes)
-        if style.verticalOrientation != "upright" && style.values["direction"] == "rtl" {
+        if style.verticalOrientation != "upright" && style.values["direction"]?.lowercased() == "rtl" {
             attributed.addAttribute(.init(kCTWritingDirectionAttributeName as String), value: [NSWritingDirection.rightToLeft.rawValue], range: NSRange(location: 0, length: (text as NSString).length))
         }
         let orientation = style.verticalOrientation
