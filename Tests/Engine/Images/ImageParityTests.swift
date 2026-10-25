@@ -309,6 +309,33 @@ final class ImageParityTests: XCTestCase {
         XCTAssertEqual(resources(try photoshop(composite, "psb")).blocks.filter { ![0x0422, 0x0424].contains($0.id) }.map(\.bytes), [iptc])
     }
 
+    func testLayerCompositeKeepsTheDocumentProfileLikeTheMergedComposite() throws {
+        let layers: [GraphicsBuilders.PsdLayer] = [.init(left: 0, top: 0, width: 12, height: 8, r: 250, g: 20, b: 10),
+                                                   .init(left: 3, top: 2, width: 5, height: 4, r: 10, g: 200, b: 40)]
+        let composite: (Int, Int) -> (UInt8, UInt8, UInt8) = { x, y in (3..<8).contains(x) && (2..<6).contains(y) ? (10, 200, 40) : (250, 20, 10) }
+        for (gray, name) in [(false, CGColorSpace.displayP3), (true, CGColorSpace.genericGrayGamma2_2)] {
+            let icc = try XCTUnwrap(CGColorSpace(name: name)?.copyICCData() as Data?)
+            // Photoshop's merged composite, as ImageIO decodes it, is the oracle for the one composited from the layers.
+            let merged = try read(addingResources(GraphicsBuilders.layeredPsd(12, 8, composite: composite, layers: layers, gray: gray),
+                                                  resource(0x040F, [UInt8](icc))), format: "psd")
+            let layered = try read(addingResources(GraphicsBuilders.layeredPsd(12, 8, composite: composite, layers: layers, realComposite: false,
+                                                                               gray: gray), resource(0x040F, [UInt8](icc))), format: "psd")
+            XCTAssertEqual(merged.image.colorSpace?.copyICCData() as Data?, icc, name as String)
+            XCTAssertTrue(CFEqual(layered.image.colorSpace, merged.image.colorSpace), name as String)
+            let colors = gray ? 1 : 3
+            func color(_ image: CGImage) -> [UInt8] {
+                let (samples, channels, _) = ImagePixels.straight(image)
+                return (0..<image.width * image.height).flatMap { samples[$0 * channels..<$0 * channels + colors] }
+            }
+            XCTAssertEqual(color(layered.image), color(merged.image), name as String)
+            for frame in [merged, layered] {
+                XCTAssertEqual(frame.properties[ImageFrame.iccKey] as? Data, icc, name as String)
+                XCTAssertEqual(JpegEncoder.embeddedProfile(try JpegEncoder.encode(try ImageEncoder.applyOptions(frame, ImageOptions(), targetFormat: "jpg"))),
+                               icc, name as String)
+            }
+        }
+    }
+
     func testPngRawProfilesCarryIptcWithinOneInflationBudget() throws {
         let record = iim([(2, 5, "From PNG"), (2, 25, "k1"), (2, 25, "k2")])
         let iptc = resource(0x0404, record)

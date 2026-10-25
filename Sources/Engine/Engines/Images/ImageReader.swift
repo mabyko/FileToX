@@ -60,11 +60,16 @@ enum ImageReader {
         // from PNG text).
         let photoshop = try ["jpg", "png", "psd", "psb"].contains(format)
             ? PsdCodec.metadataResources(jpeg ?? Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped), format: format) : Data()
-        // Embedded profiles, matched below with the space ImageIO decoded each frame in: its colour space alone can't tell
-        // a source profile from the default it assigns.
-        var profiles = jpeg.map { (profiles: [JpegEncoder.embeddedProfile($0)].compactMap { $0 }, declared: false) }
+        // Embedded profiles of each picture (one list for all when the file has one), matched below with the space ImageIO
+        // decoded the picture in: its colour space alone can't tell a source profile from the default it assigns.
+        var profiles = jpeg.map { (profiles: [[JpegEncoder.embeddedProfile($0)].compactMap { $0 }], declared: false) }
         if format == "png" {
-            profiles = ImageEncoder.pngProfiles(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)).map { ($0.profiles, $0.declared) }
+            profiles = ImageEncoder.pngProfiles(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)).map { ([$0.profiles], $0.declared) }
+        } else if jpeg == nil {
+            profiles = EmbeddedProfiles.read(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped), format: format, count: count)
+        }
+        func sourceProfile(_ index: Int, _ decoded: CGColorSpace?) -> Data? {
+            profiles.flatMap { CodecPixels.sourceProfile($0.profiles[$0.profiles.count == 1 ? 0 : index], decoded: decoded, declared: $0.declared) }
         }
         let bitmapDpi = format == "bmp" ? bmpDpi(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)) : nil
         let animation = (fileProperties[kCGImagePropertyGIFDictionary] ?? fileProperties[kCGImagePropertyWebPDictionary]) as? [CFString: Any]
@@ -76,6 +81,7 @@ enum ImageReader {
             if var composite = try PsdCodec.layerComposite(path) ?? PsdCodec.transparentComposite(path) {
                 if let metadata = CGImageSourceCopyMetadataAtIndex(source, 0, nil) { composite.properties[ImageFrame.metadataKey] = metadata }
                 if !photoshop.isEmpty { composite.properties[ImageFrame.photoshopKey] = photoshop }
+                if let icc = sourceProfile(0, composite.image.colorSpace) { composite.properties[ImageFrame.iccKey] = icc }
                 return [composite]
             }
         }
@@ -94,9 +100,7 @@ enum ImageReader {
                 properties[kCGImagePropertyDPIHeight] = bitmapDpi.y
             }
             var frame = ImageFrame(image: image, delay: delay(properties), dpi: storedDpi(properties, format: format))
-            if let profiles, let icc = CodecPixels.sourceProfile(profiles.profiles, decoded: image.colorSpace, declared: profiles.declared) {
-                frame.properties[ImageFrame.iccKey] = icc
-            }
+            if let icc = sourceProfile(index, image.colorSpace) { frame.properties[ImageFrame.iccKey] = icc }
             if let resolution = storedResolution(properties, format: format) { frame.properties[ImageFrame.resolutionKey] = resolution }
             if format == "gif" { frame.properties[ImageFrame.icoPaletteKey] = true }
             if image.colorSpace?.model == .monochrome && !["jpg", "png", "bmp"].contains(format) {

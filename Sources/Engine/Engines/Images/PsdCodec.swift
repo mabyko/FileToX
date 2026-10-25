@@ -134,32 +134,47 @@ enum PsdCodec {
         case "png":
             blocks = pngMetadata(file)
         case "psd", "psb":
-            func u32(_ at: Int) -> Int { file[at..<at + 4].reduce(0) { $0 << 8 | Int($1) } }
-            guard file.count >= 34, file.starts(with: Array("8BPS".utf8)) else { return Data() }
-            let resources = file.startIndex + 30 + u32(file.startIndex + 26)
-            guard file.endIndex - resources >= 4, u32(resources) <= file.endIndex - resources - 4 else { return Data() }
-            blocks = metadataBlocks(Array(file[resources + 4..<resources + 4 + u32(resources)]))
+            blocks = resourceStream(file).map(metadataBlocks) ?? []
         default:
             break
         }
         return Data(blocks.flatMap(\.bytes))
     }
 
+    /// The valid ICC profiles (0x040F) of a PSD/PSB file's image resources; nil without a readable resource section.
+    static func profiles(_ file: Data) -> [Data]? {
+        resourceStream(file).map { stream in blocks(stream, ids: [0x040F]).compactMap { CodecPixels.validProfile(Data($0.bytes[$0.data])) } }
+    }
+
+    /// The image resource section of a PSD/PSB file.
+    private static func resourceStream(_ file: Data) -> [UInt8]? {
+        func u32(_ at: Int) -> Int { file[at..<at + 4].reduce(0) { $0 << 8 | Int($1) } }
+        guard file.count >= 34, file.starts(with: Array("8BPS".utf8)) else { return nil }
+        let resources = file.startIndex + 30 + u32(file.startIndex + 26)
+        guard file.endIndex - resources >= 4, u32(resources) <= file.endIndex - resources - 4 else { return nil }
+        return Array(file[resources + 4..<resources + 4 + u32(resources)])
+    }
+
     /// Signatures of Photoshop resource blocks; only 8BIM blocks are copied, the others are stepped over.
     private static let resourceSignatures: Set<[UInt8]> = Set(["8BIM", "MeSa", "PHUT", "AgHg", "DCSR"].map { Array($0.utf8) })
 
-    /// The complete metadata blocks of a resource stream, each with its padding byte. Reading stops at the first block
-    /// that is malformed or runs past the stream.
+    /// The complete metadata blocks of a resource stream, each with its padding byte.
     private static func metadataBlocks(_ stream: [UInt8]) -> [(id: Int, bytes: [UInt8])] {
-        var blocks: [(id: Int, bytes: [UInt8])] = [], i = 0
+        blocks(stream, ids: metadataIds).map { ($0.id, $0.bytes) }
+    }
+
+    /// The complete 8BIM blocks with `ids` of a resource stream, each with its padding byte, and where in it the block's
+    /// data lies. Reading stops at the first block that is malformed or runs past the stream.
+    private static func blocks(_ stream: [UInt8], ids: Set<Int>) -> [(id: Int, bytes: [UInt8], data: Range<Int>)] {
+        var blocks: [(id: Int, bytes: [UInt8], data: Range<Int>)] = [], i = 0
         while stream.count - i >= 12, resourceSignatures.contains(Array(stream[i..<i + 4])) {
             let id = Int(stream[i + 4]) << 8 | Int(stream[i + 5])
             let data = i + 6 + ((Int(stream[i + 6]) + 2) & ~1) // past the Pascal name, padded to an even length
             guard stream.count - data >= 4 else { break }
             let size = stream[data..<data + 4].reduce(0) { $0 << 8 | Int($1) }
             guard size <= stream.count - data - 4 else { break }
-            if stream[i..<i + 4].elementsEqual("8BIM".utf8), metadataIds.contains(id) {
-                blocks.append((id, Array(stream[i..<data + 4 + size]) + (size % 2 == 1 ? [0] : [])))
+            if stream[i..<i + 4].elementsEqual("8BIM".utf8), ids.contains(id) {
+                blocks.append((id, Array(stream[i..<data + 4 + size]) + (size % 2 == 1 ? [0] : []), data + 4 - i..<data + 4 + size - i))
             }
             i = data + 4 + size + size % 2
         }
@@ -410,6 +425,7 @@ enum PsdCodec {
         let resourcesEnd = reader.position + resourcesLength
         var hasMergedData = true
         var dpi: (x: Double, y: Double)?
+        var icc: Data?
         while reader.position + 12 <= resourcesEnd {
             guard reader.bytes(4) == Array("8BIM".utf8) else { break }
             let id = reader.u16()
@@ -417,7 +433,9 @@ enum PsdCodec {
             reader.skip(nameLength + (nameLength + 1) % 2)
             let size = reader.u32()
             let start = reader.position
-            if id == 0x0421, size >= 5 { // VersionInfo: version, hasRealMergedData
+            if id == 0x040F, size > 0, start + size <= reader.data.count {
+                icc = Data(reader.data[start..<start + size])
+            } else if id == 0x0421, size >= 5 { // VersionInfo: version, hasRealMergedData
                 reader.skip(4)
                 hasMergedData = reader.u8() != 0
             } else if id == 0x03ED, size >= 16 {
@@ -484,9 +502,14 @@ enum PsdCodec {
         }
         var samples = [UInt8](repeating: 0, count: width * height * 4)
         for i in 0..<canvas.count { samples[i] = UInt8((canvas[i] * 255).rounded()) }
-        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        // The samples keep the document's colour space, like the merged composite ImageIO reads.
+        let profile = icc.flatMap { CGColorSpace(iccData: $0 as CFData) }
+        let space = !gray && profile?.model == .rgb ? profile! : CGColorSpace(name: CGColorSpace.sRGB)!
         var frame = ImageFrame(image: ImagePixels.make(samples, width, height, components: 4, space: space, alpha: true, premultiplied: false))
-        if gray { frame.image = ImagePixels.grayscale(frame.image) }
+        if gray {
+            frame.image = ImagePixels.grayscale(frame.image)
+            if let profile, profile.model == .monochrome, let tagged = frame.image.copy(colorSpace: profile) { frame.image = tagged }
+        }
         frame.dpi = dpi
         return frame
     }

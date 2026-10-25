@@ -242,13 +242,14 @@ enum GraphicsBuilders {
         var left: Int, top: Int, width: Int, height: Int, r: UInt8, g: UInt8, b: UInt8
     }
 
-    /// An 8-bit RGB PSD with a composite (raw) and the given layers (raw channels, bottom-most first as Photoshop stores
-    /// them). With `realComposite` false the composite is white and the VersionInfo resource says it is not real
-    /// (Photoshop's "maximize compatibility" off).
+    /// An 8-bit RGB (or, with `gray`, grayscale: the red values) PSD with a composite (raw) and the given layers (raw
+    /// channels, bottom-most first as Photoshop stores them). With `realComposite` false the composite is white and the
+    /// VersionInfo resource says it is not real (Photoshop's "maximize compatibility" off).
     static func layeredPsd(_ width: Int, _ height: Int, composite: (Int, Int) -> (UInt8, UInt8, UInt8), layers: [PsdLayer],
-                           realComposite: Bool = true) -> [UInt8] {
+                           realComposite: Bool = true, gray: Bool = false) -> [UInt8] {
+        let channels = gray ? 1 : 3
         var w = BigEndianWriter()
-        w.bytes(Array("8BPS".utf8)); w.u16(1); w.bytes([0, 0, 0, 0, 0, 0]); w.u16(3); w.u32(height); w.u32(width); w.u16(8); w.u16(3)
+        w.bytes(Array("8BPS".utf8)); w.u16(1); w.bytes([0, 0, 0, 0, 0, 0]); w.u16(channels); w.u32(height); w.u32(width); w.u16(8); w.u16(gray ? 1 : 3)
         w.u32(0)
         var resources = BigEndianWriter()
         resources.bytes(Array("8BIM".utf8)); resources.u16(0x0421); resources.bytes([0, 0]); resources.u32(6)
@@ -258,13 +259,13 @@ enum GraphicsBuilders {
         info.u16(layers.count)
         for layer in layers {
             info.u32(layer.top); info.u32(layer.left); info.u32(layer.top + layer.height); info.u32(layer.left + layer.width)
-            info.u16(3)
-            for c in 0..<3 { info.u16(c); info.u32(2 + layer.width * layer.height) }
+            info.u16(channels)
+            for c in 0..<channels { info.u16(c); info.u32(2 + layer.width * layer.height) }
             info.bytes(Array("8BIMnorm".utf8)); info.bytes([255, 0, 0, 0])
             info.u32(12); info.u32(0); info.u32(0); info.bytes([3, 0x4C, 0x31, 0x20])
         }
         for layer in layers {
-            for value in [layer.r, layer.g, layer.b] {
+            for value in [layer.r, layer.g, layer.b].prefix(channels) {
                 info.u16(0)
                 info.bytes([UInt8](repeating: value, count: layer.width * layer.height))
             }
@@ -272,7 +273,7 @@ enum GraphicsBuilders {
         if info.data.count % 2 == 1 { info.byte(0) }
         w.u32(4 + info.data.count + 4); w.u32(info.data.count); w.bytes(info.data); w.u32(0)
         w.u16(0) // raw composite
-        for c in 0..<3 {
+        for c in 0..<channels {
             for y in 0..<height {
                 for x in 0..<width {
                     let rgb = realComposite ? composite(x, y) : (255, 255, 255)

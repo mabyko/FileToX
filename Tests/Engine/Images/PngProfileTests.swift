@@ -290,4 +290,174 @@ final class PngProfileTests: XCTestCase {
         XCTAssertEqual(linear.image.colorSpace?.name as String?, CGColorSpace.linearSRGB as String)
         XCTAssertNotNil(try writtenProfile(try write(linear)))
     }
+
+    // ───────── Other sources ─────────
+
+    /// A 6 × 4 RGB (or gray) pattern in `space`.
+    private func pattern(_ space: CGColorSpace) -> CGImage {
+        let channels = space.model == .monochrome ? 1 : 3
+        return ImagePixels.make((0..<6 * 4 * channels).map { UInt8($0 * 37 % 256) }, 6, 4, components: channels, space: space, alpha: false)
+    }
+
+    /// `images` as one file of uniform type `type`, written by ImageIO.
+    private func imageIO(_ images: [CGImage], _ type: String) throws -> Data {
+        let data = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(data, type as CFString, images.count, nil))
+        for image in images { CGImageDestinationAddImage(destination, image, nil) }
+        XCTAssertTrue(CGImageDestinationFinalize(destination), type)
+        return data as Data
+    }
+
+    /// Adobe RGB with another creator: a profile ImageIO knows by no name.
+    private func unnamedProfile() throws -> Data {
+        var bytes = try Data(contentsOf: URL(fileURLWithPath: "/System/Library/ColorSync/Profiles/AdobeRGB1998.icc"))
+        bytes.replaceSubrange(80..<84, with: Array("FTX ".utf8))
+        return bytes
+    }
+
+    /// sRGB with kinked tone curves no transfer function matches: libjxl stores it as ICC, not as enumerated colour.
+    private func tableProfile() throws -> Data {
+        var bytes = try profile(CGColorSpace.sRGB)
+        func u32(_ at: Int) -> Int { bytes[at..<at + 4].reduce(0) { $0 << 8 | Int($1) } }
+        var curves = Set<Int>()
+        for tag in (0..<u32(128)).map({ 132 + 12 * $0 }) where ["rTRC", "gTRC", "bTRC"].contains(String(decoding: bytes[tag..<tag + 4], as: UTF8.self)) {
+            curves.insert(u32(tag + 4))
+        }
+        for curve in curves where bytes[curve..<curve + 4].elementsEqual("curv".utf8) {
+            let count = u32(curve + 8)
+            for i in 0..<count {
+                let value = i < count / 2 ? i * 0x7FFF / (count / 2) : 0x7FFF + (i - count / 2) * 0x8000 / (count - count / 2 - 1)
+                bytes.replaceSubrange(curve + 12 + 2 * i..<curve + 14 + 2 * i, with: [UInt8(min(value, 0xFFFF) >> 8), UInt8(min(value, 0xFFFF) & 255)])
+            }
+        }
+        return bytes
+    }
+
+    /// A GIF with an ICC application extension ("ICCRGBG1" "012") after its global colour table.
+    private func gif(_ icc: Data) throws -> Data {
+        let file = try imageIO([pattern(try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)))], "com.compuserve.gif")
+        let table = file[10] & 0x80 != 0 ? 3 << (Int(file[10] & 7) + 1) : 0
+        var blocks = Data([0x21, 0xFF, 11]) + Data("ICCRGBG1012".utf8)
+        for start in stride(from: 0, to: icc.count, by: 255) {
+            let block = icc[start..<min(start + 255, icc.count)]
+            blocks += [UInt8(block.count)] + block
+        }
+        return file.prefix(13 + table) + blocks + [0] + file.dropFirst(13 + table)
+    }
+
+    func testOtherSourceFormatsRecordTheirExactEmbeddedProfile() throws {
+        let srgb = try profile(CGColorSpace.sRGB), unnamed = try unnamedProfile(), table = try tableProfile()
+        for icc in [srgb, unnamed, try profile(CGColorSpace.displayP3), table] {
+            let space = try XCTUnwrap(CGColorSpace(iccData: icc as CFData))
+            var tagged = ImageFrame(image: pattern(space))
+            tagged.properties[ImageFrame.iccKey] = icc
+            tagged.properties[ImageFrame.qualityKey] = 100
+            // ImageIO writes sRGB HEIF/AVIF as nclx code points, JPEG 2000 can't hold every profile for it, and libjxl
+            // stores a profile only when no enumerated colour expresses it.
+            var sources: [(String, Data)] = [("tiff", try imageIO([pattern(space)], "public.tiff")),
+                                              ("psd", try imageIO([pattern(space)], "com.adobe.photoshop-image")),
+                                              ("webp", try write(tagged, "webp")), ("gif", try gif(icc))]
+            if icc != srgb { sources += [("heic", try imageIO([pattern(space)], "public.heic")), ("avif", try imageIO([pattern(space)], "public.avif"))] }
+            if icc == srgb { sources.append(("jp2", try imageIO([pattern(space)], "public.jpeg-2000"))) }
+            if icc == table { sources.append(("jxl", try write(tagged, "jxl"))) }
+            for (format, source) in sources {
+                // The source really holds these bytes (GIF in sub-blocks, JPEG XL compressed); ImageIO decodes with them.
+                if !["gif", "jxl"].contains(format) { XCTAssertNotNil(source.range(of: icc), "\(format) source holds the profile") }
+                let frame = try read(source, format)
+                XCTAssertEqual(frame.properties[ImageFrame.iccKey] as? Data, icc, format)
+                guard format != "gif" else { continue } // palette samples become sRGB for the writers below
+                XCTAssertEqual(try writtenProfile(try write(frame)), icc, "\(format) → PNG")
+                XCTAssertEqual(JpegEncoder.embeddedProfile(try write(frame, "jpg")), icc, "\(format) → JPEG")
+                XCTAssertEqual(CodecPixels.colorProfile(frame), icc, "\(format): WebP, JPEG XL and PSD")
+            }
+        }
+    }
+
+    func testUntaggedOtherSourcesGetNoInventedProfile() throws {
+        let gray = pattern(CGColorSpaceCreateDeviceGray())
+        for (format, type) in [("tiff", "public.tiff"), ("tga", "com.truevision.tga-image"), ("psd", "com.adobe.photoshop-image"),
+                               ("jp2", "public.jpeg-2000")] {
+            let source = try imageIO([gray], type)
+            let frame = try read(source, format)
+            XCTAssertEqual(frame.image.colorSpace?.name as String?, CGColorSpace.genericGrayGamma2_2 as String, "ImageIO's default for untagged gray")
+            XCTAssertNil(source.range(of: try profile(CGColorSpace.genericGrayGamma2_2)), format)
+            XCTAssertEqual(frame.properties[ImageFrame.iccKey] as? Data, Data(), format)
+            let output = try write(frame)
+            XCTAssertNil(try writtenProfile(output), format)
+            XCTAssertEqual(try samples(output), ImagePixels.straight(frame.image).samples, format)
+            XCTAssertNil(JpegEncoder.embeddedProfile(try write(frame, "jpg")), format)
+        }
+    }
+
+    func testMultiPageTiffProfilesFollowTheirPages() throws {
+        let p3 = try profile(CGColorSpace.displayP3), unnamed = try unnamedProfile()
+        let source = try imageIO([pattern(try XCTUnwrap(CGColorSpace(iccData: p3 as CFData))), pattern(CGColorSpaceCreateDeviceRGB()),
+                                  pattern(try XCTUnwrap(CGColorSpace(iccData: unnamed as CFData)))], "public.tiff")
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let path = FilePath.combine(folder, "pages.tiff")
+        try source.write(to: URL(fileURLWithPath: path))
+        let frames = try ImageReader.read(path, format: "tiff", preset: Preset())
+        XCTAssertEqual(frames.map { $0.properties[ImageFrame.iccKey] as? Data }, [p3, Data(), unnamed])
+    }
+
+    func testDeclaredColourIsNotLabelledWithAProfile() throws {
+        // JPEG XL's enumerated sRGB and HEIF's nclx declare colour without a profile: the space stays inferred.
+        let untagged = ImageFrame(image: pattern(CGColorSpaceCreateDeviceRGB()))
+        for (format, source) in [("jxl", try write(untagged, "jxl")), ("heic", try imageIO([untagged.image], "public.heic"))] {
+            XCTAssertEqual(EmbeddedProfiles.read(source, format: format, count: 1)?.declared, true, format)
+            XCTAssertNil(try read(source, format).properties[ImageFrame.iccKey], format)
+        }
+    }
+
+    func testEmbeddedProfileReadersRejectMalformedOrOversizedFiles() throws {
+        let icc = try profile(CGColorSpace.displayP3)
+        let tiff = try imageIO([pattern(try XCTUnwrap(CGColorSpace(iccData: icc as CFData)))], "public.tiff")
+        XCTAssertEqual(EmbeddedProfiles.read(tiff, format: "tiff", count: 1)?.profiles, [[icc]])
+        XCTAssertNil(EmbeddedProfiles.read(tiff, format: "tiff", count: 2), "fewer pictures than ImageIO reads")
+        // A directory pointing back at itself, and a profile running past the file.
+        var looped = tiff, past = tiff
+        let little = tiff.first == 0x49
+        func number(_ data: Data, _ at: Int, _ size: Int) -> Int { (0..<size).reduce(0) { $0 << 8 | Int(data[at + (little ? size - 1 - $1 : $1)]) } }
+        func put(_ value: Int, _ data: inout Data, _ at: Int) {
+            data.replaceSubrange(at..<at + 4, with: (0..<4).map { UInt8(truncatingIfNeeded: value >> (8 * (little ? $0 : 3 - $0))) })
+        }
+        let ifd = number(tiff, 4, 4), entries = number(tiff, ifd, 2)
+        put(ifd, &looped, ifd + 2 + 12 * entries)
+        XCTAssertNil(EmbeddedProfiles.read(looped, format: "tiff", count: 1))
+        let entry = try XCTUnwrap((0..<entries).map { ifd + 2 + 12 * $0 }.first { number(tiff, $0, 2) == 34675 })
+        put(tiff.count, &past, entry + 4)
+        XCTAssertNil(EmbeddedProfiles.read(past, format: "tiff", count: 1))
+        // Profiles beyond the budget are not read at all.
+        var large = tiff
+        put(EmbeddedProfiles.budget + 1, &large, entry + 4)
+        large += Data(count: EmbeddedProfiles.budget + 1)
+        XCTAssertNil(EmbeddedProfiles.read(large, format: "tiff", count: 1))
+        // A GIF extension cut short; one after the first picture is not ImageIO's file profile.
+        let gifFile = try gif(icc)
+        XCTAssertEqual(EmbeddedProfiles.read(gifFile, format: "gif", count: 1)?.profiles, [[icc]])
+        XCTAssertNil(EmbeddedProfiles.read(gifFile.prefix(13 + (gifFile[10] & 0x80 != 0 ? 3 << (Int(gifFile[10] & 7) + 1) : 0) + 200), format: "gif", count: 1))
+        // Truncated HEIF and JPEG 2000 boxes, and a truncated JPEG XL, give no profile.
+        let heic = try imageIO([pattern(try XCTUnwrap(CGColorSpace(iccData: icc as CFData)))], "public.heic")
+        XCTAssertEqual(EmbeddedProfiles.read(heic, format: "heic", count: 1)?.profiles, [[icc]])
+        XCTAssertNotEqual(EmbeddedProfiles.read(heic.prefix(heic.range(of: icc)!.lowerBound + 100), format: "heic", count: 1)?.profiles, [[icc]])
+        let table = try tableProfile()
+        var tableFrame = ImageFrame(image: pattern(try XCTUnwrap(CGColorSpace(iccData: table as CFData))))
+        tableFrame.properties[ImageFrame.qualityKey] = 100
+        let jxl = try write(tableFrame, "jxl")
+        XCTAssertEqual(EmbeddedProfiles.read(jxl, format: "jxl", count: 1)?.profiles, [[table]])
+        XCTAssertNil(EmbeddedProfiles.read(jxl.prefix(40), format: "jxl", count: 1))
+        let jp2 = try imageIO([pattern(try XCTUnwrap(CGColorSpace(name: CGColorSpace.adobeRGB1998)))], "public.jpeg-2000")
+        XCTAssertEqual(EmbeddedProfiles.read(jp2.prefix(60), format: "jp2", count: 1)?.profiles, [[]])
+        // Structures ending right at the end of the file: a last directory without room for its next pointer, an empty
+        // association box, associations with no property container.
+        XCTAssertNil(EmbeddedProfiles.read(Data([0x4D, 0x4D, 0, 42, 0, 0, 0, 8, 0, 0]), format: "tiff", count: 1))
+        func box(_ type: String, _ payload: [UInt8]) -> [UInt8] {
+            [24, 16, 8, 0].map { UInt8((payload.count + 8) >> $0 & 255) } + Array(type.utf8) + payload
+        }
+        let pitm = box("pitm", [0, 0, 0, 0, 0, 1]), ftyp = box("ftyp", Array("heic".utf8) + [0, 0, 0, 0])
+        for properties in [box("ipma", []), box("ipco", []) + box("ipma", [0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0x81])] {
+            XCTAssertEqual(EmbeddedProfiles.read(Data(ftyp + box("meta", [0, 0, 0, 0] + pitm + box("iprp", properties))), format: "heic", count: 1)?.profiles, [[]])
+        }
+    }
 }

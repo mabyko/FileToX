@@ -39,9 +39,10 @@ struct ImageFrame {
     /// The source's Photoshop metadata resource blocks (IPTC, its digest, caption, copyright flag, URL) as stored
     /// (`PsdCodec.metadataResources`), written into PSD/PSB; removed by keepMetadata=false.
     static let photoshopKey = "FileToXPhotoshop" as CFString
-    /// Exact ICC bytes of the JPEG (APP2) or PNG (iCCP) profile ImageIO decoded the frame with; empty when it used its
-    /// untagged default. Absent for other sources, for colour ImageIO took from elsewhere and once the samples leave
-    /// that colour space: the profile is then inferred from the image's current space.
+    /// Exact ICC bytes of the embedded profile ImageIO decoded the frame with (JPEG APP2, PNG iCCP, `EmbeddedProfiles`
+    /// for TIFF, PSD/PSB, WebP, GIF, HEIF/AVIF, JPEG XL and JPEG 2000); empty when it used its untagged default. Absent
+    /// for other sources, for colour ImageIO took from elsewhere and once the samples leave that colour space: the
+    /// profile is then inferred from the image's current space.
     static let iccKey = "FileToXICC" as CFString
     /// Resolution as the file stored it, [x, y, unit] with unit 1 = per inch, 2 = per centimetre (ImageMagick's
     /// `resolution` and `units`, which the JPEG writer copies into JFIF). `dpi` holds the same in inches.
