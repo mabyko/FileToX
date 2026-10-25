@@ -143,7 +143,7 @@ final class JpegProfileTests: XCTestCase {
 
     func testNativeICCMarkerCountsAtMultipartBoundaries() throws {
         let pixels = [UInt8](repeating: 100, count: 2 * 2 * 3)
-        for length in [0, 65518, 65519, 65520, 131037, 131038, 131039] {
+        for length in [0, 65518, 65519, 65520, 131037, 131038, 131039, 65519 * 255 - 1, 65519 * 255] {
             let profile = Data(repeating: 0x61, count: length)
             var image = FTXJpegImage()
             (image.width, image.height, image.components, image.quality) = (2, 2, 3, 75)
@@ -170,6 +170,27 @@ final class JpegProfileTests: XCTestCase {
                 joined.append(marker.dropFirst(14))
             }
             XCTAssertEqual(joined, profile)
+        }
+    }
+
+    func testNativeJPEGRejectsICCAboveMarkerCapacityWithoutReadingIt() {
+        var byte: UInt8 = 100
+        for length in [65519 * 255 + 1, Int.max] {
+            var image = FTXJpegImage()
+            (image.width, image.height, image.components, image.quality) = (1, 1, 1, 75)
+            var output: UnsafeMutablePointer<UInt8>?
+            var count: UInt = 123
+            var message = [CChar](repeating: 0, count: 256)
+            let status = withUnsafePointer(to: &byte) { pointer in
+                image.pixels = pointer
+                (image.icc, image.icc_length) = (pointer, length)
+                return ftx_jpeg_encode(&image, &output, &count, &message)
+            }
+            defer { free(output) }
+            XCTAssertEqual(status, 1)
+            XCTAssertNil(output)
+            XCTAssertEqual(count, 0)
+            XCTAssertTrue(String(cString: message).contains("255 marker limit"))
         }
     }
 }

@@ -144,6 +144,10 @@ int ftx_jpeg_encode(const FTXJpegImage *image, unsigned char **data, unsigned lo
     error.pub.emit_message = emit_message;
     *data = NULL;
     *length = 0;
+    if (!image->skia && image->icc && image->icc_length > 65519u * 255u) {
+        snprintf(message, 200, "ICC profile exceeds JPEG's 255 marker limit.");
+        return 1;
+    }
     if (setjmp(error.recovery)) {
         (*info.err->format_message)((j_common_ptr)&info, message);
         jpeg_destroy_compress(&info);

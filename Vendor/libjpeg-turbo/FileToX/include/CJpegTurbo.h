@@ -29,6 +29,7 @@ typedef struct {
     const unsigned char *exif;
     size_t exif_length;
     const unsigned char *icc;
+    /// At most 65519 * 255 bytes; larger profiles fail encoding without producing output.
     size_t icc_length;
     const unsigned char *xmp;
     size_t xmp_length;
