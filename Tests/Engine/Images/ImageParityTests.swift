@@ -358,6 +358,85 @@ final class ImageParityTests: XCTestCase {
         }
     }
 
+    // ───────── EXIF ─────────
+
+    /// IFD0 and Exif IFD entries of a TIFF-structured EXIF blob, read without ImageIO: tag → (type, count, first value
+    /// for SHORT/LONG entries).
+    private func exifEntries(_ blob: [UInt8]) -> [Int: (type: Int, count: Int, value: Int)] {
+        let little = blob.starts(with: [0x49, 0x49])
+        func number(_ at: Int, _ size: Int) -> Int { (0..<size).reduce(0) { $0 << 8 | Int(blob[at + (little ? size - 1 - $1 : $1)]) } }
+        var result: [Int: (type: Int, count: Int, value: Int)] = [:]
+        func read(_ ifd: Int) {
+            for entry in (0..<number(ifd, 2)).map({ ifd + 2 + 12 * $0 }) {
+                let (tag, type, count) = (number(entry, 2), number(entry + 2, 2), number(entry + 4, 4))
+                result[tag] = (type, count, type == 3 ? number(entry + 8, 2) : number(entry + 8, 4))
+                if tag == 0x8769 { read(number(entry + 8, 4)) }
+            }
+        }
+        read(number(4, 4))
+        return result
+    }
+
+    /// The EXIF blob of a JPEG (APP1), WebP (EXIF chunk) or JPEG XL (Exif box) file.
+    private func exifBlob(_ file: [UInt8]) -> [UInt8]? {
+        func u32(_ at: Int, little: Bool = false) -> Int { (0..<4).reduce(0) { $0 << 8 | Int(file[at + (little ? 3 - $1 : $1)]) } }
+        var i = file.starts(with: [0xFF, 0xD8]) ? 2 : file.starts(with: Array("RIFF".utf8)) ? 12 : 0
+        while i + 8 <= file.count {
+            if file.starts(with: [0xFF, 0xD8]) {
+                guard file[i] == 0xFF, file[i + 1] != 0xDA else { return nil }
+                let length = Int(file[i + 2]) << 8 | Int(file[i + 3])
+                if file[i + 1] == 0xE1, Array(file[i + 4..<i + 10]) == Array("Exif\0\0".utf8) { return Array(file[i + 10..<i + 2 + length]) }
+                i += 2 + length
+            } else if file.starts(with: Array("RIFF".utf8)) {
+                let length = u32(i + 4, little: true)
+                if Array(file[i..<i + 4]) == Array("EXIF".utf8) { return Array(file[i + 8..<i + 8 + length]) }
+                i += 8 + length + length % 2
+            } else {
+                let length = u32(i)
+                guard length >= 8 else { return nil }
+                if Array(file[i + 4..<i + 8]) == Array("Exif".utf8) { return Array(file[i + 12..<i + length]) } // after the TIFF offset
+                i += length
+            }
+        }
+        return nil
+    }
+
+    func testExifRecordsThePicturesOwnSizeAndColourSpaceWithoutTheSourceFileStructure() throws {
+        let metadata = CGImageMetadataCreateMutable()
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFModel, "TestPhone" as CFString)
+        // A TIFF source's sample layout describes that file, not the JPEG, WebP or JPEG XL written from it.
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFPhotometricInterpretation, 2 as CFNumber)
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyExifDictionary, kCGImagePropertyExifPixelXDimension, 9 as CFNumber)
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        for (name, colorSpaceTag) in [(CGColorSpace.sRGB, 1 as Int?), (CGColorSpace.displayP3, nil)] {
+            let image = try XCTUnwrap(pattern(3, width: 300, height: 7).copy(colorSpace: try XCTUnwrap(CGColorSpace(name: name))))
+            for format in ["jpg", "webp", "jxl"] {
+                let path = FilePath.combine(folder, "exif.\(format)")
+                try ImageEncoder.save([ImageFrame(image: image, properties: [ImageFrame.metadataKey: metadata])], to: path, format: format)
+                let entries = exifEntries(try XCTUnwrap(exifBlob([UInt8](try Data(contentsOf: URL(fileURLWithPath: path)))), "\(format) \(name)"))
+                XCTAssertNotNil(entries[0x0110], "\(format) \(name)") // the camera model stays
+                XCTAssertNil(entries[0x0106], "\(format) \(name)")
+                XCTAssertEqual(entries[0xA002]?.value, 300, "\(format) \(name)")
+                XCTAssertEqual(entries[0xA003]?.value, 7, "\(format) \(name)")
+                XCTAssertEqual(entries[0xA001]?.value, colorSpaceTag, "\(format) \(name)")
+            }
+        }
+    }
+
+    func testExifPixelDimensionsArePatchedInPlace() {
+        // Little-endian SHORT dimensions become LONGs in place; a cut-short directory is left as it is.
+        let little: [UInt8] = [0x49, 0x49, 42, 0, 8, 0, 0, 0, 1, 0, 0x69, 0x87, 4, 0, 1, 0, 0, 0, 26, 0, 0, 0, 0, 0, 0, 0,
+                               2, 0, 0x02, 0xA0, 3, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0x03, 0xA0, 3, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]
+        let patched = exifEntries([UInt8](CodecPixels.withPixelDimensions(Data(little), 70_000, 5)))
+        XCTAssertEqual(patched[0xA002]?.type, 4)
+        XCTAssertEqual(patched[0xA002]?.value, 70_000)
+        XCTAssertEqual(patched[0xA003]?.value, 5)
+        for broken in [Array(little.prefix(30)), Array(little.prefix(7)), [0x4D, 0x49] + little.dropFirst(2)] {
+            XCTAssertEqual([UInt8](CodecPixels.withPixelDimensions(Data(broken), 70_000, 5)), broken)
+        }
+    }
+
     private func pattern(_ channels: Int, width: Int = 71, height: Int = 71) -> CGImage {
         var values: [UInt8] = []
         for y in 0..<height { for x in 0..<width { for c in 0..<channels {

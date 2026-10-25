@@ -279,21 +279,24 @@ enum CodecPixels {
             return (icc, nil, nil)
         }
         let metadata = value as! CGImageMetadata
-        return (icc, exif(metadata), xmp(metadata))
+        return (icc, exif(metadata, frame.image), xmp(metadata))
     }
 
     private static let exifNamespaces: Set<String> = [kCGImageMetadataNamespaceExif as String, kCGImageMetadataNamespaceExifAux as String,
                                                       kCGImageMetadataNamespaceExifEX as String, kCGImageMetadataNamespaceTIFF as String]
 
-    /// EXIF of the metadata as ImageIO serializes it: the APP1 payload of a one-pixel JPEG, without "Exif\0\0".
-    private static func exif(_ metadata: CGImageMetadata) -> Data? {
+    /// EXIF of the metadata as ImageIO serializes it for `image`: the APP1 payload of a one-pixel JPEG, without
+    /// "Exif\0\0", and without the source's file structure.
+    private static func exif(_ metadata: CGImageMetadata, _ image: CGImage) -> Data? {
         // Metadata without EXIF/TIFF tags (a PNG's, for one) has no EXIF profile in ImageMagick; ImageIO would still write one.
         let tags = (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? []
         guard tags.contains(where: { (CGImageMetadataTagCopyNamespace($0) as String?).map(exifNamespaces.contains) == true }) else { return nil }
-        let pixel = ImagePixels.make([0, 0, 0], 1, 1, components: 3, space: CGColorSpace(name: CGColorSpace.sRGB)!, alpha: false)
+        // ImageIO's ColorSpace tag follows the pixel's space: sRGB (1) only for sRGB pictures.
+        let space = image.colorSpace?.model == .rgb ? image.colorSpace! : CGColorSpace(name: CGColorSpace.sRGB)!
+        let pixel = ImagePixels.make([0, 0, 0], 1, 1, components: 3, space: space, alpha: false)
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImageAndMetadata(destination, pixel, metadata, nil)
+        CGImageDestinationAddImageAndMetadata(destination, pixel, ImageEncoder.encoderMetadata(metadata, nil), nil)
         guard CGImageDestinationFinalize(destination) else { return nil }
         let bytes = [UInt8](data as Data)
         var i = 2
@@ -301,11 +304,35 @@ enum CodecPixels {
             let marker = bytes[i + 1], length = Int(bytes[i + 2]) << 8 | Int(bytes[i + 3])
             if marker == 0xDA { break }
             if marker == 0xE1, length > 8, i + 2 + length <= bytes.count, Array(bytes[i + 4..<i + 10]) == [0x45, 0x78, 0x69, 0x66, 0, 0] {
-                return Data(bytes[i + 10..<i + 2 + length])
+                return withPixelDimensions(Data(bytes[i + 10..<i + 2 + length]), image.width, image.height)
             }
             i += 2 + length
         }
         return nil
+    }
+
+    /// `exif` with the PixelXDimension and PixelYDimension of its Exif IFD set to `width` × `height` as LONGs: ImageIO
+    /// records the size of the picture it serialized, here one pixel. Any other structure is returned unchanged.
+    static func withPixelDimensions(_ exif: Data, _ width: Int, _ height: Int) -> Data {
+        var bytes = [UInt8](exif)
+        guard bytes.count >= 8, bytes[0] == bytes[1], bytes[0] == 0x49 || bytes[0] == 0x4D else { return exif }
+        let little = bytes[0] == 0x49
+        func number(_ at: Int, _ size: Int) -> Int {
+            (0..<size).reduce(0) { $0 << 8 | Int(bytes[at + (little ? size - 1 - $1 : $1)]) }
+        }
+        func field(_ value: Int, _ size: Int) -> [UInt8] {
+            (0..<size).map { UInt8(truncatingIfNeeded: value >> (8 * (little ? $0 : size - 1 - $0))) }
+        }
+        func entries(_ ifd: Int) -> [Int] {
+            guard ifd >= 8, ifd <= bytes.count - 2, number(ifd, 2) <= (bytes.count - ifd - 2) / 12 else { return [] }
+            return (0..<number(ifd, 2)).map { ifd + 2 + 12 * $0 }
+        }
+        guard let pointer = entries(number(4, 4)).first(where: { number($0, 2) == 0x8769 }) else { return exif }
+        for entry in entries(number(pointer + 8, 4)) where [0xA002, 0xA003].contains(number(entry, 2)) {
+            // Type LONG, count 1, the value in the entry itself.
+            bytes.replaceSubrange(entry + 2..<entry + 12, with: field(4, 2) + field(1, 4) + field(number(entry, 2) == 0xA002 ? width : height, 4))
+        }
+        return Data(bytes)
     }
 
     private static func xmp(_ metadata: CGImageMetadata) -> Data? {

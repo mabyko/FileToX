@@ -464,7 +464,7 @@ enum ImageEncoder {
 
     /// The frame's metadata without the source's file structure (compression, sample layout, tiles), which would
     /// override the encoder's, and with the frame's resolution.
-    private static func encoderMetadata(_ metadata: CGImageMetadata, _ dpi: (x: Double, y: Double)?) -> CGImageMetadata {
+    static func encoderMetadata(_ metadata: CGImageMetadata, _ dpi: (x: Double, y: Double)?) -> CGImageMetadata {
         guard let copy = CGImageMetadataCreateMutableCopy(metadata) else { return metadata }
         for tag in ["Compression", "PhotometricInterpretation", "BitsPerSample", "SamplesPerPixel", "PlanarConfiguration", "TileWidth",
                     "TileLength", "ImageWidth", "ImageLength"] {
