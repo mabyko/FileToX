@@ -59,8 +59,11 @@ enum ImageReader {
         let pngText = format == "png" ? PsdCodec.pngText(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped),
                                                          keywords: PsdCodec.rawProfileKeywords.union(["Comment"])) : []
         // Photoshop's IPTC and other metadata resources as the file stores them (ImageIO reads none from PNG text).
-        let photoshop = try format == "png" ? PsdCodec.rawProfileResources(pngText) : ["jpg", "tiff", "psd", "psb"].contains(format)
+        let photoshop = try format == "png" ? PsdCodec.rawProfileResources(pngText) : ["jpg", "psd", "psb"].contains(format)
             ? PsdCodec.metadataResources(jpeg ?? Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped), format: format) : Data()
+        // A TIFF's belong to each of its pictures, matched with ImageIO's by IFD order like their profiles.
+        let pages = format == "tiff"
+            ? PsdCodec.tiffMetadataResources(try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped), pages: count) : nil
         // A PNG's comments become JPEG comment segments, its Photoshop blocks following, as a JPEG source keeps them.
         let comments = pngText.filter { $0.keyword == "Comment" }.map(\.text)
         let markers = jpeg.map(JpegEncoder.preservedMarkers)
@@ -113,7 +116,7 @@ enum ImageReader {
             }
             if let sampling { frame.properties[ImageFrame.jpegSamplingKey] = sampling }
             if let markers, !markers.isEmpty { frame.properties[ImageFrame.jpegMarkersKey] = markers }
-            if !photoshop.isEmpty { frame.properties[ImageFrame.photoshopKey] = photoshop }
+            if case let blocks = pages?[index] ?? photoshop, !blocks.isEmpty { frame.properties[ImageFrame.photoshopKey] = blocks }
             if let orientation = properties[kCGImagePropertyOrientation] as? NSNumber, orientation.intValue != 1 {
                 frame.properties[kCGImagePropertyOrientation] = orientation.intValue
             }

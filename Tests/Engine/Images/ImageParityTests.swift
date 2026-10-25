@@ -441,19 +441,64 @@ final class ImageParityTests: XCTestCase {
         return values
     }
 
-    /// A little-endian 2 × 2 RGB TIFF with Photoshop resources (34377, BYTE) and an IPTC record (33723, LONG, padded to
-    /// whole LONGs as Photoshop writes it).
-    private func tiffWithPhotoshopData(_ resources: [UInt8], _ record: [UInt8]) -> Data {
-        let padded = record + [UInt8](repeating: 0, count: (4 - record.count % 4) % 4), pixels = [UInt8](repeating: 120, count: 12)
+    /// A little-endian TIFF of 2 × 2 RGB pictures, each with its Photoshop resources (34377, BYTE) and IPTC record (33723,
+    /// LONG, padded to whole LONGs as Photoshop writes it); empty ones are left out.
+    private func tiffWithPhotoshopData(_ pages: [(resources: [UInt8], record: [UInt8])]) -> Data {
         func u16(_ v: Int) -> [UInt8] { [UInt8(v & 255), UInt8(v >> 8)] }
         func u32(_ v: Int) -> [UInt8] { [UInt8(v & 255), UInt8(v >> 8 & 255), UInt8(v >> 16 & 255), UInt8(v >> 24)] }
-        let entries = 11, data = 8 + 2 + 12 * entries + 4
-        let bits = data, iptc = bits + 6, photoshop = iptc + padded.count, image = photoshop + resources.count
-        let fields: [(Int, Int, Int, Int)] = [(256, 3, 1, 2), (257, 3, 1, 2), (258, 3, 3, bits), (259, 3, 1, 1), (262, 3, 1, 2), (273, 4, 1, image),
-                                              (277, 3, 1, 3), (278, 3, 1, 2), (279, 4, 1, 12), (33723, 4, padded.count / 4, iptc), (34377, 1, resources.count, photoshop)]
-        var file: [UInt8] = [0x49, 0x49, 42, 0] + u32(8) + u16(entries)
-        for (tag, type, count, value) in fields { file += u16(tag) + u16(type) + u32(count) + (type == 3 && count == 1 ? u16(value) + [0, 0] : u32(value)) }
-        return Data(file + u32(0) + u16(8) + u16(8) + u16(8) + padded + resources + pixels)
+        var file: [UInt8] = [0x49, 0x49, 42, 0] + u32(8)
+        for (index, page) in pages.enumerated() {
+            let padded = page.record + [UInt8](repeating: 0, count: (4 - page.record.count % 4) % 4)
+            let entries = 9 + (padded.isEmpty ? 0 : 1) + (page.resources.isEmpty ? 0 : 1), data = file.count + 2 + 12 * entries + 4
+            let bits = data, iptc = bits + 6, photoshop = iptc + padded.count, image = photoshop + page.resources.count
+            var fields: [(Int, Int, Int, Int)] = [(256, 3, 1, 2), (257, 3, 1, 2), (258, 3, 3, bits), (259, 3, 1, 1), (262, 3, 1, 2), (273, 4, 1, image),
+                                                  (277, 3, 1, 3), (278, 3, 1, 2), (279, 4, 1, 12)]
+            if !padded.isEmpty { fields.append((33723, 4, padded.count / 4, iptc)) }
+            if !page.resources.isEmpty { fields.append((34377, 1, page.resources.count, photoshop)) }
+            let next = index == pages.count - 1 ? 0 : image + 12 + (image + 12) % 2
+            file += u16(entries)
+            for (tag, type, count, value) in fields { file += u16(tag) + u16(type) + u32(count) + (type == 3 && count == 1 ? u16(value) + [0, 0] : u32(value)) }
+            file += u32(next) + u16(8) + u16(8) + u16(8) + padded + page.resources + [UInt8](repeating: UInt8(120 + 60 * index & 255), count: 12)
+            if file.count % 2 == 1 { file.append(0) }
+        }
+        return Data(file)
+    }
+
+    private func tiffWithPhotoshopData(_ resources: [UInt8], _ record: [UInt8]) -> Data { tiffWithPhotoshopData([(resources, record)]) }
+
+    func testEachTiffPictureKeepsItsOwnIptcAndPhotoshopResources() async throws {
+        let one = resource(0x0404, iim([(2, 5, "PAGE ONE")])), two = resource(0x0404, iim([(2, 5, "PAGE TWO")])), copyright = resource(0x040A, [1])
+        let written = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(written, "public.tiff" as CFString, 2, nil))
+        for label in ["PAGE ONE", "PAGE TWO"] {
+            CGImageDestinationAddImage(destination, pattern(3, width: 6, height: 4),
+                                       [kCGImagePropertyIPTCDictionary: [kCGImagePropertyIPTCObjectName: label]] as CFDictionary)
+        }
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let cases: [(Data, [String?], [[UInt8]]?)] = [
+            // Different data per page; then a later page without any.
+            (tiffWithPhotoshopData([(copyright, iim([(2, 5, "PAGE ONE")])), ([], iim([(2, 5, "PAGE TWO")]))]), ["PAGE ONE", "PAGE TWO"], [copyright + one, two]),
+            (tiffWithPhotoshopData([(copyright + one, []), ([], [])]), ["PAGE ONE", nil], [copyright + one, []]),
+            // ImageIO's own pages, with an IPTC record each.
+            (written as Data, ["PAGE ONE", "PAGE TWO"], nil),
+        ]
+        for (index, (data, labels, blocks)) in cases.enumerated() {
+            let folder = GraphicsTestKit.folder()
+            defer { try? FileManager.default.removeItem(atPath: folder) }
+            let path = FilePath.combine(folder, "pages.tiff")
+            try data.write(to: URL(fileURLWithPath: path))
+            let frames = try ImageReader.read(path, format: "tiff", preset: Preset())
+            if let blocks { XCTAssertEqual(frames.map { [UInt8]($0.properties[ImageFrame.photoshopKey] as? Data ?? Data()) }, blocks, "case \(index)") }
+            // Through the image engine: one JPEG per page, each with its own page's APP13 blocks and IPTC as ImageIO reads it.
+            let jpegs = try await GraphicsTestKit.convert(MagickImageConverter(), path, to: "jpg").map { try Data(contentsOf: URL(fileURLWithPath: $0)) }
+            if let blocks { XCTAssertEqual(jpegs.map { [UInt8](PsdCodec.metadataResources($0, format: "jpg")) }, blocks, "case \(index) APP13") }
+            XCTAssertEqual(jpegs.map { imageIOIptc($0)?[kCGImagePropertyIPTCObjectName] as? String }, labels, "case \(index)")
+        }
+        // A chain with another number of pictures than ImageIO reads gives none of them any.
+        let pages = tiffWithPhotoshopData([(copyright, []), ([], [])])
+        XCTAssertEqual(PsdCodec.tiffMetadataResources(pages, pages: 2), [Data(copyright), Data()])
+        XCTAssertNil(PsdCodec.tiffMetadataResources(pages, pages: 1))
+        XCTAssertNil(PsdCodec.tiffMetadataResources(pages, pages: 3))
     }
 
     func testIptcOfPngPsdAndTiffSourcesReachJpegAndPngToo() throws {

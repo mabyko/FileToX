@@ -124,8 +124,7 @@ enum PsdCodec {
     /// The metadata resource blocks (`metadataIds`) of a JPEG, PNG, TIFF or PSD/PSB file, byte for byte in file order.
     /// JPEG: the Photoshop APP13 segments, joined (a block may continue in the next one). PNG: ImageMagick's hex "Raw
     /// profile type 8bim", or its bare IIM "Raw profile type iptc" when no 8bim profile holds an IPTC record. TIFF: the
-    /// first picture's Photoshop resources (34377), or its IPTC-NAA record (33723) when they hold none. PSD/PSB: the
-    /// image resources.
+    /// first picture's (`tiffMetadataResources` has every picture's). PSD/PSB: the image resources.
     static func metadataResources(_ file: Data, format: String) -> Data {
         var blocks: [(id: Int, bytes: [UInt8])] = []
         switch format {
@@ -135,20 +134,33 @@ enum PsdCodec {
         case "png":
             blocks = rawProfileBlocks(pngText(file, keywords: rawProfileKeywords))
         case "tiff":
-            let tags = EmbeddedProfiles.tiffValues(file, tags: [34377, 33723], directories: 1)?.first ?? [:]
-            blocks = tags[34377].map { metadataBlocks([UInt8]($0)) } ?? []
-            // TIFF pads the record to whole LONGs; its datasets say where it ends.
-            if !blocks.contains(where: { $0.id == 0x0404 }), let record = tags[33723].map({ [UInt8]($0) }), iimLength(record) > 0 {
-                var wrapped = BigEndianData()
-                wrapped.resource(0x0404, Array(record.prefix(iimLength(record))))
-                blocks.append((0x0404, wrapped.data))
-            }
+            blocks = EmbeddedProfiles.tiffValues(file, tags: [34377, 33723], directories: 1)?.first.map(tiffBlocks) ?? []
         case "psd", "psb":
             blocks = resourceStream(file).map(metadataBlocks) ?? []
         default:
             break
         }
         return Data(blocks.flatMap(\.bytes))
+    }
+
+    /// The metadata resource blocks of every picture of a TIFF, when its main IFD chain has `pages` pictures (ImageIO's
+    /// count); nil otherwise, so no picture is given another's.
+    static func tiffMetadataResources(_ file: Data, pages: Int) -> [Data]? {
+        guard let directories = EmbeddedProfiles.tiffValues(file, tags: [34377, 33723], directories: pages + 1),
+              directories.count == pages else { return nil }
+        return directories.map { Data(tiffBlocks($0).flatMap(\.bytes)) }
+    }
+
+    /// One TIFF picture's blocks: its Photoshop resources (34377), or its IPTC-NAA record (33723) when they hold none.
+    private static func tiffBlocks(_ tags: [Int: Data]) -> [(id: Int, bytes: [UInt8])] {
+        var blocks = tags[34377].map { metadataBlocks([UInt8]($0)) } ?? []
+        // TIFF pads the record to whole LONGs; its datasets say where it ends.
+        if !blocks.contains(where: { $0.id == 0x0404 }), let record = tags[33723].map({ [UInt8]($0) }), iimLength(record) > 0 {
+            var wrapped = BigEndianData()
+            wrapped.resource(0x0404, Array(record.prefix(iimLength(record))))
+            blocks.append((0x0404, wrapped.data))
+        }
+        return blocks
     }
 
     /// The length of the complete IPTC-NAA datasets (tag 0x1C, record, number, length, value) that start `record`.
