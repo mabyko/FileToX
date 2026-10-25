@@ -93,7 +93,8 @@ def compare_output(a, b, left, right, thresholds):
             x, y = decoded["baseline"], decoded["candidate"]
             metrics["tcr"]["firstDifferenceOffset"] = next((i for i, (a, b) in enumerate(zip(x, y)) if a != b), min(len(x), len(y)))
         return ("PASS" if equal else "FAIL"), ([] if equal else ["TCR decoded payload bytes changed"]), metrics
-    if a.get("sha256") and a["sha256"] == b.get("sha256"):
+    byte_equal = a.get("sha256") and a["sha256"] == b.get("sha256")
+    if byte_equal and kind != "pdf":
         return "PASS", [], metrics
     if kind == "directory":
         equal = entries_equal(a["entries"], b["entries"])
@@ -131,6 +132,14 @@ def compare_output(a, b, left, right, thresholds):
         metrics["pageTextRatios"] = scores
         if any(s < thresholds["text"] for s in scores):
             return "FAIL", ["PDF text similarity below threshold"], metrics
+        annotation_error = None
+        try:
+            if left is None or right is None: raise ValueError("Saved PDF paths are required for annotation readback")
+            annotations = {side: native("pdf-annotations", path) for side, path in (("baseline", left), ("candidate", right))}
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+            annotation_error = "PDF annotation inspection unavailable: " + str(error)
+            metrics["annotationError"] = annotation_error
+        else: metrics["annotations"] = annotations
         if thresholds.get("pdfRender"):
             try: metrics["raster"] = native("pdf-compare", left, right)
             except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
@@ -142,6 +151,21 @@ def compare_output(a, b, left, right, thresholds):
             reasons.append("PDF page content raster checked at 144 DPI; other bytes differ")
         elif not any(p["text"] for p in ma["pages"]):
             reasons.append("PDF has no extractable text; comparison checks page geometry only")
+        if annotation_error: return "WARN", [annotation_error], metrics
+        props = lambda doc: {"pages": [[item["properties"] for item in page] for page in doc["pages"]], "form": doc["form"]}
+        if props(annotations["baseline"]) != props(annotations["candidate"]):
+            return "FAIL", ["PDF annotation content, geometry, actions or form fields changed"], metrics
+        if thresholds.get("pdfRender") and any(annotations["baseline"]["pages"]):
+            try: metrics["annotationRaster"] = native("pdf-annotation-compare", left, right)
+            except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+                return "WARN", ["PDF annotation raster comparison unavailable: " + str(error)], metrics
+            if not metrics["annotationRaster"].get("sameGeometry"):
+                return "FAIL", ["PDF annotation raster geometry changed"], metrics
+            if picture_below_threshold(metrics["annotationRaster"], thresholds):
+                return "FAIL", ["PDF annotation raster similarity below threshold"], metrics
+        if annotations["baseline"] != annotations["candidate"]:
+            reasons.append("PDF annotation appearance resources differ" + ("; normal screen appearance checked separately" if thresholds.get("pdfRender") else "; rendering not requested"))
+        if byte_equal: return "PASS", [], metrics
     elif kind == "text":
         try:
             ta, pa = document_text(a["text"], left.suffix.lower() if left else "")
@@ -303,10 +327,12 @@ def main():
         grouped = defaultdict(Counter)
         for result in results: grouped[result[field]][result["status"]] += 1
         summaries[field] = {k: dict(v) for k, v in sorted(grouped.items())}
-    pdf_limit = ("PDF media-box page content is raster-compared at 144 DPI; annotations are not rendered. " if args.pdf_render else
-                 "Empty-text PDFs compare geometry only. ")
+    pdf_limit = ("PDF media-box page content and Poppler page composites including annotations are separately raster-compared at 144 DPI. " if args.pdf_render else
+                 "Empty-text PDF page content compares geometry only; annotation appearance is not rendered. ")
+    pdf_limit += "Annotation objects/actions/form values are compared, including hidden annotations; rendering uses normal screen appearance without interaction/scripts. "
     report = {"schema": 1, "baseline": str(roots[0]), "candidate": str(roots[1]), "thresholds": thresholds,
               "inspectionPolicy": {"tcr": "exact-decoded-bytes", "imageReferences": "diagnostic-only",
+                                   "pdfAnnotationVersion": 1, "pdfAnnotationRasterVersion": 1 if args.pdf_render else None,
                                    "pdfRasterDpi": 144 if args.pdf_render else None, "pdfRasterVersion": 2 if args.pdf_render else None},
               "summary": dict(Counter(r["status"] for r in results)), "groups": summaries, "cases": results,
               "limits": "Engine groups are inferred. Media compares structure/duration, fonts compare table tags/glyph count. " + pdf_limit + "Unsupported decoders produce WARN when bytes differ."}

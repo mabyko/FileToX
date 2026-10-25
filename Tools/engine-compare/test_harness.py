@@ -12,6 +12,8 @@ import sys
 import tempfile
 import unittest
 import subprocess
+import shlex
+import time
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -134,12 +136,13 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(result["status"], "PASS")
             self.assertEqual(result["outputs"][0]["imageReferences"]["baseline"]["coverage"], "unavailable")
 
-    def pdf(self, path, content, rotation=0, producer="test", width=20, height=20, origin=(0, 0)):
+    def pdf(self, path, content, rotation=0, producer="test", width=20, height=20, origin=(0, 0), annotations=(), objects=(), form=""):
         stream = content.encode()
         x, y = origin
-        objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
-                   f"<< /Type /Page /Parent 2 0 R /MediaBox [{x} {y} {x+width} {y+height}] /Rotate {rotation} /Resources << >> /Contents 4 0 R >>".encode(),
-                   f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream", f"<< /Producer ({producer}) >>".encode()]
+        refs = " ".join(f"{n} 0 R" for n in annotations)
+        objects = [f"<< /Type /Catalog /Pages 2 0 R {form} >>".encode(), b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                   f"<< /Type /Page /Parent 2 0 R /MediaBox [{x} {y} {x+width} {y+height}] /Rotate {rotation} /Resources << >> /Contents 4 0 R /Annots [{refs}] >>".encode(),
+                   f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream", f"<< /Producer ({producer}) >>".encode(), *objects]
         data = bytearray(b"%PDF-1.4\n"); offsets = [0]
         for i, obj in enumerate(objects, 1):
             offsets.append(len(data)); data.extend(f"{i} 0 obj\n".encode() + obj + b"\nendobj\n")
@@ -147,6 +150,105 @@ class HarnessTests(unittest.TestCase):
         for offset in offsets[1:]: data.extend(f"{offset:010} 00000 n \n".encode())
         data.extend(f"trailer\n<< /Size {len(offsets)} /Root 1 0 R /Info 5 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
         path.write_bytes(data)
+
+    def test_pdf_annotation_content_is_compared_without_raster_rendering(self):
+        a, b = self.root / "a.pdf", self.root / "b.pdf"
+        thresholds = {"psnr": 30, "ssim": .95, "text": .95}
+        for template in ("/Subtype /Link /A << /S /URI /URI ({}) >>",
+                         "/Subtype /Text /Contents ({}) /T (Author)",
+                         "/Subtype /Widget /FT /Tx /T (Name) /V ({})"):
+            with self.subTest(annotation=template):
+                for path, value in ((a, "Keep me"), (b, "Lost content")):
+                    annot = ("<< /Type /Annot /Rect [2 2 18 18] /P 3 0 R " + template.format(value) + " >>").encode()
+                    self.pdf(path, "", annotations=[6], objects=[annot])
+                self.assertEqual(compare_output(fingerprint(a), fingerprint(b), a, b, thresholds)[0], "FAIL")
+
+    def test_pdf_annotation_appearance_is_separate_from_v2_content_raster(self):
+        a, b = self.root / "a.pdf", self.root / "b.pdf"
+        for rotation in (0, 90, 180, 270):
+            subtype = "/Square" if rotation % 180 == 0 else "/Widget /FT /Tx /T (field) /V (same value)"
+            annotation = f"<< /Type /Annot /Subtype {subtype} /Rect [0 0 20 10] /AP << /N 7 0 R >> >>".encode()
+            for path, color in ((a, "1 0 0"), (b, "0 0 1")):
+                stream = f"{color} rg 0 0 20 10 re f".encode()
+                appearance = f"<< /Type /XObject /Subtype /Form /BBox [0 0 20 10] /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
+                self.pdf(path, "", width=20, height=10, rotation=rotation, annotations=[6], objects=[annotation, appearance],
+                         form="/AcroForm << /Fields [6 0 R] >>" if rotation % 180 else "")
+            self.assertEqual(native("pdf-compare", a, b)["frames"][0]["psnr"], 99)
+            status, reasons, metrics = compare_output(fingerprint(a), fingerprint(b), a, b,
+                                                     {"psnr": 30, "ssim": .95, "text": .95, "pdfRender": True})
+            self.assertEqual(status, "FAIL", reasons)
+            self.assertIn("annotation", " ".join(reasons).lower())
+            self.assertEqual(metrics["raster"]["rasterVersion"], 2)
+            self.assertLess(metrics["annotationRaster"]["frames"][0]["psnr"], 30)
+
+    def test_pdf_widget_inherited_value_and_hidden_annotation_are_not_discarded(self):
+        a, b = self.root / "a.pdf", self.root / "b.pdf"
+        for path, value in ((a, "before"), (b, "after")):
+            self.pdf(path, "", annotations=[6], form="/AcroForm << /Fields [7 0 R] >>", objects=[
+                b"<< /Type /Annot /Subtype /Widget /Rect [1 1 10 10] /F 2 /Parent 7 0 R >>",
+                f"<< /FT /Tx /T (Field) /V ({value}) /Kids [6 0 R] >>".encode()])
+        self.assertEqual(compare_output(fingerprint(a), fingerprint(b), a, b,
+                                        {"psnr": 30, "ssim": .95, "text": .95, "pdfRender": True})[0], "FAIL")
+
+    def test_pdf_annotation_layer_uses_media_origin_and_screen_visibility(self):
+        a, b = self.root / "a.pdf", self.root / "b.pdf"
+        for rotation in (0, 90, 180, 270):
+            for flags in (0, 2, 32):
+                for path, color in ((a, "1 0 0"), (b, "0 0 1")):
+                    stream = f"{color} rg 0 0 20 10 re f".encode()
+                    ap = f"<< /Type /XObject /Subtype /Form /BBox [0 0 20 10] /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
+                    ann = f"<< /Type /Annot /Subtype /Square /Rect [7 -3 27 7] /F {flags} /AP << /N 7 0 R >> >>".encode()
+                    self.pdf(path, "", width=20, height=10, rotation=rotation, origin=(7, -3), annotations=[6], objects=[ann, ap])
+                scores = native("pdf-annotation-compare", a, b)
+                self.assertAlmostEqual(scores["frames"][0]["psnr"], 99 if flags else 10 * math.log10(2), places=6)
+                if flags:
+                    status, reasons, _ = compare_output(fingerprint(a), fingerprint(b), a, b,
+                                                        {"psnr": 30, "ssim": .95, "text": .95, "pdfRender": True})
+                    self.assertEqual(status, "WARN")
+                    self.assertIn("appearance resources differ", " ".join(reasons))
+
+    def test_pdf_annotation_bad_entries_count_and_recursion_fail_explicitly(self):
+        path = self.root / "bad.pdf"
+        for annotation, refs in ((b"1", [6]), (b"<< /Subtype /Text /Rect [0 0 1 1] >>", [6] * 4097),
+                                 (b"<< /Subtype /Text /Rect [0 0 1 1] /A 7 0 R >>", [6])):
+            self.pdf(path, "", annotations=refs, objects=[annotation, b"<< /Next 7 0 R >>"])
+            with self.assertRaises(RuntimeError): native("pdf-annotations", path)
+        self.pdf(path, "", annotations=[6], objects=[b"<< /Type /Annot /Subtype /RichMedia /Rect [0 0 10 10] >>"])
+        with self.assertRaisesRegex(RuntimeError, "Unsupported|omitted"): native("pdf-annotation-compare", path, path)
+
+    def test_pdf_annotation_timeout_remains_an_unavailable_warning(self):
+        pdf = {"kind": "pdf", "sha256": "same", "metadata": {"pageCount": 1, "pages": [{"width": 20, "height": 20, "text": ""}]}}
+        with patch("compare.native", side_effect=subprocess.TimeoutExpired(["inspect"], 60)):
+            status, reasons, _ = compare_output(pdf, pdf, self.root / "a.pdf", self.root / "b.pdf",
+                                                {"psnr": 30, "ssim": .95, "text": .95})
+        self.assertEqual(status, "WARN")
+        self.assertIn("PDF annotation inspection unavailable", reasons[0])
+
+    def test_unavailable_annotations_do_not_hide_a_v2_raster_failure(self):
+        pdf = {"kind": "pdf", "sha256": "same", "metadata": {"pageCount": 1, "pages": [{"width": 20, "height": 20, "text": ""}]}}
+        def inspect(mode, *paths):
+            if mode == "pdf-annotations": raise subprocess.TimeoutExpired(["inspect"], 60)
+            return {"sameGeometry": True, "frames": [{"psnr": 1, "ssim": .1}], "rasterVersion": 2}
+        with patch("compare.native", side_effect=inspect):
+            status, reasons, metrics = compare_output(pdf, pdf, self.root / "a.pdf", self.root / "b.pdf",
+                                                      {"psnr": 30, "ssim": .95, "text": .95, "pdfRender": True})
+        self.assertEqual(status, "FAIL")
+        self.assertIn("PDF raster similarity below threshold", reasons)
+        self.assertIn("annotationError", metrics)
+
+    def test_annotation_renderer_is_cancelled_with_its_inspector(self):
+        from fingerprint import ensure_native
+        from inspection_process import bounded_command
+        pdf, ready, orphan = self.root / "page.pdf", self.root / "ready", self.root / "orphan"
+        self.pdf(pdf, "", annotations=[6], objects=[b"<< /Subtype /Square /Rect [0 0 20 20] >>"])
+        program = self.root / "slow-pdftoppm"
+        program.write_text(f"#!/bin/sh\n: > {shlex.quote(str(ready))}\n/bin/sleep 1.2\n: > {shlex.quote(str(orphan))}\n")
+        program.chmod(0o755)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            bounded_command([ensure_native(), "pdf-annotation-compare", pdf, pdf, program], timeout=.6)
+        self.assertTrue(ready.exists())
+        time.sleep(1.3)
+        self.assertFalse(orphan.exists(), "Native renderer escaped inspector cancellation")
 
     def test_pdf_raster_fills_the_144_dpi_canvas(self):
         black, white = self.root / "black.pdf", self.root / "white.pdf"
@@ -203,7 +305,10 @@ class HarnessTests(unittest.TestCase):
     def test_pdf_raster_timeout_is_an_unavailable_warning(self):
         pdf = {"kind": "pdf", "sha256": "a", "metadata": {"pageCount": 1, "pages": [{"width": 20, "height": 20, "text": ""}]}}
         other = copy.deepcopy(pdf); other["sha256"] = "b"
-        with patch("compare.native", side_effect=subprocess.TimeoutExpired(["inspect"], 60)):
+        def inspect(mode, *paths):
+            if mode == "pdf-annotations": return {"pages": [[]], "form": None}
+            raise subprocess.TimeoutExpired(["inspect"], 60)
+        with patch("compare.native", side_effect=inspect):
             status, reasons, _ = compare_output(pdf, other, self.root / "a.pdf", self.root / "b.pdf",
                                                 {"psnr": 30, "ssim": .95, "text": .95, "pdfRender": True})
         self.assertEqual(status, "WARN")

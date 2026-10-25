@@ -2,6 +2,7 @@
 import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -13,7 +14,7 @@ import zipfile
 import zlib
 
 ROOT = Path(__file__).resolve().parents[2]
-NATIVE = ROOT / "build/engine-compare/bin/inspect"
+NATIVE = Path(os.environ.get("FILETOX_COMPARE_INSPECTOR", ROOT / "build/engine-compare/bin/inspect"))
 IMAGES = set("png jpg jpeg webp tiff tif bmp gif ico avif heic jxl jp2 psd psb tga ppm pgm pbm icns".split())
 TEXT = set("txt md html htm rst tex csv tsv svg xml fb2 eml rtf ps eps dxf pml".split())
 MEDIA = set("mp4 m4v mov mkv webm avi wmv flv mpg ts m2ts 3gp 3g2 ogv vob dv mxf mp3 m4a m4b aac wav flac ogg opus wma aiff ac3 amr au caf weba mka mp2 voc".split())
@@ -29,6 +30,10 @@ def command(args, timeout=60, **kwargs):
 
 
 def ensure_native():
+    if "FILETOX_COMPARE_INSPECTOR" in os.environ:
+        if not NATIVE.is_absolute() or not NATIVE.is_file():
+            raise ValueError("FILETOX_COMPARE_INSPECTOR must name an existing absolute private binary")
+        return NATIVE
     source = Path(__file__).with_name("inspect.swift")
     if not NATIVE.exists() or NATIVE.stat().st_mtime < source.stat().st_mtime:
         NATIVE.parent.mkdir(parents=True, exist_ok=True)
@@ -37,7 +42,16 @@ def ensure_native():
 
 
 def native(mode, *paths):
-    return json.loads(command([ensure_native(), mode, *paths]))
+    from inspection_process import bounded_command
+    args = [ensure_native(), mode, *(Path(p).resolve() for p in paths)]
+    renderer = None
+    if mode == "pdf-annotation-compare":
+        path = Path(os.environ.get("FILETOX_COMPARE_PDFTOPPM", "/opt/homebrew/bin/pdftoppm")).resolve(strict=True)
+        renderer = {"path": str(path), "sha256": sha256(path)}
+        args.append(path)
+    result = json.loads(bounded_command(args))
+    if renderer: result["rendererBinary"] = renderer
+    return result
 
 
 def sha256(path):

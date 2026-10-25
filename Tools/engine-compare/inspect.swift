@@ -4,6 +4,7 @@ import CoreGraphics
 import PDFKit
 import CryptoKit
 import Vision
+import Darwin
 
 enum InspectError: Error { case invalid(String) }
 
@@ -126,6 +127,111 @@ func pdfInfo(_ path: String) throws -> [String: Any] {
     return ["pageCount": doc.pageCount, "pages": pages]
 }
 
+// Resolve PDF objects rather than comparing object numbers or compressed appearance bytes.
+final class AnnotationObjects {
+    var references: [CGPDFDictionaryRef: String] = [:]
+    var nodes = 0
+    var bytes = 0
+
+    func value(_ object: CGPDFObjectRef, depth: Int = 0) throws -> Any {
+        nodes += 1
+        guard nodes <= 100_000, depth <= 32 else { throw InspectError.invalid("PDF annotation object limit") }
+        switch CGPDFObjectGetType(object) {
+        case .null: return NSNull()
+        case .boolean:
+            var v: CGPDFBoolean = 0; CGPDFObjectGetValue(object, .boolean, &v); return v != 0
+        case .integer:
+            var v: CGPDFInteger = 0; CGPDFObjectGetValue(object, .integer, &v); return v
+        case .real:
+            var v: CGPDFReal = 0; CGPDFObjectGetValue(object, .real, &v)
+            guard v.isFinite else { throw InspectError.invalid("Nonfinite PDF annotation number") }; return v
+        case .name:
+            var v: UnsafePointer<CChar>?; CGPDFObjectGetValue(object, .name, &v)
+            return ["name": v.map { String(cString: $0) } ?? ""]
+        case .string:
+            var v: CGPDFStringRef?; CGPDFObjectGetValue(object, .string, &v)
+            guard let v else { throw InspectError.invalid("Invalid PDF annotation string") }
+            let count = CGPDFStringGetLength(v); bytes += count
+            guard bytes <= 8 * 1024 * 1024 else { throw InspectError.invalid("PDF annotation byte limit") }
+            // Hex preserves binary strings, encodings and trailing data without lossy conversion.
+            return ["stringBytes": Data(bytes: CGPDFStringGetBytePtr(v)!, count: count).base64EncodedString()]
+        case .array:
+            var v: CGPDFArrayRef?; CGPDFObjectGetValue(object, .array, &v)
+            guard let v, CGPDFArrayGetCount(v) <= 10_000 else { throw InspectError.invalid("PDF annotation array limit") }
+            return try (0..<CGPDFArrayGetCount(v)).map { index -> Any in
+                var item: CGPDFObjectRef?
+                guard CGPDFArrayGetObject(v, index, &item), let item else { throw InspectError.invalid("Invalid PDF annotation array") }
+                return try value(item, depth: depth + 1)
+            }
+        case .dictionary:
+            var v: CGPDFDictionaryRef?; CGPDFObjectGetValue(object, .dictionary, &v)
+            guard let v else { throw InspectError.invalid("Invalid PDF annotation dictionary") }
+            if let reference = references[v] { return ["reference": reference] }
+            return try dictionary(v, depth: depth + 1)
+        case .stream:
+            var v: CGPDFStreamRef?; CGPDFObjectGetValue(object, .stream, &v)
+            var format = CGPDFDataFormat.raw
+            guard let v, let dict = CGPDFStreamGetDictionary(v), let data = CGPDFStreamCopyData(v, &format) as Data? else { throw InspectError.invalid("Unreadable PDF annotation stream") }
+            bytes += data.count
+            guard bytes <= 8 * 1024 * 1024 else { throw InspectError.invalid("PDF annotation byte limit") }
+            return ["dictionary": try dictionary(dict, depth: depth + 1, excluding: ["Length", "Filter", "DecodeParms"]),
+                    "dataFormat": format.rawValue, "decodedSize": data.count, "decodedSHA256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()]
+        @unknown default: throw InspectError.invalid("Unsupported PDF annotation object")
+        }
+    }
+
+    func dictionary(_ dict: CGPDFDictionaryRef, depth: Int = 0, excluding: Set<String> = []) throws -> [String: Any] {
+        guard depth <= 32, CGPDFDictionaryGetCount(dict) <= 10_000 else { throw InspectError.invalid("PDF annotation dictionary limit") }
+        var result: [String: Any] = [:], failure: Error?
+        CGPDFDictionaryApplyBlock(dict, { key, object, _ in
+            let name = String(cString: key)
+            if !excluding.contains(name) {
+                do { result[name] = try self.value(object, depth: depth + 1) }
+                catch { failure = error; return false }
+            }
+            return true
+        }, nil)
+        if let failure { throw failure }
+        return result
+    }
+}
+
+func pdfAnnotations(_ path: String) throws -> [String: Any] {
+    guard let doc = CGPDFDocument(URL(fileURLWithPath: path) as CFURL), let catalog = doc.catalog, !doc.isEncrypted,
+          (1...256).contains(doc.numberOfPages) else { throw InspectError.invalid("Invalid, encrypted or over-limit PDF annotations") }
+    let reader = AnnotationObjects()
+    var pageAnnotations = [[CGPDFDictionaryRef]]()
+    for index in 1...doc.numberOfPages {
+        guard let page = doc.page(at: index), let dict = page.dictionary else { throw InspectError.invalid("Missing PDF page") }
+        reader.references[dict] = "page:\(index)"
+        var array: CGPDFArrayRef?, annotations = [CGPDFDictionaryRef]()
+        if CGPDFDictionaryGetArray(dict, "Annots", &array), let array {
+            guard CGPDFArrayGetCount(array) <= 4096 else { throw InspectError.invalid("PDF annotation count limit") }
+            for at in 0..<CGPDFArrayGetCount(array) {
+                var annotation: CGPDFDictionaryRef?
+                guard CGPDFArrayGetDictionary(array, at, &annotation), let annotation else { throw InspectError.invalid("Invalid PDF annotation entry") }
+                annotations.append(annotation)
+                reader.references[annotation] = "annotation:\(index):\(at)"
+            }
+        } else {
+            var invalid: CGPDFObjectRef?
+            if CGPDFDictionaryGetObject(dict, "Annots", &invalid) { throw InspectError.invalid("Invalid PDF Annots array") }
+        }
+        pageAnnotations.append(annotations)
+    }
+    let pages = try pageAnnotations.map { annotations in
+        try annotations.map { dict -> [String: Any] in
+            var appearance: CGPDFObjectRef?
+            let properties = try reader.dictionary(dict, excluding: ["AP"])
+            let ap: Any = CGPDFDictionaryGetObject(dict, "AP", &appearance) ? try reader.value(appearance!) : NSNull()
+            return ["properties": properties, "appearance": ap]
+        }
+    }
+    var form: CGPDFDictionaryRef?
+    let formInfo: Any = CGPDFDictionaryGetDictionary(catalog, "AcroForm", &form) ? try reader.dictionary(form!) : NSNull()
+    return ["pages": pages, "form": formInfo, "annotationVersion": 1, "reader": "CoreGraphics-object-readback"]
+}
+
 func pdfSize(_ page: CGPDFPage) throws -> CGSize {
     let box = page.getBoxRect(.mediaBox)
     guard box.width.isFinite, box.height.isFinite, box.width > 0, box.height > 0 else {
@@ -156,13 +262,53 @@ func pdfPixels(_ page: CGPDFPage, width: Int, height: Int) throws -> [UInt8] {
     return bytes
 }
 
-func comparePdfs(_ left: String, _ right: String) throws -> [String: Any] {
+func annotatedPixels(_ path: String, page: Int, program: String, width: Int, height: Int) throws -> [UInt8] {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("annotations-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let prefix = folder.appendingPathComponent("page")
+    // Foundation Process creates a separate process group on macOS. Inherit this
+    // group so the Python supervisor also kills Poppler on timeout/cancellation.
+    var actions: posix_spawn_file_actions_t?
+    guard posix_spawn_file_actions_init(&actions) == 0 else { throw InspectError.invalid("Cannot initialize renderer process") }
+    defer { posix_spawn_file_actions_destroy(&actions) }
+    for fd: Int32 in 0...2 {
+        guard posix_spawn_file_actions_addopen(&actions, fd, "/dev/null", fd == 0 ? O_RDONLY : O_WRONLY, 0) == 0 else {
+            throw InspectError.invalid("Cannot redirect renderer streams")
+        }
+    }
+    let arguments = [program, "-r", "144", "-f", String(page), "-l", String(page), "-singlefile", "-png", path, prefix.path]
+    var argv = arguments.map { strdup($0) } + [nil]
+    defer { for pointer in argv { free(pointer) } }
+    var pid: pid_t = 0
+    let code = posix_spawn(&pid, program, &actions, nil, &argv, environ)
+    guard code == 0 else { throw InspectError.invalid("Cannot launch annotation renderer: \(code)") }
+    var status: Int32 = 0
+    while waitpid(pid, &status, 0) < 0 {
+        if errno != EINTR { throw InspectError.invalid("Cannot wait for annotation renderer") }
+    }
+    guard status == 0 else { throw InspectError.invalid("Poppler annotation rendering failed, wait status: \(status)") }
+    let (w, h, decoded) = try pixels(source(prefix.path + ".png"), 0)
+    guard w <= width, h <= height else { throw InspectError.invalid("Poppler annotation canvas exceeds checked media box") }
+    if w == width && h == height { return decoded }
+    var padded = [UInt8](repeating: 255, count: width * height * 4)
+    for y in 0..<h { padded.replaceSubrange(y * width * 4..<y * width * 4 + w * 4, with: decoded[y * w * 4..<(y + 1) * w * 4]) }
+    return padded
+}
+
+func comparePdfs(_ left: String, _ right: String, annotationRenderer: String? = nil) throws -> [String: Any] {
+    let annotations = annotationRenderer != nil
     guard let a = CGPDFDocument(URL(fileURLWithPath: left) as CFURL),
           let b = CGPDFDocument(URL(fileURLWithPath: right) as CFURL) else {
         throw InspectError.invalid("Core Graphics cannot read this PDF")
     }
     guard a.numberOfPages == b.numberOfPages else { return ["sameGeometry": false] }
     guard (1...256).contains(a.numberOfPages) else { throw InspectError.invalid("PDF raster inspection exceeds 256-page limit") }
+    let ka = annotations ? PDFDocument(url: URL(fileURLWithPath: left)) : nil
+    let kb = annotations ? PDFDocument(url: URL(fileURLWithPath: right)) : nil
+    if annotations && (ka?.pageCount != a.numberOfPages || kb?.pageCount != b.numberOfPages) {
+        throw InspectError.invalid("PDFKit annotation page count mismatch")
+    }
     var scores = [[String: Any]]()
     for index in 1...a.numberOfPages {
         guard let x = a.page(at: index), let y = b.page(at: index) else { throw InspectError.invalid("Missing PDF page") }
@@ -172,8 +318,33 @@ func comparePdfs(_ left: String, _ right: String) throws -> [String: Any] {
         guard width <= 8192, height <= 8192, width * height <= 16_000_000 else {
             throw InspectError.invalid("PDF raster inspection exceeds page pixel limit")
         }
-        scores.append(pixelScores(try pdfPixels(x, width: Int(width), height: Int(height)),
-                                  try pdfPixels(y, width: Int(width), height: Int(height))))
+        if annotations {
+            let known = Set(["Text", "Link", "FreeText", "Line", "Square", "Circle", "Polygon", "PolyLine",
+                             "Highlight", "Underline", "Squiggly", "StrikeOut", "Stamp", "Caret", "Ink", "Popup", "Widget"])
+            for (page, cgPage) in [(ka!.page(at: index - 1)!, x), (kb!.page(at: index - 1)!, y)] {
+                var array: CGPDFArrayRef?
+                let actual = CGPDFDictionaryGetArray(cgPage.dictionary!, "Annots", &array) ? CGPDFArrayGetCount(array!) : 0
+                guard actual == page.annotations.count else { throw InspectError.invalid("PDFKit omitted an annotation") }
+                guard page.annotations.count <= 4096 else { throw InspectError.invalid("PDF annotation count limit") }
+                for annotation in page.annotations where annotation.shouldDisplay {
+                    guard known.contains(annotation.type ?? "") || annotation.hasAppearanceStream else {
+                        throw InspectError.invalid("Unsupported PDF annotation appearance: \(annotation.type ?? "unknown")")
+                    }
+                }
+            }
+        }
+        if let program = annotationRenderer {
+            scores.append(pixelScores(try annotatedPixels(left, page: index, program: program, width: Int(width), height: Int(height)),
+                                      try annotatedPixels(right, page: index, program: program, width: Int(width), height: Int(height))))
+        } else {
+            scores.append(pixelScores(try pdfPixels(x, width: Int(width), height: Int(height)),
+                                      try pdfPixels(y, width: Int(width), height: Int(height))))
+        }
+    }
+    if annotations {
+        return ["sameGeometry": true, "frames": scores, "dpi": 144, "annotationRasterVersion": 1,
+                "background": "white", "renderer": "Poppler-page-with-annotations-mediaBox",
+                "behavior": "Separate full-page composite with normal screen annotations; hidden/NoView excluded from raster but retained in object comparison. No interaction or scripts."]
     }
     return ["sameGeometry": true, "frames": scores, "dpi": 144, "rasterVersion": 2,
             "background": "white", "renderer": "CoreGraphics-mediaBox"]
@@ -186,6 +357,7 @@ do {
     switch args[1] {
     case "image": result = try imageInfo(args[2])
     case "pdf": result = try pdfInfo(args[2])
+    case "pdf-annotations": result = try pdfAnnotations(args[2])
     case "ocr": result = ["text": try recognizedText(args[2])]
     case "compare":
         guard args.count == 4 else { throw InspectError.invalid("compare needs two paths") }
@@ -193,6 +365,9 @@ do {
     case "pdf-compare":
         guard args.count == 4 else { throw InspectError.invalid("pdf-compare needs two paths") }
         result = try comparePdfs(args[2], args[3])
+    case "pdf-annotation-compare":
+        guard args.count == 5 else { throw InspectError.invalid("pdf-annotation-compare needs two PDF paths and a pinned pdftoppm path") }
+        result = try comparePdfs(args[2], args[3], annotationRenderer: args[4])
     default: throw InspectError.invalid("Unknown inspection mode")
     }
     let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
