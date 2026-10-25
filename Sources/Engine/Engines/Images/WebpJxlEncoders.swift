@@ -279,15 +279,15 @@ enum CodecPixels {
             return (icc, nil, nil)
         }
         let metadata = value as! CGImageMetadata
-        return (icc, exif(metadata, frame.image), xmp(metadata))
+        return (icc, exif(metadata, frame.image, frame.dpi), xmp(metadata))
     }
 
     private static let exifNamespaces: Set<String> = [kCGImageMetadataNamespaceExif as String, kCGImageMetadataNamespaceExifAux as String,
                                                       kCGImageMetadataNamespaceExifEX as String, kCGImageMetadataNamespaceTIFF as String]
 
     /// EXIF of the metadata as ImageIO serializes it for `image`: the APP1 payload of a one-pixel JPEG, without
-    /// "Exif\0\0", and without the source's file structure.
-    private static func exif(_ metadata: CGImageMetadata, _ image: CGImage) -> Data? {
+    /// "Exif\0\0", without the source's file structure and with the picture's resolution, as ImageIO's own writers get it.
+    private static func exif(_ metadata: CGImageMetadata, _ image: CGImage, _ dpi: (x: Double, y: Double)?) -> Data? {
         // Metadata without EXIF/TIFF tags (a PNG's, for one) has no EXIF profile in ImageMagick; ImageIO would still write one.
         let tags = (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? []
         guard tags.contains(where: { (CGImageMetadataTagCopyNamespace($0) as String?).map(exifNamespaces.contains) == true }) else { return nil }
@@ -299,7 +299,7 @@ enum CodecPixels {
                                      space: space, alpha: false)
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImageAndMetadata(destination, pixel, ImageEncoder.encoderMetadata(metadata, nil), nil)
+        CGImageDestinationAddImageAndMetadata(destination, pixel, ImageEncoder.encoderMetadata(metadata, dpi), nil)
         guard CGImageDestinationFinalize(destination) else { return nil }
         let bytes = [UInt8](data as Data)
         var i = 2

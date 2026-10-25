@@ -781,6 +781,46 @@ final class ImageParityTests: XCTestCase {
         }
     }
 
+    /// The value of a RATIONAL EXIF entry.
+    private func exifRational(_ blob: [UInt8], _ entry: (type: Int, count: Int, value: Int)?) -> Double? {
+        guard let entry, entry.type == 5, entry.value + 8 <= blob.count else { return nil }
+        let little = blob.starts(with: [0x49, 0x49])
+        func number(_ at: Int) -> Int { (0..<4).reduce(0) { $0 << 8 | Int(blob[at + (little ? 3 - $1 : $1)]) } }
+        return Double(number(entry.value)) / Double(number(entry.value + 4))
+    }
+
+    func testExifResolutionFollowsThePictureResolution() throws {
+        let metadata = CGImageMetadataCreateMutable()
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFModel, "TestPhone" as CFString)
+        for (key, value) in [(kCGImagePropertyTIFFXResolution, 72), (kCGImagePropertyTIFFYResolution, 72), (kCGImagePropertyTIFFResolutionUnit, 2)] {
+            CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyTIFFDictionary, key, value as CFNumber)
+        }
+        let source = try read(try JpegEncoder.encode(ImageFrame(image: pattern(3, width: 20, height: 12), properties: [ImageFrame.metadataKey: metadata])))
+        XCTAssertEqual(source.dpi?.x, 72)
+        var dpi = ImageOptions(), strip = ImageOptions()
+        dpi.dpi = 300
+        strip.dpi = 300
+        strip.keepMetadata = false
+        func samples(_ file: Data) throws -> [UInt8] {
+            ImagePixels.straight(try XCTUnwrap(CGImageSourceCreateWithData(file as CFData, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) })).samples
+        }
+        for format in ["jpg", "webp", "jxl", "psd"] {
+            func exif(_ file: Data) -> [UInt8]? {
+                format == "psd" ? resources(file).blocks.first { $0.id == 0x0422 }.map { Array($0.bytes.dropFirst(12)) } : exifBlob([UInt8](file))
+            }
+            let kept = try written(source, format), changed = try written(source, format, dpi)
+            for (file, expected) in [(kept, 72.0), (changed, 300.0)] {
+                let blob = try XCTUnwrap(exif(file), format), entries = exifEntries(blob)
+                XCTAssertEqual(exifRational(blob, entries[0x011A]), expected, format)
+                XCTAssertEqual(exifRational(blob, entries[0x011B]), expected, format)
+                XCTAssertEqual(entries[0x0128]?.value, 2, format) // inches
+                XCTAssertNotNil(entries[0x0110], format)
+            }
+            XCTAssertNil(exif(try written(source, format, strip)), format)
+            XCTAssertEqual(try samples(changed), try samples(kept), format) // only metadata changes
+        }
+    }
+
     func testExifPixelDimensionsArePatchedInPlace() {
         // Little-endian SHORT dimensions become LONGs in place; a cut-short directory is left as it is.
         let little: [UInt8] = [0x49, 0x49, 42, 0, 8, 0, 0, 0, 1, 0, 0x69, 0x87, 4, 0, 1, 0, 0, 0, 26, 0, 0, 0, 0, 0, 0, 0,
