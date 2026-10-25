@@ -36,7 +36,7 @@ extension Markdown {
         let parsers: [BlockParser]
         private let candidates: [[BlockParser]]
         /// Per character: 1 + the index of its parsers in `candidates`, 0 for none (a lookup on every line).
-        private let candidateIndex: [UInt8]
+        private let candidateIndex: [UInt32]
         let globalParsers: [BlockParser]?
 
         init(_ parsers: [BlockParser]) {

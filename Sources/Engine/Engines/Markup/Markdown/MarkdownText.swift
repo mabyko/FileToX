@@ -111,13 +111,12 @@ extension Markdown {
     // MARK: Conversions
 
     /// The values of a character-keyed dictionary in a table indexed by the character: (values, 1 + value index or 0).
-    static func characterTable<Value>(_ dictionary: [Char: Value]) -> ([Value], [UInt8]) {
-        precondition(dictionary.count < 256, "A character table holds up to 255 entries")
+    static func characterTable<Value>(_ dictionary: [Char: Value]) -> ([Value], [UInt32]) {
         var values: [Value] = []
-        var index = [UInt8](repeating: 0, count: 0x10000)
+        var index = [UInt32](repeating: 0, count: 0x10000)
         for (c, value) in dictionary {
             values.append(value)
-            index[c.int] = UInt8(values.count)
+            index[c.int] = UInt32(values.count)
         }
         return (values, index)
     }

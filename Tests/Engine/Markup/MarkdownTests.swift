@@ -137,6 +137,38 @@ final class MarkdownTests: XCTestCase {
         XCTAssertEqual(mismatches, [])
     }
 
+    func testParserListsTakeAnyNumberOfOpeningCharacters() throws {
+        final class InlineProbe: Markdown.InlineParser {
+            init(_ characters: [Markdown.Char]) {
+                super.init()
+                openingCharacters = characters
+            }
+        }
+        final class BlockProbe: Markdown.BlockParser {
+            init(_ characters: [Markdown.Char]) {
+                super.init()
+                openingCharacters = characters
+            }
+        }
+        // 295 distinct openings, more than one byte can index: ASCII letters and digits, Hangul syllables, CJK, U+FFFD.
+        let characters = (Array("abcdefghijklmnopqrstuvwxyz0123456789".utf16) + Array(0xAC00..<0xAD00) + [0x4E00, 0x4E8C, 0xFFFD]).map(Markdown.Char.init)
+        let builder = Markdown.PipelineBuilder()
+        let inline = InlineProbe(characters), block = BlockProbe(characters)
+        builder.inlineParsers.insert(inline, at: 0)
+        builder.blockParsers.insert(block, at: 0)
+        let pipeline = Markdown.Pipeline(builder)
+        XCTAssertTrue(characters.allSatisfy { pipeline.inlineParsers.parsersForOpeningCharacter($0)?.first === inline })
+        XCTAssertTrue(characters.allSatisfy { pipeline.blockParsers.parsersForOpeningCharacter($0)?.first === block })
+        XCTAssertNil(pipeline.inlineParsers.parsersForOpeningCharacter("Z"))
+        // The probes never match, so the text parses as without them.
+        let markdown = "가나다 *emphasis* and `code`  \nnext 줄\n\n- 갈 item\n- b\n\n> quote 가\n\n[link](https://example.com) &amp; \\* <b>x</b>\n"
+        XCTAssertEqual(try Markdown.toHtml(markdown, pipeline), try Markdown.toHtml(markdown, .commonMark))
+
+        // Every UTF-16 code unit as a key: indexes up to 65,536 beside the empty entry.
+        let (values, index) = Markdown.characterTable(Dictionary(uniqueKeysWithValues: (0...0xFFFF).map { (Markdown.Char(UInt16($0)), $0) }))
+        XCTAssertTrue((0...0xFFFF).allSatisfy { index[$0] > 0 && values[Int(index[$0]) - 1] == $0 })
+    }
+
     func testBlockParserContextRefreshesAfterFailedParserMutatesChildren() {
         final class ProbeParser: Markdown.BlockParser {
             let probe: (Markdown.BlockProcessor) -> Void

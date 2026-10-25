@@ -24,7 +24,7 @@ extension Markdown {
         let parsers: [InlineParser]
         private let candidates: [[InlineParser]]
         /// Per character: 1 + the index of its parsers in `candidates`, 0 for none (a lookup at every inline).
-        private let candidateIndex: [UInt8]
+        private let candidateIndex: [UInt32]
         let globalParsers: [InlineParser]?
         let postInlineProcessors: [PostInlineProcessor]
         // 0: literal, 1: parser, 2: autolink only (ordinary words can stay in the literal scan).
