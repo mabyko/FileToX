@@ -122,7 +122,7 @@ def selftest():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--rid", choices=["osx-arm64", "osx-x64"], default="osx-arm64")
+    parser.add_argument("--rid", choices=["osx-arm64"], default="osx-arm64")
     parser.add_argument("--selftest", action="store_true")
     options = parser.parse_args()
     if options.selftest:

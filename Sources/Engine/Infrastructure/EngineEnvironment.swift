@@ -87,14 +87,8 @@ public final class EngineEnvironment: @unchecked Sendable {
         return nil
     }
 
-    /// "osx-arm64" or "osx-x64", the name of the bundled engine folders.
-    public static let runtimeIdentifier: String = {
-        #if arch(arm64)
-        "osx-arm64"
-        #else
-        "osx-x64"
-        #endif
-    }()
+    /// The supported Apple Silicon engine folder.
+    public static let runtimeIdentifier = "osx-arm64"
 
     /// The folder of the user's own copy of package `id`, when it has every program.
     public static func ownCopyFolder(_ id: String) -> String? {

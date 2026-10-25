@@ -11,6 +11,15 @@ case "${ARCHS:-arm64}" in
 esac
 : "${TARGET_BUILD_DIR:?run from Xcode}" "${EXECUTABLE_FOLDER_PATH:?run from Xcode}"
 
+stage_code() {
+    local code_source=$1 code_destination=$2
+    cp -p "$code_source" "$code_destination"
+    if [[ "$(lipo -archs "$code_destination")" != arm64 ]]; then
+        lipo "$code_destination" -thin arm64 -output "$code_destination"
+    fi
+    codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" --options runtime "$code_destination"
+}
+
 python3 -I "$root/Tools/fetch-bundled-engines.py" --rid "$rid" >/dev/null
 source="$root/build/engines/$rid"
 destination="$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/engines"
@@ -22,13 +31,15 @@ while IFS= read -r -d '' file; do
     relative=${file#"$source/"}
     if file -b "$file" | grep -q 'Mach-O'; then
         mkdir -p "$destination/$(dirname "$relative")"
-        cp -p "$file" "$destination/$relative"
-        codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" --options runtime "$destination/$relative"
+        stage_code "$file" "$destination/$relative"
     elif [[ "$(basename "$file")" != .filee-component ]]; then
         mkdir -p "$notices/$(dirname "$relative")"
         cp -p "$file" "$notices/$relative"
     fi
 done < <(find "$source" -type f -print0)
+# Replace the embed phase's universal copy and sign the selected slice before the helper is signed.
+: "${FRAMEWORKS_FOLDER_PATH:?run from Xcode}"
+stage_code "$root/Vendor/PDFium/lib/libpdfium.dylib" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/libpdfium.dylib"
 cp "$root/Resources/Filee.LICENSE" "$notices/Filee.LICENSE"
 # LibRaw and libjpeg-turbo are compiled into the helper (their licences and notices ship with the binary).
 cp "$root/docs/upstream/LibRaw.LICENSE" "$root/docs/upstream/LibRaw.THIRD-PARTY-NOTICES.md" "$notices/"
