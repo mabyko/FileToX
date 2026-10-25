@@ -136,7 +136,7 @@ enum PsdCodec {
         case "tiff":
             blocks = EmbeddedProfiles.tiffValues(file, tags: [34377, 33723], directories: 1)?.first.map(tiffBlocks) ?? []
         case "psd", "psb":
-            blocks = resourceStream(file).map(metadataBlocks) ?? []
+            blocks = resourceStream(file).map { metadataBlocks($0) } ?? []
         default:
             break
         }
@@ -153,7 +153,7 @@ enum PsdCodec {
 
     /// One TIFF picture's blocks: its Photoshop resources (34377), or its IPTC-NAA record (33723) when they hold none.
     private static func tiffBlocks(_ tags: [Int: Data]) -> [(id: Int, bytes: [UInt8])] {
-        var blocks = tags[34377].map { metadataBlocks([UInt8]($0)) } ?? []
+        var blocks = tags[34377].map { metadataBlocks($0) } ?? []
         // TIFF pads the record to whole LONGs; its datasets say where it ends.
         if !blocks.contains(where: { $0.id == 0x0404 }), let record = tags[33723].map({ [UInt8]($0) }), iimLength(record) > 0 {
             var wrapped = BigEndianData()
@@ -180,39 +180,46 @@ enum PsdCodec {
         return i
     }
 
-    /// The valid ICC profiles (0x040F) of a PSD/PSB file's image resources; nil without a readable resource section.
+    /// The valid ICC profiles (0x040F) of a PSD/PSB file's image resources. Nil without a readable resource section, and
+    /// when they hold more than `EmbeddedProfiles.budget` bytes together (counted before any is copied): the profile
+    /// then stays inferred.
     static func profiles(_ file: Data) -> [Data]? {
-        resourceStream(file).map { stream in blocks(stream, ids: [0x040F]).compactMap { CodecPixels.validProfile(Data($0.bytes[$0.data])) } }
+        guard let stream = resourceStream(file), let found = blocks(stream, ids: [0x040F], limit: EmbeddedProfiles.budget) else { return nil }
+        return found.compactMap { CodecPixels.validProfile(Data($0.bytes[$0.data])) }
     }
 
-    /// The image resource section of a PSD/PSB file.
-    private static func resourceStream(_ file: Data) -> [UInt8]? {
+    /// The image resource section of a PSD/PSB file, not copied.
+    private static func resourceStream(_ file: Data) -> Data? {
         func u32(_ at: Int) -> Int { file[at..<at + 4].reduce(0) { $0 << 8 | Int($1) } }
         guard file.count >= 34, file.starts(with: Array("8BPS".utf8)) else { return nil }
         let resources = file.startIndex + 30 + u32(file.startIndex + 26)
         guard file.endIndex - resources >= 4, u32(resources) <= file.endIndex - resources - 4 else { return nil }
-        return Array(file[resources + 4..<resources + 4 + u32(resources)])
+        return file[resources + 4..<resources + 4 + u32(resources)]
     }
 
     /// Signatures of Photoshop resource blocks; only 8BIM blocks are copied, the others are stepped over.
     private static let resourceSignatures: Set<[UInt8]> = Set(["8BIM", "MeSa", "PHUT", "AgHg", "DCSR"].map { Array($0.utf8) })
 
     /// The complete metadata blocks of a resource stream, each with its padding byte.
-    private static func metadataBlocks(_ stream: [UInt8]) -> [(id: Int, bytes: [UInt8])] {
-        blocks(stream, ids: metadataIds).map { ($0.id, $0.bytes) }
+    private static func metadataBlocks<Stream: RandomAccessCollection<UInt8>>(_ stream: Stream) -> [(id: Int, bytes: [UInt8])] where Stream.Index == Int {
+        (blocks(stream, ids: metadataIds) ?? []).map { ($0.id, $0.bytes) }
     }
 
     /// The complete 8BIM blocks with `ids` of a resource stream, each with its padding byte, and where in it the block's
-    /// data lies. Reading stops at the first block that is malformed or runs past the stream.
-    private static func blocks(_ stream: [UInt8], ids: Set<Int>) -> [(id: Int, bytes: [UInt8], data: Range<Int>)] {
-        var blocks: [(id: Int, bytes: [UInt8], data: Range<Int>)] = [], i = 0
-        while stream.count - i >= 12, resourceSignatures.contains(Array(stream[i..<i + 4])) {
+    /// data lies. Reading stops at the first block that is malformed or runs past the stream; nil once the blocks' data
+    /// would pass `limit` bytes, before that block is copied.
+    private static func blocks<Stream: RandomAccessCollection<UInt8>>(_ stream: Stream, ids: Set<Int>, limit: Int = .max)
+        -> [(id: Int, bytes: [UInt8], data: Range<Int>)]? where Stream.Index == Int {
+        var blocks: [(id: Int, bytes: [UInt8], data: Range<Int>)] = [], i = stream.startIndex, left = limit
+        while stream.endIndex - i >= 12, resourceSignatures.contains(Array(stream[i..<i + 4])) {
             let id = Int(stream[i + 4]) << 8 | Int(stream[i + 5])
             let data = i + 6 + ((Int(stream[i + 6]) + 2) & ~1) // past the Pascal name, padded to an even length
-            guard stream.count - data >= 4 else { break }
+            guard stream.endIndex - data >= 4 else { break }
             let size = stream[data..<data + 4].reduce(0) { $0 << 8 | Int($1) }
-            guard size <= stream.count - data - 4 else { break }
+            guard size <= stream.endIndex - data - 4 else { break }
             if stream[i..<i + 4].elementsEqual("8BIM".utf8), ids.contains(id) {
+                guard size <= left else { return nil }
+                left -= size
                 blocks.append((id, Array(stream[i..<data + 4 + size]) + (size % 2 == 1 ? [0] : []), data + 4 - i..<data + 4 + size - i))
             }
             i = data + 4 + size + size % 2

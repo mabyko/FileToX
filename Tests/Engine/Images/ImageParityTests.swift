@@ -341,6 +341,35 @@ final class ImageParityTests: XCTestCase {
         }
     }
 
+    func testPhotoshopProfilesCountAgainstTheProfileBudget() throws {
+        let srgb = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB)?.copyICCData() as Data?)
+        let p3 = try XCTUnwrap(CGColorSpace(name: CGColorSpace.displayP3)?.copyICCData() as Data?)
+        let adobe = [UInt8](try Data(contentsOf: URL(fileURLWithPath: "/System/Library/ColorSync/Profiles/AdobeRGB1998.icc")))
+        func padded(_ size: Int) -> [UInt8] { adobe + [UInt8](repeating: 0, count: size - adobe.count) }
+        for format in ["psd", "psb"] {
+            let plain = [UInt8](try written(ImageFrame(image: pattern(3, width: 6, height: 4)), format))
+            // Two profiles are both candidates; the one ImageIO decoded with is recorded.
+            let two = addingResources(plain, resource(0x040F, [UInt8](srgb)) + resource(0x040F, [UInt8](p3)))
+            XCTAssertEqual(PsdCodec.profiles(two), [srgb, p3], format)
+            let frame = try read(two, format: format)
+            let recorded = try XCTUnwrap(frame.properties[ImageFrame.iccKey] as? Data, format)
+            XCTAssertTrue([srgb, p3].contains(recorded), format)
+            XCTAssertTrue(CFEqual(CGColorSpace(iccData: recorded as CFData), frame.image.colorSpace), format)
+            // Under the budget a padded profile is kept as stored.
+            let under = try read(addingResources(plain, resource(0x040F, padded(1 << 20))), format: format)
+            XCTAssertEqual(under.properties[ImageFrame.iccKey] as? Data, Data(padded(1 << 20)), format)
+            // Above it, in one resource or two together, nothing is read and the profile stays inferred.
+            let over = format == "psd" ? resource(0x040F, padded(8_500_000)) + resource(0x040F, padded(8_500_000)) : resource(0x040F, padded(16_777_220))
+            let large = addingResources(plain, over)
+            XCTAssertNil(PsdCodec.profiles(large), format)
+            let inferred = try read(large, format: format)
+            XCTAssertNil(inferred.properties[ImageFrame.iccKey], format)
+            let png = try written(inferred, "png")
+            XCTAssertLessThan(try XCTUnwrap(ImageEncoder.pngProfiles(png)).inflated, 1 << 20, format) // no padded profile in the PNG
+            XCTAssertEqual(ImagePixels.straight(try read(png, format: "png").image).samples, ImagePixels.straight(inferred.image).samples, format)
+        }
+    }
+
     func testPngRawProfilesCarryIptcWithinOneInflationBudget() throws {
         let record = iim([(2, 5, "From PNG"), (2, 25, "k1"), (2, 25, "k2")])
         let iptc = resource(0x0404, record)
