@@ -37,7 +37,8 @@ struct ImageFrame {
     /// Opaque JPEG COM and Photoshop APP13 marker segments, removed by keepMetadata=false.
     static let jpegMarkersKey = "FileToXJpegMarkers" as CFString
     /// The source's Photoshop metadata resource blocks (IPTC, its digest, caption, copyright flag, URL) as stored
-    /// (`PsdCodec.metadataResources`), written into PSD/PSB; removed by keepMetadata=false.
+    /// (`PsdCodec.metadataResources`), written into PSD/PSB, and for sources other than JPEG (whose own marker segments
+    /// are kept) into JPEG APP13 and PNG's raw profile; removed by keepMetadata=false.
     static let photoshopKey = "FileToXPhotoshop" as CFString
     /// Exact ICC bytes of the embedded profile ImageIO decoded the frame with (JPEG APP2, PNG iCCP, `EmbeddedProfiles`
     /// for TIFF, PSD/PSB, WebP, GIF, HEIF/AVIF, JPEG XL and JPEG 2000); empty when it used its untagged default. Absent
@@ -438,13 +439,16 @@ enum ImageEncoder {
 
     /// ImageMagick's PNG raw-profile convention keeps Photoshop resources that ImageIO cannot serialize.
     private static func preservingJpegMetadata(_ png: Data, _ frame: ImageFrame) throws -> Data {
-        guard let markers = frame.properties[ImageFrame.jpegMarkersKey] as? Data else { return png }
-        let segments = JpegEncoder.segments(Data([0xFF, 0xD8]) + markers + Data([0xFF, 0xD9]))
         var comments = Data(), photoshop = Data()
-        for (marker, payload) in segments {
-            if marker == 0xFE { comments.append(payload) }
-            if marker == 0xED { photoshop.append(payload.dropFirst(14)) }
+        if let markers = frame.properties[ImageFrame.jpegMarkersKey] as? Data {
+            for (marker, payload) in JpegEncoder.segments(Data([0xFF, 0xD8]) + markers + Data([0xFF, 0xD9])) {
+                if marker == 0xFE { comments.append(payload) }
+                if marker == 0xED { photoshop.append(payload.dropFirst(14)) }
+            }
+        } else if let blocks = frame.properties[ImageFrame.photoshopKey] as? Data {
+            photoshop = blocks
         }
+        guard !comments.isEmpty || !photoshop.isEmpty else { return png }
         var chunks = Data()
         func text(_ name: String, _ value: Data) throws { chunks += try pngChunk("tEXt", Data(name.utf8) + Data([0]) + value) }
         if !comments.isEmpty { try text("Comment", Data(comments.prefix { $0 != 0 })) }

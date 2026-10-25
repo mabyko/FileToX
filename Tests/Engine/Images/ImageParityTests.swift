@@ -146,6 +146,11 @@ final class ImageParityTests: XCTestCase {
         return (data, try read(data))
     }
 
+    /// `frame` through the preset's options and the writer of `format`, as the image engine converts it.
+    private func written(_ frame: ImageFrame, _ format: String, _ options: ImageOptions = ImageOptions()) throws -> Data {
+        try photoshop(frame, format, options)
+    }
+
     /// `frame` through the preset's options and the PSD/PSB writer, as the image engine converts it.
     private func photoshop(_ frame: ImageFrame, _ format: String, _ options: ImageOptions = ImageOptions()) throws -> Data {
         let folder = GraphicsTestKit.folder()
@@ -434,6 +439,69 @@ final class ImageParityTests: XCTestCase {
             add(tag, "")
         }
         return values
+    }
+
+    /// A little-endian 2 × 2 RGB TIFF with Photoshop resources (34377, BYTE) and an IPTC record (33723, LONG, padded to
+    /// whole LONGs as Photoshop writes it).
+    private func tiffWithPhotoshopData(_ resources: [UInt8], _ record: [UInt8]) -> Data {
+        let padded = record + [UInt8](repeating: 0, count: (4 - record.count % 4) % 4), pixels = [UInt8](repeating: 120, count: 12)
+        func u16(_ v: Int) -> [UInt8] { [UInt8(v & 255), UInt8(v >> 8)] }
+        func u32(_ v: Int) -> [UInt8] { [UInt8(v & 255), UInt8(v >> 8 & 255), UInt8(v >> 16 & 255), UInt8(v >> 24)] }
+        let entries = 11, data = 8 + 2 + 12 * entries + 4
+        let bits = data, iptc = bits + 6, photoshop = iptc + padded.count, image = photoshop + resources.count
+        let fields: [(Int, Int, Int, Int)] = [(256, 3, 1, 2), (257, 3, 1, 2), (258, 3, 3, bits), (259, 3, 1, 1), (262, 3, 1, 2), (273, 4, 1, image),
+                                              (277, 3, 1, 3), (278, 3, 1, 2), (279, 4, 1, 12), (33723, 4, padded.count / 4, iptc), (34377, 1, resources.count, photoshop)]
+        var file: [UInt8] = [0x49, 0x49, 42, 0] + u32(8) + u16(entries)
+        for (tag, type, count, value) in fields { file += u16(tag) + u16(type) + u32(count) + (type == 3 && count == 1 ? u16(value) + [0, 0] : u32(value)) }
+        return Data(file + u32(0) + u16(8) + u16(8) + u16(8) + padded + resources + pixels)
+    }
+
+    func testIptcOfPngPsdAndTiffSourcesReachJpegAndPngToo() throws {
+        let record = iim([(2, 5, "Carried"), (2, 25, "k1")]), iptc = resource(0x0404, record), copyright = resource(0x040A, [1])
+        func chunk(_ type: String, _ payload: [UInt8]) -> [UInt8] {
+            let body = Array(type.utf8) + payload
+            let crc = Int(body.withUnsafeBytes { crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count)) })
+            return [24, 16, 8, 0].map { UInt8(payload.count >> $0 & 255) } + body + [24, 16, 8, 0].map { UInt8(crc >> $0 & 255) }
+        }
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let plain = FilePath.combine(folder, "plain.png")
+        try ImageEncoder.save([ImageFrame(image: pattern(3, width: 6, height: 4))], to: plain, format: "png")
+        let png = [UInt8](try Data(contentsOf: URL(fileURLWithPath: plain)))
+        let raw = Array("\niptc\n\(String(format: "%8lu", record.count))\n".utf8) + Array(record.map { String(format: "%02x", $0) }.joined().utf8) + [10]
+        let imageIOTiff = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(imageIOTiff, "public.tiff" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, pattern(3, width: 6, height: 4),
+                                   [kCGImagePropertyIPTCDictionary: [kCGImagePropertyIPTCObjectName: "Carried", kCGImagePropertyIPTCKeywords: ["k1"]]] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let built = GraphicsBuilders.layeredPsd(6, 4, composite: { _, _ in (9, 99, 199) }, layers: [])
+        let sources: [(String, Data, [[UInt8]])] = [
+            ("png", Data(png.prefix(33) + chunk("tEXt", Array("Raw profile type iptc".utf8) + [0] + raw) + png.dropFirst(33)), [iptc]),
+            ("psd", addingResources(built, iptc + copyright), [iptc, copyright]),
+            ("tiff", tiffWithPhotoshopData(copyright, record), [copyright, iptc]),
+            ("tiff", imageIOTiff as Data, []),
+        ]
+        for (format, data, expected) in sources {
+            let frame = try read(data, format: format)
+            let jpeg = try written(frame, "jpg")
+            let blocks = PsdCodec.metadataResources(jpeg, format: "jpg")
+            // ImageIO's own TIFF keeps the record it serialized; its first dataset is the one written.
+            let wanted = expected.isEmpty ? [UInt8](PsdCodec.metadataResources(data, format: "tiff")) : expected.flatMap { $0 }
+            XCTAssertFalse(wanted.isEmpty, format)
+            XCTAssertEqual([UInt8](blocks), wanted, "\(format) → JPEG APP13")
+            XCTAssertEqual(imageIOIptc(jpeg)?[kCGImagePropertyIPTCObjectName] as? String, "Carried", "\(format) → JPEG, read by ImageIO")
+            XCTAssertEqual([UInt8](PsdCodec.metadataResources(try written(frame, "png"), format: "png")), wanted, "\(format) → PNG")
+            XCTAssertEqual(resources(try photoshop(frame, "psd")).blocks.filter { [0x0404, 0x040A].contains($0.id) }.flatMap(\.bytes), wanted, "\(format) → PSD")
+            var options = ImageOptions()
+            options.keepMetadata = false
+            XCTAssertTrue(PsdCodec.metadataResources(try written(frame, "jpg", options), format: "jpg").isEmpty, format)
+            XCTAssertTrue(PsdCodec.metadataResources(try written(frame, "png", options), format: "png").isEmpty, format)
+        }
+        // A TIFF record cut inside its second dataset's header keeps the first (zero padding could complete a cut value);
+        // a value that isn't IIM is no IPTC.
+        let cut = try read(tiffWithPhotoshopData([], Array(record.dropLast(4))), format: "tiff")
+        XCTAssertEqual(cut.properties[ImageFrame.photoshopKey] as? Data, Data(resource(0x0404, iim([(2, 5, "Carried")]))))
+        XCTAssertNil(try read(tiffWithPhotoshopData([], [0, 1, 2, 3]), format: "tiff").properties[ImageFrame.photoshopKey])
     }
 
     func testPsdAndPsbKeepExifXmpAndDocumentResourcesButHaveNoPlaceForComments() throws {

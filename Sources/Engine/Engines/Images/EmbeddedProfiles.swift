@@ -28,33 +28,41 @@ enum EmbeddedProfiles {
     }
 
     /// TIFF: the InterColorProfile tag (34675) of every picture in the main IFD chain, when the chain has as many
-    /// pictures as ImageIO reads. BigTIFF is not read.
+    /// pictures as ImageIO reads.
     private static func tiff(_ file: Data, count: Int) -> [[Data]]? {
+        guard let directories = tiffValues(file, tags: [34675], directories: count + 1), directories.count == count else { return nil }
+        return directories.map { $0[34675].flatMap(CodecPixels.validProfile).map { [$0] } ?? [] }
+    }
+
+    /// The bytes of `tags` (BYTE, LONG or UNDEFINED values) in the first `directories` IFDs of a classic TIFF's main
+    /// chain. Nil for BigTIFF, a malformed chain or values beyond the budget.
+    static func tiffValues(_ file: Data, tags: Set<Int>, directories: Int) -> [[Int: Data]]? {
         guard file.count >= 8, file[file.startIndex] == file[file.startIndex + 1], [0x49, 0x4D].contains(file[file.startIndex]) else { return nil }
         let little = file[file.startIndex] == 0x49
         func number(_ at: Int, _ size: Int) -> Int {
             (0..<size).reduce(0) { $0 << 8 | Int(file[file.startIndex + at + (little ? size - 1 - $1 : $1)]) }
         }
         guard number(2, 2) == 42 else { return nil }
-        var profiles: [[Data]] = [], seen = Set<Int>(), ifd = number(4, 4), left = budget
-        while ifd != 0 {
+        var result: [[Int: Data]] = [], seen = Set<Int>(), ifd = number(4, 4), left = budget
+        while ifd != 0, result.count < directories {
             // Room for the entry count and the next directory's offset.
-            guard profiles.count < count, ifd >= 8, ifd <= file.count - 6, seen.insert(ifd).inserted else { return nil }
+            guard ifd >= 8, ifd <= file.count - 6, seen.insert(ifd).inserted else { return nil }
             let entries = number(ifd, 2)
             guard entries <= (file.count - ifd - 6) / 12 else { return nil }
-            var found: [Data] = []
-            for entry in (0..<entries).map({ ifd + 2 + 12 * $0 }) where number(entry, 2) == 34675 && [1, 7].contains(number(entry + 2, 2)) {
-                let size = number(entry + 4, 4), offset = size <= 4 ? entry + 8 : number(entry + 8, 4)
-                guard size <= left, offset <= file.count - size else { return nil }
+            var values: [Int: Data] = [:]
+            for entry in (0..<entries).map({ ifd + 2 + 12 * $0 }) where tags.contains(number(entry, 2)) {
+                guard let unit = [1: 1, 4: 4, 7: 1][number(entry + 2, 2)] else { continue }
+                let count = number(entry + 4, 4)
+                guard count <= left / unit else { return nil }
+                let size = count * unit, offset = size <= 4 ? entry + 8 : number(entry + 8, 4)
+                guard offset <= file.count - size else { return nil }
                 left -= size
-                if let valid = CodecPixels.validProfile(file.subdata(in: file.startIndex + offset..<file.startIndex + offset + size)) {
-                    found.append(valid)
-                }
+                values[number(entry, 2)] = file.subdata(in: file.startIndex + offset..<file.startIndex + offset + size)
             }
-            profiles.append(found)
+            result.append(values)
             ifd = number(ifd + 2 + 12 * entries, 4)
         }
-        return profiles.count == count ? profiles : nil
+        return result
     }
 
     /// WebP: the ICCP chunk, the profile of every frame.

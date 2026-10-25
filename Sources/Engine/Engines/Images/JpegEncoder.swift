@@ -94,8 +94,10 @@ enum JpegEncoder {
             throw ConversionError("JPEG encoding failed: " + String(cString: message))
         }
         let encoded = Data(bytes: data, count: Int(length))
-        guard let markers = frame.properties[ImageFrame.jpegMarkersKey] as? Data else { return encoded }
-        // COM and Photoshop APP13 are opaque; keep their complete payloads instead of converting IPTC to XMP.
+        // COM and Photoshop APP13 are opaque; keep their complete payloads instead of converting IPTC to XMP. Other
+        // sources' Photoshop metadata resources go into APP13 the same way.
+        guard let markers = frame.properties[ImageFrame.jpegMarkersKey] as? Data
+                ?? (frame.properties[ImageFrame.photoshopKey] as? Data).map(photoshopSegments) else { return encoded }
         // JFIF requires APP0 immediately after SOI; Adobe's APP14 also stays in the encoder header.
         var offset = 2
         while offset + 4 <= encoded.count, encoded[offset] == 0xFF, [0xE0, 0xEE].contains(encoded[offset + 1]) {
@@ -149,6 +151,17 @@ enum JpegEncoder {
         var profile = Data()
         for sequence in 1...total { profile.append(chunks[sequence]!) }
         return CodecPixels.validProfile(profile)
+    }
+
+    /// Photoshop resource blocks as APP13 "Photoshop 3.0" segments; a block may continue in the next segment.
+    static func photoshopSegments(_ blocks: Data) -> Data {
+        let header = Data("Photoshop 3.0\0".utf8), room = 65533 - header.count
+        var result = Data()
+        for start in stride(from: blocks.startIndex, to: blocks.endIndex, by: room) {
+            let part = blocks[start..<min(start + room, blocks.endIndex)], length = header.count + part.count + 2
+            result += [0xFF, 0xED, UInt8(length >> 8), UInt8(length & 255)] + header + part
+        }
+        return result
     }
 
     /// COM and Photoshop APP13, including multipart resources and markers between progressive scans.

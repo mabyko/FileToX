@@ -56,9 +56,8 @@ enum ImageReader {
         let jpeg = format == "jpg" ? try Data(contentsOf: URL(fileURLWithPath: path)) : nil
         let sampling = jpeg.flatMap(JpegEncoder.samplingFactors)
         let markers = jpeg.map(JpegEncoder.preservedMarkers)
-        // Photoshop's IPTC and other metadata resources as the file stores them, for PSD/PSB targets (ImageIO reads none
-        // from PNG text).
-        let photoshop = try ["jpg", "png", "psd", "psb"].contains(format)
+        // Photoshop's IPTC and other metadata resources as the file stores them (ImageIO reads none from PNG text).
+        let photoshop = try ["jpg", "png", "tiff", "psd", "psb"].contains(format)
             ? PsdCodec.metadataResources(jpeg ?? Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped), format: format) : Data()
         // Embedded profiles of each picture (one list for all when the file has one), matched below with the space ImageIO
         // decoded the picture in: its colour space alone can't tell a source profile from the default it assigns.

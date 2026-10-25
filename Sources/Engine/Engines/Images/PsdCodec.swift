@@ -121,10 +121,11 @@ enum PsdCodec {
     /// thumbnails, colour mode or print setup, which the flattened, possibly resized or converted copy doesn't have.
     private static let metadataIds: Set<Int> = [0x03F0, 0x0404, 0x040A, 0x040B, 0x0425]
 
-    /// The metadata resource blocks (`metadataIds`) of a JPEG, PNG or PSD/PSB file for PSD/PSB targets, byte for byte
-    /// in file order. JPEG: the Photoshop APP13 segments, joined (a block may continue in the next one). PNG:
-    /// ImageMagick's hex "Raw profile type 8bim", or its bare IIM "Raw profile type iptc" when no 8bim profile holds an
-    /// IPTC record. PSD/PSB: the image resources.
+    /// The metadata resource blocks (`metadataIds`) of a JPEG, PNG, TIFF or PSD/PSB file, byte for byte in file order.
+    /// JPEG: the Photoshop APP13 segments, joined (a block may continue in the next one). PNG: ImageMagick's hex "Raw
+    /// profile type 8bim", or its bare IIM "Raw profile type iptc" when no 8bim profile holds an IPTC record. TIFF: the
+    /// first picture's Photoshop resources (34377), or its IPTC-NAA record (33723) when they hold none. PSD/PSB: the
+    /// image resources.
     static func metadataResources(_ file: Data, format: String) -> Data {
         var blocks: [(id: Int, bytes: [UInt8])] = []
         switch format {
@@ -133,12 +134,38 @@ enum PsdCodec {
             blocks = metadataBlocks(JpegEncoder.segments(file).filter { $0.0 == 0xED && $0.1.starts(with: header) }.flatMap { $0.1.dropFirst(header.count) })
         case "png":
             blocks = pngMetadata(file)
+        case "tiff":
+            let tags = EmbeddedProfiles.tiffValues(file, tags: [34377, 33723], directories: 1)?.first ?? [:]
+            blocks = tags[34377].map { metadataBlocks([UInt8]($0)) } ?? []
+            // TIFF pads the record to whole LONGs; its datasets say where it ends.
+            if !blocks.contains(where: { $0.id == 0x0404 }), let record = tags[33723].map({ [UInt8]($0) }), iimLength(record) > 0 {
+                var wrapped = BigEndianData()
+                wrapped.resource(0x0404, Array(record.prefix(iimLength(record))))
+                blocks.append((0x0404, wrapped.data))
+            }
         case "psd", "psb":
             blocks = resourceStream(file).map(metadataBlocks) ?? []
         default:
             break
         }
         return Data(blocks.flatMap(\.bytes))
+    }
+
+    /// The length of the complete IPTC-NAA datasets (tag 0x1C, record, number, length, value) that start `record`.
+    private static func iimLength(_ record: [UInt8]) -> Int {
+        var i = 0
+        while record.count - i >= 5, record[i] == 0x1C {
+            var size = Int(record[i + 3]) << 8 | Int(record[i + 4]), header = 5
+            if size & 0x8000 != 0 { // an extended dataset: the length's own byte count, then the length
+                let count = size & 0x7FFF
+                guard count <= 4, record.count - i - 5 >= count else { break }
+                size = record[i + 5..<i + 5 + count].reduce(0) { $0 << 8 | Int($1) }
+                header += count
+            }
+            guard size <= record.count - i - header else { break }
+            i += header + size
+        }
+        return i
     }
 
     /// The valid ICC profiles (0x040F) of a PSD/PSB file's image resources; nil without a readable resource section.
