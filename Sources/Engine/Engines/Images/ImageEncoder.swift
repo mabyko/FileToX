@@ -240,7 +240,7 @@ enum ImageEncoder {
     /// `image.Write(path, format)` and `collection.Write(path, format)`.
     static func save(_ frames: [ImageFrame], to path: String, format: String) throws {
         var frames = frames
-        if !["jpg", "tiff", "ico"].contains(format) {
+        if !["jpg", "tiff", "ico", "psd", "psb"].contains(format) {
             for i in frames.indices where frames[i].image.colorSpace?.model == .cmyk || (format == "bmp" && frames[i].image.colorSpace?.model == .indexed) {
                 // RGB-only writers must not attach a CMYK ICC profile to converted RGB samples. ImageIO writes an indexed
                 // picture to BMP as bare pixels without a header; drawn as sRGB, its colours match the BMP writer's own

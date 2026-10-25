@@ -46,6 +46,31 @@ final class CmykQualityTests: XCTestCase {
         }
     }
 
+    func testPsdAndPsbKeepCmykInksAndTheirOwnProfile() throws {
+        let folder = GraphicsTestKit.folder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let inks: [UInt8] = [0, 0, 0, 0, 0, 0, 0, 255, 255, 0, 0, 0, 30, 80, 120, 90]
+        let generic = try XCTUnwrap(CGColorSpace(name: CGColorSpace.genericCMYK))
+        let icc = try XCTUnwrap(generic.copyICCData() as Data?)
+        let resource = Data("8BIM".utf8) + [0x04, 0x0F]
+        for tagged in [false, true] {
+            var frame = ImageFrame(image: ImagePixels.make(inks, 4, 1, components: 4, space: tagged ? generic : CGColorSpaceCreateDeviceCMYK(), alpha: false))
+            frame.properties[ImageFrame.iccKey] = tagged ? icc : Data()
+            for format in ["psd", "psb"] {
+                let path = FilePath.combine(folder, "\(tagged).\(format)")
+                try ImageEncoder.save([frame], to: path, format: format)
+                let data = try Data(contentsOf: URL(fileURLWithPath: path))
+                XCTAssertEqual([UInt8](data[12..<14]), [0, 4], "four channels")
+                XCTAssertEqual([UInt8](data[24..<26]), [0, 4], "CMYK colour mode")
+                XCTAssertEqual(data.range(of: resource) != nil, tagged)
+                if tagged { XCTAssertNotNil(data.range(of: icc)) }
+                let decoded = try read(data, format: format)
+                XCTAssertEqual(decoded.image.colorSpace?.model, .cmyk)
+                XCTAssertEqual(ImagePixels.straight(decoded.image).samples, inks)
+            }
+        }
+    }
+
     /// ImageIO-written 32×8 CMYK JPEG (quality 1.0) without its APP0, APP1, APP13 and Adobe APP14 markers: 8×8 blocks
     /// of no ink, K, C and C30 M80 Y120 K90, stored as 255 − ink.
     private static let unmarkedBlocks = "/9j/wAAUCAAIACAEAREAAhEBAxEBBBEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9sAQwABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB/9sAQwEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB/90ABAAE/9oADgQBAAIRAxEEEQA/AP7+K/7+D/v4P+/gKAP/AABz/AHoA/8Af4P9wiv+X8/4Pz/kvP/Z"

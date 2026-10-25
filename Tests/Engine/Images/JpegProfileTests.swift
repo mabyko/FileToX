@@ -141,7 +141,8 @@ final class JpegProfileTests: XCTestCase {
                 let output = try ImageReader.read(path, format: format, preset: Preset())[0]
                 XCTAssertEqual(output.image.width, decoded.image.width)
                 XCTAssertEqual(output.image.height, decoded.image.height)
-                XCTAssertNotEqual(output.image.colorSpace?.model, .cmyk)
+                // WebP and JPEG XL are RGB-only; Photoshop documents keep CMYK inks.
+                XCTAssertEqual(output.image.colorSpace?.model == .cmyk, name == CGColorSpace.genericCMYK && format.hasPrefix("ps"))
             }
         }
     }

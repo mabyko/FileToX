@@ -14,24 +14,35 @@ enum PsdCodec {
 
     /// Writes a PSD (version 1) or, when `large`, a PSB (version 2) with one layer "L1" and the composite.
     static func write(_ frame: ImageFrame, to path: String, large: Bool) throws {
-        let bitmap = ImagePixels.bitmap(frame.image)
-        let (width, height) = (bitmap.width, bitmap.height)
+        let (width, height) = (frame.image.width, frame.image.height)
         let limit = large ? 300_000 : 30_000
         guard width <= limit, height <= limit else {
             throw ConversionError("The picture is \(width) × \(height) pixels; \(large ? "PSB" : "PSD") files hold at most \(limit) × \(limit).")
         }
-        let gray = bitmap.gray != nil
-        let colorChannels = gray ? 1 : 3
-        let alpha = bitmap.hasAlpha
+        let native = frame.image.colorSpace?.model == .cmyk ? ImagePixels.straight(frame.image) : nil
+        let cmyk = native?.space.model == .cmyk
+        var gray = false, colorChannels = 4, alpha = native?.channels == 5
         // Straight (not premultiplied) channel planes.
-        var planes = [[UInt8]](repeating: [UInt8](repeating: 0, count: width * height), count: colorChannels + (alpha ? 1 : 0))
-        for i in 0..<width * height {
-            let a = Int(bitmap.pixels[i * 4 + 3])
-            for c in 0..<colorChannels {
-                let value = Int(bitmap.pixels[i * 4 + c])
-                planes[c][i] = UInt8(a == 0 ? 0 : a == 255 ? value : min(255, (value * 255 + a / 2) / a))
+        var planes: [[UInt8]]
+        if let native, cmyk {
+            // CMYK keeps its inks, stored inverted (0 = full ink) as Photoshop and ImageMagick store them.
+            planes = (0..<native.channels).map { c in
+                (0..<width * height).map { i in c < 4 ? 255 - native.samples[i * native.channels + c] : native.samples[i * native.channels + c] }
             }
-            if alpha { planes[colorChannels][i] = UInt8(a) }
+        } else {
+            let bitmap = ImagePixels.bitmap(frame.image)
+            gray = bitmap.gray != nil
+            colorChannels = gray ? 1 : 3
+            alpha = bitmap.hasAlpha
+            planes = [[UInt8]](repeating: [UInt8](repeating: 0, count: width * height), count: colorChannels + (alpha ? 1 : 0))
+            for i in 0..<width * height {
+                let a = Int(bitmap.pixels[i * 4 + 3])
+                for c in 0..<colorChannels {
+                    let value = Int(bitmap.pixels[i * 4 + c])
+                    planes[c][i] = UInt8(a == 0 ? 0 : a == 255 ? value : min(255, (value * 255 + a / 2) / a))
+                }
+                if alpha { planes[colorChannels][i] = UInt8(a) }
+            }
         }
 
         var out = BigEndianData()
@@ -42,14 +53,14 @@ enum PsdCodec {
         out.u32(height)
         out.u32(width)
         out.u16(8)
-        out.u16(gray ? 1 : 3)
+        out.u16(cmyk ? 4 : gray ? 1 : 3)
         out.u32(0) // colour mode data
 
         var resources = BigEndianData()
         if let dpi = frame.dpi, dpi.x > 0 {
             resources.resource(0x03ED, resolutionInfo(dpi))
         }
-        if let icc = CodecPixels.colorProfile(frame, colorModel: gray ? .monochrome : .rgb) {
+        if let icc = CodecPixels.colorProfile(frame, colorModel: cmyk ? .cmyk : gray ? .monochrome : .rgb) {
             resources.resource(0x040F, [UInt8](icc))
         }
         out.u32(resources.data.count)
