@@ -2,6 +2,13 @@
 
 모든 메시지는 UTF-8 NDJSON, 최대 4 MiB. 요청 `{v:1,id:String,method:String,params:Object}`, 응답 `{v:1,id,result}` 또는 `{v:1,id,error:{code,message}}`, 이벤트 `{v:1,event,data}`. enum은 camelCase 문자열, 날짜는 ISO8601. 이 문서는 병렬 구현에서 사용하는 필드 계약이다.
 
+앱은 helper 실행 시 `--chunked-output`을 전달한다. 이 옵션을 받은 helper는 4 MiB보다 큰 응답·이벤트를
+`{v:1,chunk:{id:UUID,offset:Int,total:Int,bytes:Base64}}` 전송 프레임으로 나눈다. 각 프레임은 기존 줄 제한을
+지키며 원본 JSON의 최대 2 MiB를 담는다. `offset`은 재조립한 바이트 수와 같아야 하며, 같은 `id`와 `total`의
+프레임이 끊김 없이 순서대로 온다. 재조립 뒤에는 위와 같은 v1 메시지를 처리하므로 파일 목록·이력을 생략하지 않는다.
+메시지 전체와 writer 대기 큐는 각각 64 MiB로 제한한다. 전체 제한을 넘는 응답은 오류, 완료 이벤트는 기존 fatal
+경로로 처리한다. 이 옵션이 없는 클라이언트에는 기존 v1 메시지만 보내며, 요청 줄 제한은 그대로 4 MiB다.
+
 - `hello`: `{protocol:1,hostVersion,fileeCommit,rid,dataDir}`.
 - `catalog.get` → `{formats:[{id,displayName,category,extensions,writable,isVirtual}],engines:[{id,displayName,available,reasonKey?,detail?,version?}]}`.
 - `selection.resolve {paths:[String]}` → `{profileId:String?,formats:[String],unknown:[String],rejected:[{path,reason}],slices:[Slice],tools:[Slice],presetOptions:[Slice],targets:[Target]}`. 일치하는 툴바 프로필이 없으면 `profileId=null`, `slices=[]`이며 전체 출력 형식은 그대로 반환한다.

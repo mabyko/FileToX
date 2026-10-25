@@ -24,6 +24,40 @@ public struct HostLineBuffer {
     }
 }
 
+struct HostMessageChunk: Decodable {
+    let id: String
+    let offset: Int
+    let total: Int
+    let bytes: String
+}
+
+/// A transport frame never changes the JSON message or the 4 MiB line limit.
+struct HostMessageAssembler {
+    static let maximumLength = 64 * 1024 * 1024
+    private var id: String?
+    private var total = 0
+    private var buffer = Data()
+    var isReceiving: Bool { id != nil }
+
+    mutating func append(_ chunk: HostMessageChunk) throws -> Data? {
+        guard UUID(uuidString: chunk.id) != nil,
+              chunk.total > HostLineBuffer.maximumLength, chunk.total <= Self.maximumLength,
+              chunk.offset == buffer.count,
+              chunk.bytes.utf8.count <= ((2 * 1024 * 1024 + 2) / 3) * 4,
+              let bytes = Data(base64Encoded: chunk.bytes), !bytes.isEmpty, bytes.count <= 2 * 1024 * 1024,
+              bytes.count <= chunk.total - buffer.count,
+              id == nil || (id == chunk.id && total == chunk.total) else {
+            throw HostError(code: "protocol_error", message: "분할된 엔진 응답이 올바르지 않습니다.")
+        }
+        if id == nil { id = chunk.id; total = chunk.total }
+        buffer.append(bytes)
+        guard buffer.count == total else { return nil }
+        let result = buffer
+        self = Self()
+        return result
+    }
+}
+
 public actor EngineHost {
     private struct WireMessage: Decodable {
         let v: Int
@@ -32,6 +66,7 @@ public actor EngineHost {
         let result: JSONValue?
         let error: HostWireError?
         let data: JSONValue?
+        let chunk: HostMessageChunk?
     }
     private struct HostWireError: Decodable { let code: String; let message: String }
     private struct Pending {
@@ -53,6 +88,7 @@ public actor EngineHost {
     private var handshakeTimeout: Task<Void, Never>?
     private var pending: [String: Pending] = [:]
     private var lineBuffer = HostLineBuffer()
+    private var messageAssembler = HostMessageAssembler()
     private var stderr = Data()
     private var shuttingDown = false
     private var restartTask: Task<Void, Never>?
@@ -92,7 +128,7 @@ public actor EngineHost {
         let temporary = dataDirectory.appendingPathComponent("tmp").path
         let child = Process()
         child.executableURL = executableURL
-        child.arguments = ["--data", core, "--engines", engines]
+        child.arguments = ["--data", core, "--engines", engines, "--chunked-output"]
         var environment = ProcessInfo.processInfo.environment
         environment["TMPDIR"] = temporary + "/"
         child.environment = environment
@@ -103,6 +139,7 @@ public actor EngineHost {
         runID = UUID()
         let generation = runID
         lineBuffer = HostLineBuffer()
+        messageAssembler = HostMessageAssembler()
         stderr = Data()
         input = stdin.fileHandleForWriting
         output = stdout.fileHandleForReading
@@ -171,7 +208,14 @@ public actor EngineHost {
         }
         do {
             for line in try lineBuffer.append(data) {
-                let message = try JSONDecoder.hostDecoder().decode(WireMessage.self, from: line)
+                var message = try JSONDecoder.hostDecoder().decode(WireMessage.self, from: line)
+                if let chunk = message.chunk {
+                    guard hello != nil, message.v == 1, message.id == nil, message.event == nil,
+                          message.result == nil, message.error == nil, message.data == nil else { throw HostError.interrupted }
+                    guard let complete = try messageAssembler.append(chunk) else { continue }
+                    message = try JSONDecoder.hostDecoder().decode(WireMessage.self, from: complete)
+                    guard message.chunk == nil else { throw HostError.interrupted }
+                } else if messageAssembler.isReceiving { throw HostError.interrupted }
                 guard message.v == 1, (message.id != nil) != (message.event != nil) else { throw HostError.interrupted }
                 if let id = message.id {
                     guard hello != nil, (message.result != nil) != (message.error != nil),
@@ -243,6 +287,7 @@ public actor EngineHost {
         }
         process = nil
         hello = nil
+        messageAssembler = HostMessageAssembler()
         handshakeTimeout?.cancel(); handshakeTimeout = nil
         try? input?.close(); try? output?.close(); try? errorOutput?.close()
         input = nil; output = nil; errorOutput = nil

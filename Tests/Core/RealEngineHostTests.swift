@@ -6,6 +6,33 @@ import XCTest
 @testable import FileToXCore
 
 final class RealEngineHostTests: XCTestCase {
+    func testLargePersistedHistorySurvivesTheRealHostTransport() async throws {
+        let executable = try engineHelper()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let core = folder.appendingPathComponent("core")
+        try FileManager.default.createDirectory(at: core, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let outputs = (0..<6_000).map { "/tmp/" + String(repeating: "페이지/", count: 40) + "\($0).png" }
+        let entry: [String: Any] = ["jobId": "many-pages", "finishedAt": "2026-10-25T00:00:00Z",
+            "presetId": "to-png", "presetName": "PNG", "state": "completed", "sources": ["/tmp/source.pdf"],
+            "outputs": outputs, "failures": [], "errors": []]
+        let saved = try JSONSerialization.data(withJSONObject: [entry])
+        try saved.write(to: core.appendingPathComponent("history.json"))
+        let host = EngineHost(executableURL: executable, dataDirectory: folder)
+        do {
+            let history = try await host.history()
+            XCTAssertEqual(history.count, 1)
+            XCTAssertEqual(history.first?.outputs, outputs)
+            let catalog = try await host.catalog()
+            XCTAssertEqual(catalog.formats.count, 172)
+            await host.shutdown()
+            XCTAssertEqual(try Data(contentsOf: core.appendingPathComponent("history.json")), saved)
+        } catch {
+            await host.shutdown()
+            throw error
+        }
+    }
+
     func testLanguageChangesReachHostWithoutRestartAndSettingsPersist() async throws {
         let executable = try engineHelper()
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

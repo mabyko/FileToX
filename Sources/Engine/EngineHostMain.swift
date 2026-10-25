@@ -11,7 +11,7 @@ public enum EngineHostMain {
         let devNull = open("/dev/null", O_RDWR)
         guard devNull >= 0 && dup2(devNull, STDIN_FILENO) >= 0 else { return 1 }
         close(devNull); _ = setpgid(0, 0); signal(SIGPIPE, SIG_IGN)
-        let wire = WireWriter(output)
+        let wire = WireWriter(output, chunkedOutput: arguments.contains("--chunked-output"))
         defer { close(input); close(output) }
         do { return try serve(arguments, wire, input) }
         catch { wire.event("fatal", ["code": "internal", "message": error.localizedDescription]); wire.complete(2); return 1 }

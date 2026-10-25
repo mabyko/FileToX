@@ -60,13 +60,19 @@ enum WireJson {
 
 /// A bounded queue and one writer preserve order while callers enqueue under the host gate.
 final class WireWriter: @unchecked Sendable {
+    static let maxMessage = 64 * 1024 * 1024
+    private static let chunkSize = 2 * 1024 * 1024
     private let output: Int32
+    private let chunkedOutput: Bool
     private let condition = NSCondition()
     private var queue: [Data] = []
+    private var queuedBytes = 0
     private var closing = false, completed = false
     private let worker = DispatchQueue(label: "FileToXEngine.wire")
     var broken: (() -> Void)?
-    init(_ output: Int32) { self.output = output; worker.async { self.pump() } }
+    init(_ output: Int32, chunkedOutput: Bool = false) {
+        self.output = output; self.chunkedOutput = chunkedOutput; worker.async { self.pump() }
+    }
     func response(_ id: String?, _ result: Any) { if !send(["v": 1, "id": id as Any? ?? NSNull(), "result": result]) { error(id, "internal", "The result is larger than \(WireJson.maxLine) bytes.") } }
     func error(_ id: String?, _ code: String, _ message: String) { _ = send(["v": 1, "id": id as Any? ?? NSNull(), "error": ["code": code, "message": message]]) }
     func event(_ name: String, _ data: Any) { _ = send(["v": 1, "event": name, "data": data]) }
@@ -74,11 +80,11 @@ final class WireWriter: @unchecked Sendable {
         guard var data = try? JSONSerialization.data(withJSONObject: message, options: [.withoutEscapingSlashes]) else { return false }
         data = EngineJsonEscaping.encode(data)
         data.append(10)
-        if data.count > WireJson.maxLine { return false }
+        if data.count > (chunkedOutput ? Self.maxMessage : WireJson.maxLine) { return false }
         condition.lock(); defer { condition.unlock() }
-        while queue.count >= 4096 && !closing { condition.wait() }
+        while (queue.count >= 4096 || queuedBytes + data.count > Self.maxMessage) && !closing { condition.wait() }
         if closing { return false }
-        queue.append(data); condition.broadcast(); return true
+        queue.append(data); queuedBytes += data.count; condition.broadcast(); return true
     }
     func fatal(_ code: String, _ message: String) {
         _ = send(["v": 1, "event": "fatal", "data": ["code": code, "message": message]])
@@ -96,17 +102,32 @@ final class WireWriter: @unchecked Sendable {
             condition.lock()
             while queue.isEmpty && !closing { condition.wait() }
             if queue.isEmpty { completed = true; condition.broadcast(); condition.unlock(); return }
-            let data = queue.removeFirst(); condition.broadcast(); condition.unlock()
-            let success = data.withUnsafeBytes { bytes -> Bool in
-                var offset = 0
-                while offset < bytes.count {
-                    let n = Darwin.write(output, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
-                    if n < 0 && errno == EINTR { continue }
-                    if n <= 0 { return false }; offset += n
-                }
-                return true
+            let data = queue.removeFirst(); queuedBytes -= data.count; condition.broadcast(); condition.unlock()
+            if !writeMessage(data) { condition.lock(); closing = true; queue.removeAll(); queuedBytes = 0; completed = true; condition.broadcast(); condition.unlock(); broken?(); return }
+        }
+    }
+    private func writeMessage(_ data: Data) -> Bool {
+        if data.count <= WireJson.maxLine { return write(data) }
+        let id = UUID().uuidString
+        // Emit one complete message before the next; only clients opting in may receive these transport frames.
+        for offset in stride(from: 0, to: data.count, by: Self.chunkSize) {
+            let bytes = data.subdata(in: offset..<min(data.count, offset + Self.chunkSize)).base64EncodedString()
+            let frame: [String: Any] = ["v": 1, "chunk": ["id": id, "offset": offset, "total": data.count, "bytes": bytes]]
+            guard var line = try? JSONSerialization.data(withJSONObject: frame, options: [.withoutEscapingSlashes]) else { return false }
+            line.append(10)
+            guard line.count <= WireJson.maxLine, write(line) else { return false }
+        }
+        return true
+    }
+    private func write(_ data: Data) -> Bool {
+        data.withUnsafeBytes { bytes in
+            var offset = 0
+            while offset < bytes.count {
+                let n = Darwin.write(output, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+                if n < 0 && errno == EINTR { continue }
+                if n <= 0 { return false }; offset += n
             }
-            if !success { condition.lock(); closing = true; queue.removeAll(); completed = true; condition.broadcast(); condition.unlock(); broken?(); return }
+            return true
         }
     }
 }

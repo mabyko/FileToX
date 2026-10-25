@@ -87,6 +87,39 @@ final class HostContractTests: XCTestCase {
         XCTAssertTrue(encoded.contains(#"\uC774\uB984\uD83D\uDE00 \u0026\u003C \u003E\u0027\u0022\u002B\u0060=/"#))
         XCTAssertEqual(try FileeJson.decode([String:String].self,from:Data(encoded.utf8))["name"],value)
     }
+    func testOptedInWriterChunksOversizedMessagesWithoutChangingContentOrOrder() throws {
+        let d = CoreTempDir(), path = try d.file("wire", "")
+        let output = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+        defer { try? output.close() }
+        let writer = WireWriter(output.fileDescriptor, chunkedOutput: true)
+        XCTAssertFalse(writer.send(["blob": String(repeating: "x", count: WireWriter.maxMessage)]))
+        let text = String(repeating: "한글😀", count: 250_000)
+        let large: [String: Any] = ["v": 1, "event": "job.finished", "data": ["jobId": "large", "text": text]]
+        let expected = EngineJsonEscaping.encode(try JSONSerialization.data(withJSONObject: large, options: [.withoutEscapingSlashes]))
+        XCTAssertGreaterThan(expected.count, WireJson.maxLine)
+        XCTAssertTrue(writer.send(large))
+        writer.response("next", ["ready": true])
+        writer.complete(10)
+        let lines = try Data(contentsOf: URL(fileURLWithPath: path)).split(separator: 10)
+        XCTAssertGreaterThan(lines.count, 2)
+        var assembled = Data(), id: String?
+        for line in lines.dropLast() {
+            XCTAssertLessThanOrEqual(line.count + 1, WireJson.maxLine)
+            let frame = hostObject(try JSONSerialization.jsonObject(with: Data(line)))
+            XCTAssertEqual(frame["v"] as? Int, 1)
+            let chunk = hostObject(frame["chunk"])
+            XCTAssertEqual(chunk["offset"] as? Int, assembled.count)
+            XCTAssertEqual(chunk["total"] as? Int, expected.count + 1)
+            if id == nil { id = try XCTUnwrap(chunk["id"] as? String) }
+            XCTAssertEqual(chunk["id"] as? String, id)
+            assembled.append(try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(chunk["bytes"] as? String))))
+        }
+        XCTAssertEqual(assembled, expected + Data([10]))
+        let restored = hostObject(try JSONSerialization.jsonObject(with: assembled))
+        XCTAssertEqual(hostObject(restored["data"])["text"] as? String, text)
+        let next = hostObject(try JSONSerialization.jsonObject(with: Data(try XCTUnwrap(lines.last))))
+        XCTAssertEqual(next["id"] as? String, "next")
+    }
     func testValidationRangesAndPaths() throws {
         try Validation.library(BuiltInData.createPresets(),BuiltInData.createProfiles()); try Validation.settings(AppSettings())
         var japanese = AppSettings(); japanese.language = "ja"; try Validation.settings(japanese)
