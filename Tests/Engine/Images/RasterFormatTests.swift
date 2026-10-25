@@ -423,6 +423,62 @@ extension RasterFormatTests {
         }
     }
 
+    func testTgaConvertsProfiledColoursToSrgbWithoutLosingAlpha() throws {
+        let srgb = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+        func rendered(_ image: CGImage) throws -> [UInt8] {
+            var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+            try bytes.withUnsafeMutableBytes { buffer in
+                let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: image.width, height: image.height,
+                    bitsPerComponent: 8, bytesPerRow: image.width * 4, space: srgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            }
+            return bytes
+        }
+        for name in [CGColorSpace.sRGB, CGColorSpace.displayP3, CGColorSpace.adobeRGB1998] {
+            let space = try XCTUnwrap(CGColorSpace(name: name))
+            let colours: [[UInt8]] = [[200, 100, 50], [38, 19, 47], [32, 190, 120], [255, 0, 0]]
+            for alpha in [false, true] {
+                let alphas: [UInt8] = [255, 128, 64, 0]
+                let samples: [UInt8] = (0..<8).flatMap { colours[$0 % 4] + (alpha ? [alphas[$0 % 4]] : []) }
+                let source = ImagePixels.make(samples, 4, 2, components: alpha ? 4 : 3, space: space, alpha: alpha, premultiplied: false)
+                let expected = try rendered(source)
+                if name != CGColorSpace.sRGB { XCTAssertNotEqual(Array(expected.prefix(3)), colours[0]) }
+                let path = FilePath.combine(dir, "colour-\(name)-\(alpha).tga")
+                try ImageEncoder.save([ImageFrame(image: source)], to: path, format: "tga")
+                let data = try Data(contentsOf: URL(fileURLWithPath: path))
+                XCTAssertEqual(data[2], 2, "uncompressed truecolour")
+                XCTAssertEqual(data[16], alpha ? 32 : 24)
+                let reader = try XCTUnwrap(CGImageSourceCreateWithData(data as CFData, nil))
+                let decoded = try XCTUnwrap(CGImageSourceCreateImageAtIndex(reader, 0, nil))
+                let actual = try rendered(decoded)
+                XCTAssertEqual(actual.count, expected.count)
+                for i in actual.indices { XCTAssertEqual(Double(actual[i]), Double(expected[i]), accuracy: 1, "\(name), alpha=\(alpha), component=\(i)") }
+            }
+            let palette = try XCTUnwrap(CGColorSpace(indexedBaseSpace: space, last: 3, colorTable: colours.flatMap { $0 }))
+            let indexed = try XCTUnwrap(CGImage(width: 4, height: 2, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: 4,
+                space: palette, bitmapInfo: CGBitmapInfo(rawValue: 0), provider: try XCTUnwrap(CGDataProvider(data: Data([0, 1, 2, 3, 3, 2, 1, 0]) as CFData)),
+                decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+            let path = FilePath.combine(dir, "indexed-\(name).tga")
+            try ImageEncoder.save([ImageFrame(image: indexed)], to: path, format: "tga")
+            let reader = try XCTUnwrap(CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil))
+            XCTAssertEqual(try rendered(try XCTUnwrap(CGImageSourceCreateImageAtIndex(reader, 0, nil))), try rendered(indexed))
+        }
+    }
+
+    func testTgaSrgbAndGrayKeepTheImageIoBytes() throws {
+        for (space, channels) in [(CGColorSpace(name: CGColorSpace.sRGB)!, 3), (CGColorSpaceCreateDeviceGray(), 1)] {
+            let image = ImagePixels.make((0..<24 * channels).map { UInt8(($0 * 31) % 256) }, 6, 4,
+                                        components: channels, space: space, alpha: false)
+            let original = NSMutableData()
+            let writer = try XCTUnwrap(CGImageDestinationCreateWithData(original, "com.truevision.tga-image" as CFString, 1, nil))
+            CGImageDestinationAddImage(writer, image, ["{TGA}": ["Compression": 0]] as CFDictionary)
+            XCTAssertTrue(CGImageDestinationFinalize(writer))
+            let path = FilePath.combine(dir, "control-\(channels).tga")
+            try ImageEncoder.save([ImageFrame(image: image)], to: path, format: "tga")
+            XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), original as Data)
+        }
+    }
+
     func testBmpWithoutAHeaderIsNeverAccepted() throws {
         // What ImageIO writes for an indexed picture: bare BGR pixels, no header.
         let indexed = try XCTUnwrap(CGColorSpace(indexedBaseSpace: CGColorSpace(name: CGColorSpace.sRGB)!, last: 3, colorTable: Self.palette.joined().map { $0 }))

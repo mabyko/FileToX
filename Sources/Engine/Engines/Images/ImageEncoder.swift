@@ -288,7 +288,19 @@ enum ImageEncoder {
             CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: loops]] as CFDictionary)
         }
         for frame in frames {
-            let image = format == "gif" ? ImagePixels.gifImage(frame.image) : frame.image
+            var image = format == "gif" ? ImagePixels.gifImage(frame.image) : frame.image
+            // TGA has no ICC profile, and ImageIO otherwise writes RGB samples in their source space unchanged.
+            if format == "tga", let source = image.colorSpace, [.rgb, .indexed].contains(source.model),
+               let srgb = CGColorSpace(name: CGColorSpace.sRGB), !CFEqual(source.baseColorSpace ?? source, srgb) {
+                let alpha: CGImageAlphaInfo = ImagePixels.hasAlpha(image) ? .premultipliedLast : .noneSkipLast
+                guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
+                                              bytesPerRow: image.width * 4, space: srgb, bitmapInfo: alpha.rawValue) else {
+                    throw ConversionError("Could not convert the image to sRGB for TGA.")
+                }
+                context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+                guard let converted = context.makeImage() else { throw ConversionError("Could not convert the image to sRGB for TGA.") }
+                image = converted
+            }
             var properties = frame.properties.filter { !privateKeys.contains($0.key) }
             if let dpi = frame.dpi, dpi.x > 0, dpi.y > 0 {
                 properties[kCGImagePropertyDPIWidth] = dpi.x
