@@ -5,6 +5,29 @@ import XCTest
 
 final class AppModelTests: XCTestCase {
     @MainActor
+    func testCancelledInstallPollCannotPublishAnAvailabilityError() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
+        let model = AppModel(host: host)
+        await model.connect()
+        model.selectFiles([URL(fileURLWithPath: "/tmp/selection.rst")])
+        await model.installEngine("pandoc")
+        try Data().write(to: fixture.root.appendingPathComponent("hold-catalog"))
+        let next = fixture.root.appendingPathComponent("next.json")
+        try #"{"pandoc":"installed","ffmpeg":"idle","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { FileManager.default.fileExists(atPath: fixture.root.appendingPathComponent("catalog-held").path) }
+        await model.installEngine("ffmpeg")
+        // Release the old poll's catalog response only after its replacement cancelled it.
+        _ = try await host.history()
+        try #"{"pandoc":"installed","ffmpeg":"downloading","bytes":75}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { model.enginePackages.first(where: { $0.id == "ffmpeg" })?.bytesReceived == 75 }
+        XCTAssertNil(model.engineInstallError)
+        await model.cancelEngineInstall("ffmpeg")
+        await model.shutDown()
+    }
+
+    @MainActor
     func testInstallPollingSurvivesSelectionRefreshFailureAndTracksCancellation() async throws {
         let fixture = try makeInstallFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -428,6 +451,7 @@ final class AppModelTests: XCTestCase {
         root=os.path.dirname(__file__)
         states={"pandoc":"idle","ffmpeg":"idle"}
         received=0
+        held_catalog=None
         def send(value):print(json.dumps(value),flush=True)
         def response(r,result):send({"v":1,"id":r["id"],"result":result})
         def error(r,message):send({"v":1,"id":r["id"],"error":{"code":"fixture","message":message}})
@@ -435,9 +459,20 @@ final class AppModelTests: XCTestCase {
         send({"v":1,"event":"hello","data":{"protocol":1,"hostVersion":"test","fileeCommit":"21fdd05ef7181b032ed83ec895cc9bbc4b198985","rid":"osx-arm64","dataDir":"/tmp/data"}})
         for line in sys.stdin:
             r=json.loads(line);m=r["method"]
-            if m=="catalog.get":response(r,{"formats":[],"engines":[{"id":k,"displayName":k,"available":s=="installed"} for k,s in states.items()]})
+            if m=="catalog.get":
+                result={"formats":[],"engines":[{"id":k,"displayName":k,"available":s=="installed"} for k,s in states.items()]}
+                hold=os.path.join(root,"hold-catalog")
+                if os.path.exists(hold):
+                    os.unlink(hold)
+                    held_catalog=(r,result)
+                    open(os.path.join(root,"catalog-held"),"w").close()
+                else:response(r,result)
             elif m=="library.get":response(r,{"revision":1,"settings":{},"presets":[],"profiles":[]})
-            elif m=="history.get":response(r,{"entries":[]})
+            elif m=="history.get":
+                if held_catalog:
+                    response(*held_catalog)
+                    held_catalog=None
+                response(r,{"entries":[]})
             elif m=="engine.packages":
                 failure=os.path.join(root,"fail-status")
                 if os.path.exists(failure):

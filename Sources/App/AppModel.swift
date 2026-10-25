@@ -423,7 +423,7 @@ final class AppModel {
         do {
             let status = try await host.cancelEngineInstall(packageId: id)
             enginePackages.removeAll { $0.id == id }; enginePackages.append(status)
-            pollEngineInstalls()
+            if !isShuttingDown { pollEngineInstalls() }
             if status.state == "installed" { try await refreshEngineAvailability() }
         } catch { engineInstallError = L(error.localizedDescription) }
     }
@@ -445,7 +445,7 @@ final class AppModel {
                         package.state == "installed" && previous.first(where: { $0.id == package.id })?.state != "installed"
                     }) {
                         do { try await refreshEngineAvailability() }
-                        catch { engineInstallError = L(error.localizedDescription) }
+                        catch { if !Task.isCancelled { engineInstallError = L(error.localizedDescription) } }
                     }
                     if !enginePackages.contains(where: \.isActive) { return }
                 }
