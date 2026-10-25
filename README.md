@@ -105,7 +105,9 @@ The 2026-10-25 arm64 replay ran all **849 cases**: 786 completed and the same 63
 
 Historical architecture evidence: before the arm64-only support decision, x86_64 Release cross-compilation and linkage passed; Intel execution was unavailable (`Bad CPU type in executable`, no Rosetta). This record does not create an Intel or Rosetta validation requirement for the current product.
 
-Not every format pair or codec has been tested. Ghostscript is absent on this machine, and its FFmpeg lacks some encoders. Automatic watch folders and in-app engine downloads are not connected yet. Login registration and notification delivery across a real logout/login remain unverified. External exFAT and SMB volumes, distribution notarization and TCC relaunch checks remain unverified.
+Under **Settings → Watch folders**, choose an input folder and preset, enable the rule and save. Wait for **Watching** before adding files. Monitoring leaves existing files untouched at startup and processes new or changed files while FileToX is running. Output defaults to `converted`; originals stay in place unless you select moving successful, unchanged inputs to `originals`. Packages and temporary download folders are excluded. The three-second settling window is a heuristic: producers with longer write pauses should publish completed files by atomic rename. A scan is limited to 10,000 entries and a job to 128 inputs.
+
+Not every format pair or codec has been tested. Ghostscript is absent on this machine, and its FFmpeg lacks some encoders. In-app engine downloads are not connected yet. Login registration and notification delivery across a real logout/login remain unverified. External exFAT and SMB volumes, distribution notarization and TCC relaunch checks remain unverified. The watch-folder and ICC follow-up is undergoing final integrated validation; the replay counts above describe the earlier snapshot.
 
 ## Source and design
 

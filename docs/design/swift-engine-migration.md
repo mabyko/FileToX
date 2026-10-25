@@ -2,7 +2,7 @@
 
 ## 현재 상태 (2026-10-25)
 
-현재 제품 소스는 `70fff7d`다. 앱은 SwiftUI·AppKit, helper는 `Sources/EngineMain`에서 시작하는 Swift 실행 파일이다. 앱 통신·모델은 `Sources/Core`(`FileToXCore`), host·변환 코어·엔진은 `Sources/Engine`(`FileToXEngineKit`)에 있다. 빌드 정의는 `Package.swift`, 앱·helper 번들·서명·도구 내장은 `project.yml`과 `Tools/stage-bundled-engines.sh`가 담당한다. 현재 빌드·실행에는 .NET SDK·런타임·NuGet 복원이나 과거 C# host가 필요 없다.
+앱은 SwiftUI·AppKit, helper는 `Sources/EngineMain`에서 시작하는 Swift 실행 파일이다. 앱 통신·모델은 `Sources/Core`(`FileToXCore`), host·변환 코어·엔진은 `Sources/Engine`(`FileToXEngineKit`)에 있다. 빌드 정의는 `Package.swift`, 앱·helper 번들·서명·도구 내장은 `project.yml`과 `Tools/stage-bundled-engines.sh`가 담당한다. 현재 빌드·실행에는 .NET SDK·런타임·NuGet 복원이나 과거 C# host가 필요 없다.
 
 지원 범위는 **Apple Silicon M1 이상(arm64), macOS 15 이상**이다. 최소 OS는 유지하며 Intel·Rosetta 실행과 그 검증은 요구하지 않는다. 앱·helper·테스트는 `ARCHS: arm64`이고 staging도 다른 아키텍처를 거부한다. Xcode 명령에는 `-destination 'platform=macOS,arch=arm64' ARCHS=arm64`를 함께 지정해 Swift package 의존성 빌드도 제한한다. 구체적인 명령과 현재 데이터·취소·출력 안전은 [README](../../README.md), [아키텍처](../architecture.md), [패키징](macos-packaging.md)을 따른다.
 
@@ -11,6 +11,8 @@
 PDFium·Skia의 업스트림 버전·원본 해시·고지는 보존한다. 현재 Skia 정적 bridge·재빌드·다운로드는 arm64 전용이고 배포 staging은 PDFium·번들 도구에서도 arm64만 남겨 서명한다. 검증용 PDFium universal 원본은 변경하지 않는다. 이전 universal 출력의 경위와 과거 Intel 검증 기록은 보존하지만 현재 지원·추가 검증 의무는 아니다.
 
 이전 단계에서 SDK 접근 차단 빌드·테스트, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사와 재배치한 앱의 변환 검증을 통과했다. 이는 Developer ID 서명·공증 검증이 아니다. 위 기록의 이전 최종 비교 결과와 WARN·FAIL 한계도 그대로 유지하며 새 검증 결과로 재사용하지 않는다.
+
+후속 변경으로 감시 폴더 실행·설정 UI를 연결하고, JPEG·PNG의 ICC 추적과 BMP 안전 처리를 보완했다. PDF의 단일 텍스트 상태 검증과 Markdown 조회 캐시 최적화도 통합했다. 임의 색 공간·폼 기본 색 공간 등 확인할 수 없는 PDF는 기존 PDFKit 속성 경로를 유지한다. SVG 상대 font shorthand 변경은 비교 품질이 낮아진 표본 때문에 통합하지 않았다. 이 후속 소스의 전체 빌드·변환·성능 검증은 진행 중이며, 아래 `70fff7d` 수치는 앞선 단계의 기록이다. 현재 감시·취소·색상 처리 경계는 [아키텍처](../architecture.md)를 따른다. 앱 내 관리형 엔진 다운로드는 여전히 미구현이며, 전환 전 Mac host에도 설치 요청 API가 없었다.
 
 실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [최신 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
 

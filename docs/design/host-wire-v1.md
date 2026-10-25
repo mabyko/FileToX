@@ -10,6 +10,8 @@
 - Target = `{formatId,available,reasonKey?,reasonText?,runnableCount}`. 전체 writable 형식과 folder·*에 대해 host의 planner와 옵션으로 판단한다.
 - `job.start {paths:[String],presetId?:String,targetFormat?:String,preset?:Object}` → `{jobId}`. 셋 중 하나만 허용. targetFormat은 기본 옵션으로 프리셋을 만들며 이름 충돌 정책은 Rename을 기본으로 한다. presetId는 저장된 라이브러리의 프리셋이다.
 - `job.cancel {jobId}` → `{}`.
+- `watch.status {}` → `{rules:[{id,state,detail?}]}`. 상태는 `disabled`, `starting`, `watching`, `running`, `error`, `stopped`이며 메모리에 캐시한 값을 반환한다. `error`는 이전 변환·원본 이동 오류를 표시할 수도 있고, 그 자체로 다른 작업 취소를 뜻하지 않는다.
+- `watch.stop {}` → `{}`. 현재 helper 세션의 새 감시 작업을 막고 감시 작업을 취소한다. 저장한 규칙을 끄지 않으며 helper를 다시 시작하면 저장한 설정을 따른다. 앱 종료 시 전체 작업 취소·stdin 종료보다 먼저 호출한다.
 - `job.updated` / `job.finished` data = `{jobId,state,progress,presetName,files:[File],historyEntry?:History,retrySources?:[String],preset?:Object}`.
 - File = `{source,state,progress,outputs?:[{path,isDirectory}],errorKey?,errorDetail?}`. Outputs는 finished에만 포함한다.
 - `history.get` → `{entries:[History]}`. `history.clear` → `{}`.
@@ -18,6 +20,8 @@
 - `library.save {baseRevision:Int,presets:[Object],profiles:[Object]}` / `settings.save {baseRevision:Int,settings:Object}` → Library. 받은 JSON의 전체 필드를 보존한다.
 
 Swift 인터페이스(EngineHost actor): start()→HostHello, catalog()→HostCatalog, resolve(paths:[String])→HostSelection, startJob(paths:[String],presetId:String?=nil,targetFormat:String?=nil,preset:JSONValue?=nil)→String, cancel(jobId:String), events()→AsyncStream<HostEvent>, history()→[HostHistory], library()→HostLibrary, saveLibrary(baseRevision:presets:profiles:)→HostLibrary, saveSettings(baseRevision:settings:)→HostLibrary, clearHistory(), shutdown(). 모두 async throws (events는 async, shutdown은 async). actor init(executableURL:URL?=nil,dataDirectory:URL?=nil).
+
+추가 클라이언트 메서드는 `watchStatus() async throws → [JSONValue]`, `stopWatching() async throws`다. 감시 작업은 기존 job 이벤트와 이력을 사용하며 이력의 `watchRuleId`로 규칙을 식별한다. 프로토콜 버전과 설정 schema 8은 유지한다.
 
 HostEvent = .hello(HostHello), .updated(HostJob), .finished(HostJob), .fatal(String), .interrupted(String). Models의 필드명은 위 JSON과 같다. HostLibrary 설정·프리셋·프로필은 JSONValue, HostHistory.preset은 JSONValue?. JSONValue는 Foundation 값의 전체 JSON을 보존하는 Codable/Sendable enum이다. 외부 변환 실패는 file/job 상태로 전달하며 host crash는 pending 요청 실패·interrupted 이벤트다.
 
