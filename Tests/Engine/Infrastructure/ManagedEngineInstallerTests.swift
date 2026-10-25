@@ -358,7 +358,7 @@ final class ManagedEngineInstallerTests: XCTestCase {
         })
         _ = try installer.start("pandoc")
         await fulfillment(of: [entered], timeout: 3)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: d.path + "/engines/pandoc/bin/pandoc"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: d.path + "/engines/pandoc/pandoc"))
         XCTAssertTrue(installer.isActive)
         XCTAssertTrue(try XCTUnwrap(installer.snapshot().first { $0.id == "pandoc" }).isActive)
         installer.stop()
