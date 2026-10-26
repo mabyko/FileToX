@@ -12,6 +12,7 @@
 		057284B725CF37FFAD59BF5B /* EbookRegexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17962B620FEB89126DD93D41 /* EbookRegexTests.swift */; };
 		0657C0314A00B9567F80B2DC /* FileToXEngineKit in Frameworks */ = {isa = PBXBuildFile; productRef = 701D2EFA5900170E6CF03367 /* FileToXEngineKit */; };
 		072694D2D4EA48852367187C /* OoxmlVariantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3628DD5274AA6FF1DC00649 /* OoxmlVariantTests.swift */; };
+		08BA7EF6CAA93FD4C773AD3C /* AvifEncoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE845A37D0C2C371EB88162E /* AvifEncoderTests.swift */; };
 		0CFE07DB333DE0135499D8E8 /* ComparisonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E43F83DB34B8E4ECE70C4C2E /* ComparisonTests.swift */; };
 		0FA9C40D089982B3DF532925 /* HtmlReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC33D07731284C8872799D92 /* HtmlReaderTests.swift */; };
 		10C8A2E5DAE577480D0C4C89 /* HostTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CAB0B1E19B0AB716F70535E /* HostTestSupport.swift */; };
@@ -105,6 +106,7 @@
 		8B4D159EBC14A51CAD526680 /* ConversionPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1615C83046F2EAA78AFBADC7 /* ConversionPanelController.swift */; };
 		8F4477C15AFD9EE73961E4CF /* JpegProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E466F263EB8E4C3906C8724 /* JpegProfileTests.swift */; };
 		9007190551E07BDA5EE635E3 /* ConversionNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80E78EBD59DADC9F9030478F /* ConversionNotifications.swift */; };
+		904A4F9C025498E5FF1E415E /* avifenc.c in Sources */ = {isa = PBXBuildFile; fileRef = CED08184FF50001C9F3BACDB /* avifenc.c */; };
 		918A8BE19DAF0C126F42709B /* FileeTest-TrueType.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C1A3DE2F557BD08250A832F8 /* FileeTest-TrueType.ttf */; };
 		92CD36AB932068B47FD19D45 /* libpdfium.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = E56E4F8F5D4B301B56734146 /* libpdfium.dylib */; };
 		933CCFB32BEA8D90FC059707 /* ImageQualityFollowupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9BC232A359691C7E9BE92C6 /* ImageQualityFollowupTests.swift */; };
@@ -200,6 +202,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = C855A15C42D8924432598E61;
 			remoteInfo = FileToXEngine;
+		};
+		E0414FBF22F77F86B0F9A32F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C2A6D2AC3F4EFFCB2976E15E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7CF0482B0FA317C5D0603AA3;
+			remoteInfo = FileToXAvifEncoder;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -309,6 +318,7 @@
 		62283497CAE138D70290061F /* MarkupTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkupTestSupport.swift; sourceTree = "<group>"; };
 		6296B15EFFAF31E5AA94D95D /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		629B17962DBFAB2AE4BDA565 /* OfficeBuilders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeBuilders.swift; sourceTree = "<group>"; };
+		66AFB09EEF4A53B788C7A661 /* FileToXAvifEncoder */ = {isa = PBXFileReference; includeInIndex = 0; path = FileToXAvifEncoder; sourceTree = BUILT_PRODUCTS_DIR; };
 		67AB9252827BAB17A3D3DEDE /* HostContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostContractTests.swift; sourceTree = "<group>"; };
 		69134E092A3D8369B75378A2 /* ApplicationSettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationSettingsViews.swift; sourceTree = "<group>"; };
 		6B1BFA1FE0CDA2202046EFCE /* sample_AC1015.dwg */ = {isa = PBXFileReference; path = sample_AC1015.dwg; sourceTree = "<group>"; };
@@ -377,6 +387,7 @@
 		CD18298014CBFAE2965D92C0 /* DocumentTextPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTextPerformanceTests.swift; sourceTree = "<group>"; };
 		CD44AA28761083E892693B7B /* AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelTests.swift; sourceTree = "<group>"; };
 		CEC1220C6DD1FF5419BADC88 /* GlobalDragMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalDragMonitor.swift; sourceTree = "<group>"; };
+		CED08184FF50001C9F3BACDB /* avifenc.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = avifenc.c; sourceTree = "<group>"; };
 		CEF64D18A53A1F8CC46E3AC8 /* libreoffice-baseline.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "libreoffice-baseline.json"; sourceTree = "<group>"; };
 		CF4B4D1C4221202F4A8A57FB /* dwgwriter_mix.dxf */ = {isa = PBXFileReference; path = dwgwriter_mix.dxf; sourceTree = "<group>"; };
 		DB5947CEAB776747730419A4 /* DocxWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocxWriterTests.swift; sourceTree = "<group>"; };
@@ -409,6 +420,7 @@
 		F92069215A215E966DF70300 /* FormatCatalogResourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatCatalogResourceTests.swift; sourceTree = "<group>"; };
 		F9A1DE2DC082DFA69C4C9670 /* RadialMenuEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadialMenuEntry.swift; sourceTree = "<group>"; };
 		FD37AE3DA9B3F7CAFF1F3001 /* conversion-baseline.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "conversion-baseline.json"; sourceTree = "<group>"; };
+		FE845A37D0C2C371EB88162E /* AvifEncoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvifEncoderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -450,6 +462,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		004CEE1D847D609D61419678 /* FileToX */ = {
+			isa = PBXGroup;
+			children = (
+				CED08184FF50001C9F3BACDB /* avifenc.c */,
+			);
+			name = FileToX;
+			path = Vendor/LibAVIF/FileToX;
+			sourceTree = "<group>";
+		};
 		045A254585ED462B913110DA /* Fixtures */ = {
 			isa = PBXGroup;
 			children = (
@@ -466,6 +487,7 @@
 			isa = PBXGroup;
 			children = (
 				8AECAB50498DE186D3A3868D /* FileToX.app */,
+				66AFB09EEF4A53B788C7A661 /* FileToXAvifEncoder */,
 				71EEB7DE2FCE6CA2D0AC54FF /* FileToXEngine.app */,
 				3350F78390B17BEF81D0AA51 /* FileToXEngineTests.xctest */,
 				76FBDAAD1FA3A983D5BCC58F /* FileToXTests.xctest */,
@@ -799,6 +821,7 @@
 				4071149E4B5DF04FC9B1AFF2 /* Config */,
 				D1FE34FF8329F805733E3BCF /* Engine */,
 				58104E181838F55C3270A996 /* EngineMain */,
+				004CEE1D847D609D61419678 /* FileToX */,
 				5E876F1A57615824D6AA89EB /* Packages */,
 				1A562ECEC5A995C8533FA931 /* Platform */,
 				0E1D89675AC0F3EB692DE051 /* Resources */,
@@ -848,6 +871,7 @@
 		FDF062E3FE014A861079C2D4 /* Images */ = {
 			isa = PBXGroup;
 			children = (
+				FE845A37D0C2C371EB88162E /* AvifEncoderTests.swift */,
 				BDF97042EF32EA32FE6A94CE /* BmpResolutionTests.swift */,
 				4F3CE3DC3201516BA5882B8E /* CameraRawTests.swift */,
 				B97E6A141B97974EF60A6FE8 /* CmykQualityTests.swift */,
@@ -891,6 +915,23 @@
 			productName = FileToX;
 			productReference = 8AECAB50498DE186D3A3868D /* FileToX.app */;
 			productType = "com.apple.product-type.application";
+		};
+		7CF0482B0FA317C5D0603AA3 /* FileToXAvifEncoder */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 77DFFA46BE3CE284357F451D /* Build configuration list for PBXNativeTarget "FileToXAvifEncoder" */;
+			buildPhases = (
+				5C3AC469560FD02ECD07BB45 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FileToXAvifEncoder;
+			packageProductDependencies = (
+			);
+			productName = FileToXAvifEncoder;
+			productReference = 66AFB09EEF4A53B788C7A661 /* FileToXAvifEncoder */;
+			productType = "com.apple.product-type.tool";
 		};
 		8E1039F465CFF6FF84F0A797 /* FileToXEngineTests */ = {
 			isa = PBXNativeTarget;
@@ -943,11 +984,12 @@
 				736D960BA3644EC9E85DB782 /* Sources */,
 				BD6A170272AB883015D8DDA4 /* Frameworks */,
 				6B7E4CBD061AD9405FE40933 /* Embed Frameworks */,
-				E8689EF79F1BE7B3951A0018 /* Stage bundled engines (rhwp, 7-Zip) */,
+				18A3CEA60AAC86B873DA62F4 /* Stage bundled engines (rhwp, 7-Zip, AVIF encoder) */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				94A3277167F2AC79E9549E98 /* PBXTargetDependency */,
 			);
 			name = FileToXEngine;
 			packageProductDependencies = (
@@ -967,6 +1009,9 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					024C3D04D76196C59FC4CA51 = {
+						ProvisioningStyle = Automatic;
+					};
+					7CF0482B0FA317C5D0603AA3 = {
 						ProvisioningStyle = Automatic;
 					};
 					C855A15C42D8924432598E61 = {
@@ -995,6 +1040,7 @@
 			targets = (
 				024C3D04D76196C59FC4CA51 /* FileToX */,
 				C855A15C42D8924432598E61 /* FileToXEngine */,
+				7CF0482B0FA317C5D0603AA3 /* FileToXAvifEncoder */,
 				8E1039F465CFF6FF84F0A797 /* FileToXEngineTests */,
 				998EFF4C5F7796C9F05ECA13 /* FileToXTests */,
 			);
@@ -1049,6 +1095,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		18A3CEA60AAC86B873DA62F4 /* Stage bundled engines (rhwp, 7-Zip, AVIF encoder) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Stage bundled engines (rhwp, 7-Zip, AVIF encoder)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/Tools/stage-bundled-engines.sh\"\n";
+		};
 		E6C67CA7AC445715F16596B3 /* Prepare helper signing entitlements */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -1071,25 +1136,6 @@
 			shellScript = "python3 -I \"$SRCROOT/Tools/prepare-engine-entitlements.py\" \"$SCRIPT_OUTPUT_FILE_0\" \"${EXPANDED_CODE_SIGN_IDENTITY:--}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		E8689EF79F1BE7B3951A0018 /* Stage bundled engines (rhwp, 7-Zip) */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Stage bundled engines (rhwp, 7-Zip)";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"$SRCROOT/Tools/stage-bundled-engines.sh\"\n";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -1100,6 +1146,7 @@
 				4BD17022922CC98B35C3B117 /* ArchiveBuilders.swift in Sources */,
 				E7C1854AC92C705F55A627D7 /* ArchiveSupportTests.swift in Sources */,
 				20AACC5989D9A1AA30FE9ED8 /* ArchiveTests.swift in Sources */,
+				08BA7EF6CAA93FD4C773AD3C /* AvifEncoderTests.swift in Sources */,
 				A6501A6484664838024D4C6C /* BmpResolutionTests.swift in Sources */,
 				CDD09F79066E606D663AEAD3 /* CadBuilder.swift in Sources */,
 				DFA4B2700C440E77F7D9B9B7 /* CadDwgReaderTests.swift in Sources */,
@@ -1222,6 +1269,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5C3AC469560FD02ECD07BB45 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				904A4F9C025498E5FF1E415E /* avifenc.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		736D960BA3644EC9E85DB782 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1263,6 +1318,11 @@
 			isa = PBXTargetDependency;
 			target = C855A15C42D8924432598E61 /* FileToXEngine */;
 			targetProxy = 1F4D80ACF8C476D96376EF70 /* PBXContainerItemProxy */;
+		};
+		94A3277167F2AC79E9549E98 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7CF0482B0FA317C5D0603AA3 /* FileToXAvifEncoder */;
+			targetProxy = E0414FBF22F77F86B0F9A32F /* PBXContainerItemProxy */;
 		};
 		9D87D7CE709AA67C8E818A1E /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1444,6 +1504,30 @@
 			};
 			name = Release;
 		};
+		73A733CFFEAFD5962D4BD691 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7A999BB765DCB71CC48D7973 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Vendor/LibAVIF/headers",
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(SRCROOT)/Vendor/LibAVIF/lib/libavif.a",
+				);
+				PRODUCT_NAME = FileToXAvifEncoder;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 		787B2763054FD68FD09705C7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1566,6 +1650,30 @@
 			};
 			name = Release;
 		};
+		B9760A1616DB0940A6FAE7B9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7A999BB765DCB71CC48D7973 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/Vendor/LibAVIF/headers",
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(SRCROOT)/Vendor/LibAVIF/lib/libavif.a",
+				);
+				PRODUCT_NAME = FileToXAvifEncoder;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
 		C085312A2F817043125BFB1C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7A999BB765DCB71CC48D7973 /* Base.xcconfig */;
@@ -1611,6 +1719,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		77DFFA46BE3CE284357F451D /* Build configuration list for PBXNativeTarget "FileToXAvifEncoder" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B9760A1616DB0940A6FAE7B9 /* Debug */,
+				73A733CFFEAFD5962D4BD691 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		799B6742BB86B8547667D4BC /* Build configuration list for PBXNativeTarget "FileToX" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
