@@ -2,9 +2,9 @@
 // AVIF first. libavif's 4:4:4 encode at ImageIO's AV1 quantizers then replaces that file only when both hold:
 // - with both files decoded by ImageIO and compared with the encoder's input as premultiplied 8-bit samples in their own
 //   colour space, its summed squared error is no larger for colour and for alpha, and smaller for one of them;
-// - read back by ImageIO, it keeps every top-level tag of the frame's metadata that ImageIO's file kept, with equal
-//   string values (arrays and structures by presence only), except the pixel dimensions, which it records from the
-//   picture while ImageIO copies the source's.
+// - read back by ImageIO, it keeps every top-level tag of the frame's metadata that ImageIO's file kept, with all of its
+//   value: equal text, and every item, field and qualifier (such as a language) of arrays, alternatives and structures,
+//   except the pixel dimensions, which it records from the picture while ImageIO copies the source's.
 // Like ImageIO's own writer, the helper's file keeps the Exif auxiliary tags (lens, serial number), which Exif cannot
 // hold, as XMP. That bounds these measures, not visual, SSIM or full metadata equivalence. Colour pictures usually gain
 // (ImageIO's 4:2:0 drops chroma detail); ImageIO's file usually stays for gray-like ones. The helper does not run for gray
@@ -115,30 +115,81 @@ enum AvifEncoder {
         return (colour, alpha)
     }
 
-    /// True when `file` holds every top-level tag of `metadata` that `reference` holds, both as ImageIO reads them, with the
-    /// same value where it is a string. Arrays and structures are compared by presence only, not item by item. Neither
-    /// writer gets the source's file structure (`encoderMetadata`), and the pixel dimensions are left out: `CodecPixels`
-    /// records the picture's own size, while ImageIO's AVIF writer copies the source's.
+    /// True when `file` holds every top-level tag of `metadata` that `reference` holds, both as ImageIO reads them (one view
+    /// of Exif and XMP together), with all of the reference's value (`TagValue.holds`). Neither writer gets the source's file
+    /// structure (`encoderMetadata`), and the pixel dimensions are left out: `CodecPixels` records the picture's own size,
+    /// while ImageIO's AVIF writer copies the source's.
     static func keepsTags(of metadata: CGImageMetadata, _ file: Data, comparedTo reference: Data) -> Bool {
-        func read(_ data: Data) -> [String: String] {
+        func read(_ data: Data) -> [String: CGImageMetadataTag] {
             guard let source = CGImageSourceCreateWithData(data as CFData, nil),
                   let metadata = CGImageSourceCopyMetadataAtIndex(source, CGImageSourceGetPrimaryImageIndex(source), nil) else { return [:] }
             return tags(metadata)
         }
-        var wanted = tags(ImageEncoder.encoderMetadata(metadata, nil))
-        for name in ["PixelXDimension", "PixelYDimension"] { wanted[(kCGImageMetadataNamespaceExif as String) + " " + name] = nil }
+        var wanted = Set(tags(ImageEncoder.encoderMetadata(metadata, nil)).keys)
+        for name in ["PixelXDimension", "PixelYDimension"] { wanted.remove((kCGImageMetadataNamespaceExif as String) + " " + name) }
         let kept = read(file)
-        return read(reference).allSatisfy { key, value in wanted[key] == nil || kept[key] == value }
+        return read(reference).allSatisfy { key, tag in !wanted.contains(key) || kept[key].map { TagValue($0).holds(TagValue(tag)) } == true }
     }
 
-    /// Namespace and name of each top-level tag, with its value when that is a string ("" otherwise).
-    private static func tags(_ metadata: CGImageMetadata) -> [String: String] {
-        var result: [String: String] = [:]
-        for tag in (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? [] {
-            guard let namespace = CGImageMetadataTagCopyNamespace(tag) as String?, let name = CGImageMetadataTagCopyName(tag) as String? else { continue }
-            result[namespace + " " + name] = CGImageMetadataTagCopyValue(tag) as? String ?? ""
-        }
+    /// Each top-level tag by namespace and name.
+    private static func tags(_ metadata: CGImageMetadata) -> [String: CGImageMetadataTag] {
+        var result: [String: CGImageMetadataTag] = [:]
+        for tag in (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? [] { result[key(tag)] = tag }
         return result
+    }
+
+    private static func key(_ tag: CGImageMetadataTag) -> String {
+        (CGImageMetadataTagCopyNamespace(tag) as String? ?? "") + " " + (CGImageMetadataTagCopyName(tag) as String? ?? "")
+    }
+
+    /// A metadata tag's whole value as a comparable tree: its type, its qualifiers (such as `xml:lang`) and its text, items
+    /// or fields (by namespace and name).
+    struct TagValue: Hashable {
+        enum Content: Hashable { case text(String), items([TagValue]), unordered([TagValue: Int]), fields([String: TagValue]) }
+        let type: Int32
+        let qualifiers: [TagValue: Int]
+        let content: Content
+
+        init(_ tag: CGImageMetadataTag) {
+            let type = CGImageMetadataTagGetType(tag)
+            self.type = type.rawValue
+            qualifiers = Self.counts(((CGImageMetadataTagCopyQualifiers(tag) as? [AnyObject]) ?? []).map(Self.value))
+            let value = CGImageMetadataTagCopyValue(tag)
+            if let items = value as? [AnyObject] {
+                content = type == .arrayUnordered ? .unordered(Self.counts(items.map(Self.value))) : .items(items.map(Self.value))
+            } else if let fields = value as? [String: AnyObject] {
+                content = .fields(Dictionary(fields.map { name, field in (Self.isTag(field) ? AvifEncoder.key(field as! CGImageMetadataTag) : name, Self.value(field)) },
+                                             uniquingKeysWith: { first, _ in first }))
+            } else {
+                content = .text(value.map(Self.text) ?? "")
+            }
+        }
+
+        private init(text: String) { (type, qualifiers, content) = (-1, [:], .text(text)) }
+
+        /// An item, field or qualifier: a tag's value, or the text of anything else.
+        private static func value(_ object: AnyObject) -> TagValue {
+            isTag(object) ? TagValue(object as! CGImageMetadataTag) : TagValue(text: text(object))
+        }
+
+        private static func isTag(_ object: AnyObject) -> Bool { CFGetTypeID(object) == CGImageMetadataTagGetTypeID() }
+
+        private static func text(_ object: AnyObject) -> String { object as? String ?? "\(object)" }
+
+        /// True when this value has `reference`'s type and holds all of it: its qualifiers, equal text, each of its fields,
+        /// the items of an ordered array or alternative in the same order, and those of an unordered array in any order.
+        /// Qualifiers and unordered items must be equal whole.
+        func holds(_ reference: TagValue) -> Bool {
+            guard type == reference.type, reference.qualifiers.allSatisfy({ qualifiers[$0.key, default: 0] >= $0.value }) else { return false }
+            switch (content, reference.content) {
+            case let (.items(items), .items(expected)): return items.count == expected.count && zip(items, expected).allSatisfy { $0.holds($1) }
+            case let (.unordered(items), .unordered(expected)): return expected.allSatisfy { items[$0.key, default: 0] >= $0.value }
+            case let (.fields(fields), .fields(expected)): return expected.allSatisfy { name, field in fields[name]?.holds(field) == true }
+            default: return content == reference.content
+            }
+        }
+
+        private static func counts(_ values: [TagValue]) -> [TagValue: Int] { values.reduce(into: [:]) { $0[$1, default: 0] += 1 } }
     }
 
     /// A new folder only this user can open, in the host's temporary folder.

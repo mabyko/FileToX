@@ -174,7 +174,7 @@ final class AvifEncoderTests: XCTestCase {
     }
 
     func testStructuredMetadataKeepsItsInnerValues() throws {
-        // The tag check compares array and structure values by presence only; this checks their items in the kept file.
+        // Arrays and structures that both files keep leave the helper's file in place; their items, read back from it.
         let folder = GraphicsTestKit.folder(), tiff = folder + "/structured.tiff", path = folder + "/structured.avif"
         let iptc = "http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/", dc = "http://purl.org/dc/elements/1.1/"
         let metadata = CGImageMetadataCreateMutable()
@@ -220,6 +220,59 @@ final class AvifEncoderTests: XCTestCase {
         // The other writers' shared serializer is unchanged: its XMP still leaves the auxiliary tags out.
         let shared = String(decoding: try XCTUnwrap(CodecPixels.metadataBlobs(frame, colorModel: .rgb).xmp), as: UTF8.self)
         XCTAssertFalse(shared.contains("aux:Lens"))
+    }
+
+    func testANativeFileThatChangesInnerMetadataValuesIsNotUsed() throws {
+        // Helper files that keep every top-level tag but change an item, a field, a language or an order inside one keep
+        // ImageIO's file; the helper's file without a change replaces it. The order is that of an XMP-only sequence: ImageIO
+        // reads dc:creator back from the Exif Artist as well, so a change to its XMP alone does not show.
+        let folder = GraphicsTestKit.folder(), tiff = folder + "/inner.tiff"
+        let xmp = """
+            <x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+            <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"
+             xmlns:ftx="http://example.com/filetox/1.0/">
+            <dc:subject><rdf:Bag><rdf:li>alpha</rdf:li><rdf:li>beta</rdf:li></rdf:Bag></dc:subject>
+            <ftx:Steps><rdf:Seq><rdf:li>first step</rdf:li><rdf:li>second step</rdf:li></rdf:Seq></ftx:Steps>
+            <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Title</rdf:li><rdf:li xml:lang="ko-KR">제목</rdf:li></rdf:Alt></dc:title>
+            <Iptc4xmpCore:CreatorContactInfo rdf:parseType="Resource"><Iptc4xmpCore:CiAdrCity>Seoul</Iptc4xmpCore:CiAdrCity></Iptc4xmpCore:CreatorContactInfo>
+            </rdf:Description></rdf:RDF></x:xmpmeta>
+            """
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(URL(fileURLWithPath: tiff) as CFURL, "public.tiff" as CFString, 1, nil))
+        CGImageDestinationAddImageAndMetadata(destination, Self.colour(65, 39), try XCTUnwrap(CGImageMetadataCreateFromXMPData(Data(xmp.utf8) as CFData)), nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let frame = try ImageEncoder.applyOptions(try XCTUnwrap(ImageReader.read(tiff, format: "tiff", preset: Preset()).first), Self.options(quality: 75),
+                                                  targetFormat: "avif")
+        let metadata = try XCTUnwrap(frame.properties[ImageFrame.metadataKey].map { $0 as! CGImageMetadata })
+        // ImageIO's file of the frame and its metadata, as the writer makes it first.
+        let data = NSMutableData()
+        let writer = try XCTUnwrap(CGImageDestinationCreateWithData(data, "public.avif" as CFString, 1, nil))
+        CGImageDestinationAddImageAndMetadata(writer, frame.image, ImageEncoder.encoderMetadata(metadata, frame.dpi),
+                                              [kCGImageDestinationLossyCompressionQuality: frame.properties[kCGImageDestinationLossyCompressionQuality]!] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(writer))
+        let imageIO = data as Data
+        // The helper's own file of the frame, from a hand-off whose XMP has one change.
+        let (samples, channels) = CodecPixels.straight(frame.image)
+        let blobs = CodecPixels.metadataBlobs(frame, colorModel: .rgb)
+        let icc = blobs.icc ?? Data(), exif = blobs.exif ?? Data(), packet = String(decoding: try XCTUnwrap(blobs.xmp), as: UTF8.self)
+        let mutations: [(String, [(String, String)])] = [
+            ("unchanged", []), ("item", [(">beta<", ">BETA<")]), ("field", [(">Seoul<", ">Busan<")]), ("language", [("\"ko-KR\"", "\"ja-JP\"")]),
+            ("order", [("first step", "\u{1}"), ("second step", "first step"), ("\u{1}", "second step")]),
+        ]
+        for (name, changes) in mutations {
+            let changed = changes.reduce(packet) { $0.replacingOccurrences(of: $1.0, with: $1.1) }
+            XCTAssertEqual(changed == packet, changes.isEmpty, name)
+            let input = folder + "/\(name).in", made = folder + "/\(name)-helper.avif", path = folder + "/\(name).avif", helper = folder + "/\(name).sh"
+            let xmpData = Data(changed.utf8)
+            try Self.handOff(UInt32(frame.image.width), UInt32(frame.image.height), UInt32(channels), 75, Data(samples) + icc + exif + xmpData,
+                             sizes: [UInt64(icc.count), UInt64(exif.count), UInt64(xmpData.count)]).write(to: URL(fileURLWithPath: input))
+            XCTAssertEqual(try ProcessRunner.runBlocking(try XCTUnwrap(AvifEncoder.helper), [input, made], timeout: 60).exitCode, 0, name)
+            try "#!/bin/sh\ncp '\(made)' \"$2\"\n".write(toFile: helper, atomically: true, encoding: .utf8)
+            chmod(helper, 0o755)
+            try imageIO.write(to: URL(fileURLWithPath: path))
+            let replaced = try AvifEncoder.improve([frame], at: path, helper: helper)
+            XCTAssertEqual(replaced, changes.isEmpty, name)
+            XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), changes.isEmpty ? try Data(contentsOf: URL(fileURLWithPath: made)) : imageIO, name)
+        }
     }
 
     func testResolutionIsKeptAsImageIODoes() throws {

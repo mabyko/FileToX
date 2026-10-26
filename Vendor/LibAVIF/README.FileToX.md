@@ -25,8 +25,8 @@ that are not all gray. It keeps the helper's file only when both hold:
 - With both files decoded by ImageIO and compared with the encoder's input as premultiplied 8-bit samples, its summed
   squared error is no larger for colour and for alpha, and smaller for one of them.
 - Read back by ImageIO, it keeps every top-level tag of the picture's metadata that ImageIO's file kept.
-  - String values must be equal.
-  - Arrays and structures are compared by presence only; their items are not compared.
+  - The whole value must be kept: equal text, and every item, field and qualifier (such as a language) of arrays,
+    alternatives and structures, in order where the array is ordered.
   - The pixel dimensions are the exception: the helper's file records the picture's own size, while ImageIO copies
     the source's.
 
