@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -55,7 +56,8 @@ with tempfile.TemporaryDirectory(prefix='ftx-stage-arm64-') as folder:
         assert staged.stat().st_mode & 0o777 == source.stat().st_mode & 0o777, staged
         run(['/usr/bin/codesign', '--verify', '--strict', staged])
     encoder = target / 'Helper.app/Contents/MacOS/FileToXAvifEncoder'
-    assert b'flags=0x10000(runtime)' in run(['/usr/bin/codesign', '-dv', encoder]), 'hardened runtime'
+    # CS_RUNTIME (0x10000), also with an ad hoc signature (0x10002).
+    assert int(re.search(rb'flags=0x([0-9a-f]+)', run(['/usr/bin/codesign', '-dv', encoder])).group(1), 16) & 0x10000, 'hardened runtime'
     assert [line.split()[0] for line in run(['/usr/bin/otool', '-L', encoder]).splitlines()[1:]] == [b'/usr/lib/libSystem.B.dylib'], 'only libSystem'
     # The staged encoder runs: a 2 x 1 RGB hand-off becomes an AVIF file.
     handoff = target / 'picture'
