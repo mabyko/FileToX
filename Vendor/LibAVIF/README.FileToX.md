@@ -39,7 +39,8 @@ This bounds these measures only; it does not establish visual, SSIM or full meta
 - the AV1 quantizers ImageIO's AVIF encoder uses for the preset quality: colour `floor((100 - quality) * 63 / 100)`;
   alpha 7, or the colour quantizer where that is finer (ImageIO keeps alpha at 7 for every quality)
 - YUV 4:4:4, BT.601 matrix, full range
-- speed 6, two threads
+- speed 6, two to eight threads (the processors online, at most eight); libaom writes the same bitstream for every
+  count from two (its `test/ethread_test.cc`), so the count changes only the time
 - colour tuned for SSIM (libavif's linear quantizer scale); alpha keeps libavif's default PSNR tuning
 - `nclx` sRGB primaries and transfer for untagged pictures; an ICC profile otherwise
 - Exif and XMP as items, without `irot`/`imir`: the engine already wrote the pixels upright

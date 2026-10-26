@@ -155,7 +155,10 @@ int main(int argc, char ** argv)
         goto done;
     }
     encoder->codecChoice = AVIF_CODEC_CHOICE_AOM;
-    encoder->maxThreads = 2;
+    // libaom writes the same bitstream with any number of threads from two on (its test/ethread_test.cc checks all-intra
+    // speed 6 at 2, 4 and 64), so more threads only shorten the encode; past eight they mostly add CPU time.
+    const long processors = sysconf(_SC_NPROCESSORS_ONLN);
+    encoder->maxThreads = processors < 2 ? 2 : processors > 8 ? 8 : (int)processors;
     encoder->speed = 6;
     // The preset quality keeps the AV1 quantizers of ImageIO's AVIF encoder, which this replaces: colour
     // floor((100 - quality) * 63 / 100), alpha 7 at every quality. Alpha follows colour where colour is finer. libavif's
