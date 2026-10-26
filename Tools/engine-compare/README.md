@@ -141,6 +141,15 @@ remain WARN. Pixel format and frame rate are checked alongside stream geometry.
 Unsupported binary books/documents remain WARN; this is not proof of content
 equivalence. A smaller output needs inspection or readback, even when WARN.
 
+AZW3, MOBI, PDB, RB, SNB, LRF, LIT, DOC and DWG have bounded independent readback
+of supported text, structure, metadata and embedded images. Unsupported fields
+and unavailable readers remain explicit limits; this is not device/layout rendering.
+`binaryReadbackVersion: 2` identifies OPF and LRF metadata text in
+`readback.metadataTextParts`. Their scores remain in `textRatios`, but a failed
+metadata score is reported separately from body text loss. UUIDs, dates and other
+metadata are still compared with the same thresholds; no failure is waived by
+this distinction. Keep earlier reports when comparing policy versions.
+
 TCR is now inspected independently by decoding its literal 256-entry dictionary, with bounded encoded/decoded
 sizes. Decoded payloads must match exactly; different dictionary encodings with identical bytes PASS. A changed
 payload FAILs, including trailing characters or newlines; an invalid candidate FAILs and an unreadable/invalid

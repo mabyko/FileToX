@@ -94,7 +94,7 @@ def compare_readback(left, right, thresholds):
             else: decoded[side] = value
         except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
             errors[side] = {"kind": "unavailable", "message": str(error)}
-    metrics = {"readback": {"version": 1, "errors": errors, "readers": {}, "limits": {}, "coverage": {}}}
+    metrics = {"readback": {"version": 2, "errors": errors, "readers": {}, "limits": {}, "coverage": {}}}
     for side, value in decoded.items():
         for key in ("reader", "limits", "coverage", "uninspected"):
             if key not in value: continue
@@ -110,10 +110,15 @@ def compare_readback(left, right, thresholds):
     if a["textParts"].keys() != b["textParts"].keys(): reasons.append("Decoded document text part names/count changed")
     scores = {name: ratio(a["textParts"][name], b["textParts"][name]) for name in sorted(a["textParts"].keys() & b["textParts"].keys())}
     metrics["readback"]["textRatios"] = scores
+    metadata = set(a.get("metadataTextParts", [])) | set(b.get("metadataTextParts", []))
+    metrics["readback"]["metadataTextParts"] = sorted(metadata)
     if a["structure"] != b["structure"]:
         reasons.append("Decoded document structure or metadata changed")
         metrics["readback"]["structure"] = {"baseline": a["structure"], "candidate": b["structure"]}
-    if any(score < thresholds["text"] for score in scores.values()): reasons.append("Decoded document text similarity below threshold")
+    if any(score < thresholds["text"] for name, score in scores.items() if name not in metadata):
+        reasons.append("Decoded document text similarity below threshold")
+    if any(score < thresholds["text"] for name, score in scores.items() if name in metadata):
+        reasons.append("Decoded document metadata text similarity below threshold")
     if a["opaqueParts"] != b["opaqueParts"]:
         reasons.append("Decoded non-text resource/index bytes changed; no equivalence waiver")
         metrics["readback"]["opaqueParts"] = {"baseline": a["opaqueParts"], "candidate": b["opaqueParts"]}
@@ -397,7 +402,7 @@ def main():
     report = {"schema": 1, "baseline": str(roots[0]), "candidate": str(roots[1]), "thresholds": thresholds,
               "selectedCaseIDs": sorted(args.case_ids) if args.case_ids else None,
               "inspectionPolicy": {"tcr": "exact-decoded-bytes", "imageReferences": "diagnostic-only",
-                                   "binaryReadbackVersion": 1, "binaryReadbackFormats": sorted(READBACK_FORMATS),
+                                   "binaryReadbackVersion": 2, "binaryReadbackFormats": sorted(READBACK_FORMATS),
                                    "pdfAnnotationVersion": 1, "pdfAnnotationRasterVersion": 1 if args.pdf_render else None,
                                    "pdfRasterDpi": 144 if args.pdf_render else None, "pdfRasterVersion": 2 if args.pdf_render else None},
               "summary": dict(Counter(r["status"] for r in results)), "groups": summaries, "cases": results,

@@ -221,6 +221,7 @@ class ReadbackTests(unittest.TestCase):
         b = lrf(self.lrf("한글 content", False))
         self.assertEqual(a, b)
         self.assertEqual(a["textParts"]["object:1:text:0"], "한글 content")
+        self.assertEqual(a["metadataTextParts"], ["metadata"])
         with self.assertRaises(ValueError): lrf(self.lrf("text")[:-1])
 
     def test_lrf_toc_reads_labels_references_and_rejects_recursive_tags(self):
@@ -311,6 +312,28 @@ class ReadbackTests(unittest.TestCase):
         self.assertEqual(a["textParts"], b["textParts"])
         self.assertNotEqual(a["structure"], b["structure"])
         with self.assertRaises(ParseError): package(result("fixture", []), {"book.opf": b"<broken>"})
+
+    def test_metadata_text_failure_is_distinct_from_body_loss_without_waiving_either(self):
+        from readback import package, result
+        files = {"book.opf": b"<package><identifier>aaaaaaaaaaaaaaaa</identifier></package>",
+                 "chapter.xhtml": b"<html><body>Retained book text</body></html>"}
+        original = package(result("fixture", []), files)
+        changed_metadata = package(result("fixture", []), dict(files, **{
+            "book.opf": b"<package><identifier>zzzzzzzzzzzzzzzz</identifier></package>"}))
+        changed_body = package(result("fixture", []), dict(files, **{
+            "chapter.xhtml": b"<html><body>Lost</body></html>"}))
+        old = {"kind": "binary", "sha256": "same"}
+        for candidate, expected, absent in (
+            (changed_metadata, "Decoded document metadata text similarity below threshold", "Decoded document text similarity below threshold"),
+            (changed_body, "Decoded document text similarity below threshold", "Decoded document metadata text similarity below threshold"),
+        ):
+            with self.subTest(expected=expected), patch("compare.readback", side_effect=[original, candidate]):
+                status, reasons, metrics = compare_output(old, old, self.root / "a.lit", self.root / "b.lit", self.thresholds)
+                self.assertEqual(status, "FAIL")
+                self.assertIn(expected, reasons)
+                self.assertNotIn(absent, reasons)
+                self.assertEqual(metrics["readback"]["metadataTextParts"], ["book.opf"])
+                self.assertEqual(metrics["readback"]["textRatios"]["chapter.xhtml" if candidate is changed_metadata else "book.opf"], 1)
 
     def test_timeout_and_unavailable_readers_never_become_pass(self):
         a, b = self.root / "a.lit", self.root / "b.lit"

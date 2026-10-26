@@ -64,7 +64,7 @@ def image_type(data):
 
 def result(reader, coverage, limits=()):
     return {"reader": reader, "coverage": coverage, "limits": list(limits),
-            "textParts": {}, "structure": {}, "pictures": [], "opaqueParts": {}}
+            "textParts": {}, "metadataTextParts": [], "structure": {}, "pictures": [], "opaqueParts": {}}
 
 
 def picture(out, name, data):
@@ -95,9 +95,10 @@ class Markup(HTMLParser):
         self.strings.append(value)
 
 
-def markup(out, name, value):
+def markup(out, name, value, metadata=False):
     parser = Markup(); parser.feed(value); parser.close()
     out["textParts"][name] = "".join(parser.strings)
+    if metadata: out["metadataTextParts"].append(name)
     out["structure"].setdefault("markup", {})[name] = parser.events
 
 
@@ -114,7 +115,7 @@ def package(out, files):
                 if Path(name).suffix.lower() in (".css", ".info"): out["structure"][name] = value
             else:
                 if Path(name).suffix.lower() in (".xml", ".opf", ".ncx", ".snbc", ".snbf"): ET.fromstring(value)
-                markup(out, name, value)
+                markup(out, name, value, metadata=Path(name).suffix.lower() == ".opf")
         else:
             out["opaqueParts"][name] = hashlib.sha256(data).hexdigest()
     if out["opaqueParts"]: out["limits"].append("Unrecognized package parts remain exact decoded-byte checks: " + ", ".join(out["opaqueParts"]))
@@ -351,7 +352,7 @@ def lrf(data):
     out = result("independent-LRF-object-reader-v1", ["UTF-16 text and all parsed control tags", "object graph/styles/page geometry", "embedded images"],
                  ["No Sony device layout rendering; embedded fonts/sounds remain decoded-byte checks."])
     ET.fromstring(metadata)
-    markup(out, "metadata", text(metadata))
+    markup(out, "metadata", text(metadata), metadata=True)
     if thumb_size: picture(out, "thumbnail", take(data, 84 + info_size, thumb_size))
     out["structure"]["device"] = {"binding": data[36], "dpi": unpack("<H", data, 38)[0], "width": unpack("<H", data, 42)[0],
                                     "height": unpack("<H", data, 44)[0], "depth": data[46]}
