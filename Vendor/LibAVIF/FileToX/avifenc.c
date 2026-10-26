@@ -155,8 +155,9 @@ int main(int argc, char ** argv)
         goto done;
     }
     encoder->codecChoice = AVIF_CODEC_CHOICE_AOM;
-    // libaom writes the same bitstream with any number of threads from two on (its test/ethread_test.cc checks all-intra
-    // speed 6 at 2, 4 and 64), so more threads only shorten the encode; past eight they mostly add CPU time.
+    // More threads shorten libaom's encode; at most eight are used. libaom's test/ethread_test.cc finds the same bitstream
+    // with 2, 4 and 64 row-multithreaded threads for one 640x480 4:2:0 clip at all-intra speed 6, cq-level 18: evidence
+    // for, not proof of, output that does not depend on the count with 4:4:4 colour, alpha or other sizes.
     const long processors = sysconf(_SC_NPROCESSORS_ONLN);
     encoder->maxThreads = processors < 2 ? 2 : processors > 8 ? 8 : (int)processors;
     encoder->speed = 6;
