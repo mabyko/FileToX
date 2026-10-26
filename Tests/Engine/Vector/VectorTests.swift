@@ -911,3 +911,123 @@ extension VectorTests {
         }
     }
 }
+
+extension VectorTests {
+    private func textPathSource(_ body: String) -> Data {
+        Data("<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='200' height='120' font-family='Helvetica' font-size='16'>\(body)</svg>".utf8)
+    }
+
+    /// Outlines of the normalized text; referenced geometry (with an id) is left out.
+    private func textPathOutlines(_ body: String, file: StaticString = #filePath, line: UInt = #line) throws -> [String] {
+        let root = try XDocument.load(data: SvgNormalizer.normalize(textPathSource(body), baseDirectory: dir)).root
+        XCTAssertFalse(root.descendants().contains { $0.name.localName == "textPath" }, "text on a path is outlined", file: file, line: line)
+        return root.descendants().filter { $0.name.localName == "path" && $0.attributeValue("id") == nil }.compactMap { $0.attributeValue("d") }
+    }
+
+    func testTextOnAStraightPathMatchesTheSameTextLaidOutInLine() throws {
+        let expected = try textPathOutlines("<text x='10' y='50'>Path text</text>")
+        XCTAssertEqual(expected.count, 1)
+        // The path's own data (SVG 2), relative and implicit commands, a line, the reversed path with side=right, and
+        // the referenced path's own transform all describe the same line from (10, 50) to (190, 50).
+        for body in ["<path id='p' d='M10 50 H190'/><text><textPath href='#p'>Path text</textPath></text>",
+                     "<path id='p' d='M10 50 H190'/><text><textPath xlink:href='#p'>Path text</textPath></text>",
+                     "<text><textPath path='m1e1,50 180 0'>Path text</textPath></text>",
+                     "<line id='p' x1='10' y1='50' x2='190' y2='50'/><text><textPath href='#p'>Path text</textPath></text>",
+                     "<path id='p' d='M190 50 H10'/><text><textPath href='#p' side='right'>Path text</textPath></text>",
+                     "<path id='p' d='M0 0 H180' transform='translate(10 50)'/><text><textPath href='#p'>Path text</textPath></text>"] {
+            XCTAssertEqual(try textPathOutlines(body), expected, body)
+        }
+    }
+
+    func testStartOffsetAnchorsAndPositionsMoveAlongThePath() throws {
+        let path = "<path id='p' d='M10 50 H190'/>"
+        XCTAssertEqual(try textPathOutlines("\(path)<text text-anchor='middle'><textPath href='#p' startOffset='50%'>Mid</textPath></text>"),
+                       try textPathOutlines("<text x='100' y='50' text-anchor='middle'>Mid</text>"))
+        // x moves along the path (y doesn't apply), dx too, and dy moves across it.
+        XCTAssertEqual(try textPathOutlines("\(path)<text y='99'><textPath href='#p' startOffset='20'>A<tspan x='60' y='7' dy='5'>B</tspan><tspan dx='3'>C</tspan></textPath></text>"),
+                       try textPathOutlines("<text x='30' y='50'>A<tspan x='90' dy='5'>B</tspan><tspan dx='3'>C</tspan></text>"))
+    }
+
+    func testCharactersOffAnOpenPathAreHiddenAndFollowingTextStartsAtItsEnd() throws {
+        let font = CTFontCreateWithName("Helvetica" as CFString, 16, nil)
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "ABC", attributes: [.init(kCTFontAttributeName as String): font]))
+        // One unit past "ABC": the midpoint of "D" is beyond the end of the path.
+        let end = 10 + CTLineGetTypographicBounds(line, nil, nil, nil) + 1
+        XCTAssertEqual(try textPathOutlines("<path id='p' d='M10 50 H\(end)'/><text y='90'><textPath href='#p'>ABCD</textPath>E</text>"),
+                       try textPathOutlines("<text x='10' y='50'>ABC</text><text x='\(end)' y='50'>E</text>"))
+    }
+
+    func testClosedPathsWrapCharactersPastTheirEnd() throws {
+        let square = "M10 10 H110 V110 H10"
+        XCTAssertEqual(try textPathOutlines("<path id='p' d='\(square) V10'/><text><textPath href='#p' startOffset='396'>AB</textPath></text>"), [])
+        XCTAssertEqual(try textPathOutlines("<path id='p' d='\(square) Z'/><text><textPath href='#p' startOffset='396'>AB</textPath></text>").count, 1)
+        // A circle is the SVG 2 equivalent path: four clockwise arcs from its rightmost point.
+        XCTAssertEqual(try textPathOutlines("<circle id='c' cx='100' cy='60' r='40'/><text><textPath href='#c'>Round text</textPath></text>"),
+                       try textPathOutlines("<path id='c' d='M140 60 A40 40 0 0 1 100 100 A40 40 0 0 1 60 60 A40 40 0 0 1 100 20 A40 40 0 0 1 140 60 Z'/><text><textPath href='#c'>Round text</textPath></text>"))
+    }
+
+    func testMissingReferencesAndNestedTextPathsDrawNothing() throws {
+        let expected = try textPathOutlines("<text x='10' y='50'>AC</text>")
+        for body in ["<text x='10' y='50'>A<textPath href='#missing'>B</textPath>C</text>",
+                     "<text x='10' y='50'>A<textPath>B</textPath>C</text>",
+                     "<g id='g'/><text x='10' y='50'>A<textPath href='#g'>B</textPath>C</text>",
+                     "<path id='p' d='M10 50 H190'/><text><textPath href='#p'>A<tspan><textPath href='#p'>B</textPath></tspan>C</textPath></text>"] {
+            XCTAssertEqual(try textPathOutlines(body), expected, body)
+        }
+    }
+
+    func testGlyphsTurnWithThePathAndDecorationsFollowIt() throws {
+        let plain = verticalInkBounds(try verticalImage("<path id='p' d='M60 10 V170'/><text><textPath href='#p'>Turned</textPath></text>"))
+        XCTAssertGreaterThan(plain.height, plain.width * 3, "glyphs follow the downward path")
+        XCTAssertEqual(plain.minX, 240, accuracy: 6, "the baseline lies on the path")
+        let underlined = verticalInkBounds(try verticalImage("<path id='p' d='M60 10 V170'/><text text-decoration='underline'><textPath href='#p'>Turned</textPath></text>"))
+        // Below the baseline faces -x on a downward path, so the underline runs left of the glyphs along the path.
+        XCTAssertLessThan(underlined.minX, plain.minX - 2)
+        XCTAssertEqual(underlined.height, plain.height, accuracy: 12)
+    }
+
+    func testColourGlyphsOnAPathStayPositionedText() throws {
+        let normalized = SvgNormalizer.normalize(textPathSource("<path id='p' d='M10 50 H190'/><text><textPath href='#p'>A😀</textPath></text>"), baseDirectory: dir)
+        let texts = try XDocument.load(data: normalized).root.descendants().filter { $0.name.localName == "text" }
+        XCTAssertEqual(texts.map(\.value), ["😀"])
+        // Unrotated on a horizontal path, after "A", on the path's baseline.
+        let matrix = try XCTUnwrap(texts.first?.attributeValue("transform")).dropFirst("matrix(".count).dropLast().split(separator: " ").compactMap { Double($0) }
+        let font = CTFontCreateWithName("Helvetica" as CFString, 16, nil)
+        let advance = CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: "A", attributes: [.init(kCTFontAttributeName as String): font])), nil, nil, nil)
+        XCTAssertEqual(matrix.count, 6)
+        for (value, expected) in zip(matrix, [1, 0, 0, 1, 10 + advance, 50]) { XCTAssertEqual(value, expected, accuracy: 0.01) }
+        XCTAssertEqual(try textPathOutlines("<path id='p' d='M10 50 H190'/><text><textPath href='#p'>A😀</textPath></text>"),
+                       try textPathOutlines("<text x='10' y='50'>A</text>"))
+    }
+
+    func testMalformedAndHugePathDataEndsThePathWithoutCrashing() throws {
+        // Errors end the path where they occur; numbers too large to compute with leave nothing to measure.
+        XCTAssertEqual(try textPathOutlines("<text><textPath path='M10 50 H190 L'>Path text</textPath></text>"),
+                       try textPathOutlines("<text x='10' y='50'>Path text</text>"))
+        for data in ["L10 50 H190", "M0 0 A1e300 1e300 0 0 1 1e300 1e300", "M0 0 C1e308 1e308 -1e308 -1e308 1e308 0",
+                     "M1e308 0 h1e308 h-1e308", "M0 0 a0 0 0 0 1 0 0 z", "M10 50 Q 1e200 1e200 190 50"] {
+            _ = try textPathOutlines("<text><textPath path='\(data)'>Path text</textPath></text>")
+        }
+    }
+
+    func testPathsPastTheFlatteningBudgetStayWithTheRenderer() throws {
+        // 66,000 curves of at least 64 pieces each exceed the drawing's 4,194,304-piece budget.
+        let curves = String(repeating: "c1 1 2 2 3 0", count: 66_000)
+        let source = textPathSource("<path id='p' d='M0 50 \(curves)'/><text><textPath href='#p'>AB</textPath></text><text><textPath href='#p'>CD</textPath></text>")
+        let root = try XDocument.load(data: SvgNormalizer.normalize(source, baseDirectory: dir)).root
+        XCTAssertEqual(root.descendants().filter { $0.name.localName == "textPath" }.count, 2)
+    }
+
+    func testUnsupportedTextOnAPathStaysWithTheRenderer() throws {
+        // Vertical or rotated text on a path, right-to-left text on a path, mixed-direction styled chunks and geometry in
+        // percentages keep the text for CoreSVG.
+        for body in ["<text writing-mode='tb'><textPath href='#p'>AB</textPath></text>",
+                     "<text rotate='10'><textPath href='#p'>AB</textPath></text>",
+                     "<text direction='rtl'><textPath href='#p'>AB</textPath></text>",
+                     "<text><textPath href='#p'>A<tspan fill='red'>\u{5E9}</tspan>B</textPath></text>",
+                     "<rect id='r' width='50%' height='20'/><text><textPath href='#r'>AB</textPath></text>"] {
+            let root = try XDocument.load(data: SvgNormalizer.normalize(textPathSource("<path id='p' d='M10 50 H190'/>" + body), baseDirectory: dir)).root
+            XCTAssertNotNil(root.descendants().first { $0.name.localName == "textPath" }, body)
+        }
+    }
+}
