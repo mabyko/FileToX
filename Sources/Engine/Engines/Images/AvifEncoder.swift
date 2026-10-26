@@ -143,17 +143,21 @@ enum AvifEncoder {
     }
 
     /// A metadata tag's whole value as a comparable tree: its type, its qualifiers (such as `xml:lang`) and its text, items
-    /// or fields (by namespace and name).
+    /// or fields. Qualifiers and fields are named by namespace and local name, never by prefix.
     struct TagValue: Hashable {
         enum Content: Hashable { case text(String), items([TagValue]), unordered([TagValue: Int]), fields([String: TagValue]) }
+        /// A qualifier's namespace and local name, with its value.
+        struct Qualifier: Hashable { let name: String; let value: TagValue }
         let type: Int32
-        let qualifiers: [TagValue: Int]
+        let qualifiers: [Qualifier: Int]
         let content: Content
 
         init(_ tag: CGImageMetadataTag) {
             let type = CGImageMetadataTagGetType(tag)
             self.type = type.rawValue
-            qualifiers = Self.counts(((CGImageMetadataTagCopyQualifiers(tag) as? [AnyObject]) ?? []).map(Self.value))
+            qualifiers = Self.counts(((CGImageMetadataTagCopyQualifiers(tag) as? [AnyObject]) ?? []).map { qualifier in
+                Qualifier(name: Self.isTag(qualifier) ? AvifEncoder.key(qualifier as! CGImageMetadataTag) : "", value: Self.value(qualifier))
+            })
             let value = CGImageMetadataTagCopyValue(tag)
             if let items = value as? [AnyObject] {
                 content = type == .arrayUnordered ? .unordered(Self.counts(items.map(Self.value))) : .items(items.map(Self.value))
@@ -176,9 +180,9 @@ enum AvifEncoder {
 
         private static func text(_ object: AnyObject) -> String { object as? String ?? "\(object)" }
 
-        /// True when this value has `reference`'s type and holds all of it: its qualifiers, equal text, each of its fields,
-        /// the items of an ordered array or alternative in the same order, and those of an unordered array in any order.
-        /// Qualifiers and unordered items must be equal whole.
+        /// True when this value has `reference`'s type and holds all of it: its qualifiers (same namespace, local name and
+        /// value), equal text, each of its fields, the items of an ordered array or alternative in the same order, and those
+        /// of an unordered array in any order. Qualifiers and unordered items must be equal whole.
         func holds(_ reference: TagValue) -> Bool {
             guard type == reference.type, reference.qualifiers.allSatisfy({ qualifiers[$0.key, default: 0] >= $0.value }) else { return false }
             switch (content, reference.content) {
@@ -189,7 +193,7 @@ enum AvifEncoder {
             }
         }
 
-        private static func counts(_ values: [TagValue]) -> [TagValue: Int] { values.reduce(into: [:]) { $0[$1, default: 0] += 1 } }
+        private static func counts<Element: Hashable>(_ values: [Element]) -> [Element: Int] { values.reduce(into: [:]) { $0[$1, default: 0] += 1 } }
     }
 
     /// A new folder only this user can open, in the host's temporary folder.

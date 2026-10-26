@@ -223,9 +223,10 @@ final class AvifEncoderTests: XCTestCase {
     }
 
     func testANativeFileThatChangesInnerMetadataValuesIsNotUsed() throws {
-        // Helper files that keep every top-level tag but change an item, a field, a language or an order inside one keep
-        // ImageIO's file; the helper's file without a change replaces it. The order is that of an XMP-only sequence: ImageIO
-        // reads dc:creator back from the Exif Artist as well, so a change to its XMP alone does not show.
+        // Helper files that keep every top-level tag but change an item, a field, a language, a qualifier's namespace or name
+        // or an order inside one keep ImageIO's file; the helper's file without a change replaces it. The order is that of an
+        // XMP-only sequence: ImageIO reads dc:creator back from the Exif Artist as well, so a change to its XMP alone does
+        // not show.
         let folder = GraphicsTestKit.folder(), tiff = folder + "/inner.tiff"
         let xmp = """
             <x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -233,6 +234,7 @@ final class AvifEncoderTests: XCTestCase {
              xmlns:ftx="http://example.com/filetox/1.0/">
             <dc:subject><rdf:Bag><rdf:li>alpha</rdf:li><rdf:li>beta</rdf:li></rdf:Bag></dc:subject>
             <ftx:Steps><rdf:Seq><rdf:li>first step</rdf:li><rdf:li>second step</rdf:li></rdf:Seq></ftx:Steps>
+            <ftx:Ratings><rdf:Seq><rdf:li xml:lang="ko-KR">five</rdf:li></rdf:Seq></ftx:Ratings>
             <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Title</rdf:li><rdf:li xml:lang="ko-KR">제목</rdf:li></rdf:Alt></dc:title>
             <Iptc4xmpCore:CreatorContactInfo rdf:parseType="Resource"><Iptc4xmpCore:CiAdrCity>Seoul</Iptc4xmpCore:CiAdrCity></Iptc4xmpCore:CreatorContactInfo>
             </rdf:Description></rdf:RDF></x:xmpmeta>
@@ -257,10 +259,19 @@ final class AvifEncoderTests: XCTestCase {
         let mutations: [(String, [(String, String)])] = [
             ("unchanged", []), ("item", [(">beta<", ">BETA<")]), ("field", [(">Seoul<", ">Busan<")]), ("language", [("\"ko-KR\"", "\"ja-JP\"")]),
             ("order", [("first step", "\u{1}"), ("second step", "first step"), ("\u{1}", "second step")]),
+            // The same value as a qualifier of another namespace, then with another name too.
+            ("qualifier namespace", [("rdf:about=\"\"", "rdf:about=\"\" xmlns:q=\"http://example.com/qualifier/1.0/\""),
+                                     ("<rdf:li xml:lang=\"ko-KR\">five</rdf:li>", "<rdf:li rdf:parseType=\"Resource\"><rdf:value>five</rdf:value><q:lang>ko-KR</q:lang></rdf:li>")]),
+            ("qualifier name", [("rdf:about=\"\"", "rdf:about=\"\" xmlns:q=\"http://example.com/qualifier/1.0/\""),
+                                ("<rdf:li xml:lang=\"ko-KR\">five</rdf:li>", "<rdf:li rdf:parseType=\"Resource\"><rdf:value>five</rdf:value><q:Other>ko-KR</q:Other></rdf:li>")]),
         ]
         for (name, changes) in mutations {
-            let changed = changes.reduce(packet) { $0.replacingOccurrences(of: $1.0, with: $1.1) }
-            XCTAssertEqual(changed == packet, changes.isEmpty, name)
+            // Every replacement must change the packet.
+            let changed = changes.reduce(packet) { text, change in
+                let next = text.replacingOccurrences(of: change.0, with: change.1)
+                XCTAssertNotEqual(next, text, "\(name): \(change.0)")
+                return next
+            }
             let input = folder + "/\(name).in", made = folder + "/\(name)-helper.avif", path = folder + "/\(name).avif", helper = folder + "/\(name).sh"
             let xmpData = Data(changed.utf8)
             try Self.handOff(UInt32(frame.image.width), UInt32(frame.image.height), UInt32(channels), 75, Data(samples) + icc + exif + xmpData,
@@ -272,6 +283,58 @@ final class AvifEncoderTests: XCTestCase {
             let replaced = try AvifEncoder.improve([frame], at: path, helper: helper)
             XCTAssertEqual(replaced, changes.isEmpty, name)
             XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), changes.isEmpty ? try Data(contentsOf: URL(fileURLWithPath: made)) : imageIO, name)
+        }
+    }
+
+    func testQualifiersAndFieldsAreComparedByNamespaceAndName() throws {
+        // Both files written by the helper from the given XMP and read back by ImageIO. A qualifier or field keeps its
+        // namespace and local name whatever prefix spells it; unordered arrays may change their order, ordered ones may
+        // not, and the native file may add fields.
+        let folder = GraphicsTestKit.folder(), helper = try XCTUnwrap(AvifEncoder.helper)
+        let frame = try Self.prepared(Self.colour(65, 39), quality: 75)
+        let (samples, channels) = CodecPixels.straight(frame.image)
+        func packet(_ body: String) -> String {
+            """
+            <x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+            <rdf:Description rdf:about="" xmlns:ftx="http://example.com/filetox/1.0/" xmlns:q="http://example.com/qualifier/1.0/"
+             xmlns:alias="http://example.com/qualifier/1.0/" xmlns:other="http://example.com/other/1.0/">\(body)</rdf:Description>
+            </rdf:RDF></x:xmpmeta>
+            """
+        }
+        func file(_ name: String, _ body: String) throws -> Data {
+            let xmp = Data(packet(body).utf8), input = folder + "/\(name).in", output = folder + "/\(name).avif"
+            try Self.handOff(UInt32(frame.image.width), UInt32(frame.image.height), UInt32(channels), 75, Data(samples) + xmp,
+                             sizes: [0, 0, UInt64(xmp.count)]).write(to: URL(fileURLWithPath: input))
+            XCTAssertEqual(try ProcessRunner.runBlocking(helper, [input, output], timeout: 60).exitCode, 0, name)
+            return try Data(contentsOf: URL(fileURLWithPath: output))
+        }
+        func rating(_ qualifier: String) -> String {
+            "<ftx:Ratings><rdf:Seq><rdf:li rdf:parseType=\"Resource\"><rdf:value>five</rdf:value>\(qualifier)</rdf:li></rdf:Seq></ftx:Ratings>"
+        }
+        let record = "<ftx:Record rdf:parseType=\"Resource\"><q:City>Seoul</q:City><q:Country>KR</q:Country></ftx:Record>"
+        let tags = "<ftx:Tags><rdf:Bag><rdf:li>alpha</rdf:li><rdf:li>alpha</rdf:li><rdf:li>beta</rdf:li></rdf:Bag></ftx:Tags>"
+        let steps = "<ftx:Steps><rdf:Seq><rdf:li>first</rdf:li><rdf:li>second</rdf:li></rdf:Seq></ftx:Steps>"
+        let cases: [(String, String, String, Bool)] = [
+            ("qualifier unchanged", rating("<q:lang>ko-KR</q:lang>"), rating("<q:lang>ko-KR</q:lang>"), true),
+            ("qualifier prefix alias", rating("<q:lang>ko-KR</q:lang>"), rating("<alias:lang>ko-KR</alias:lang>"), true),
+            ("qualifier local name", rating("<q:lang>ko-KR</q:lang>"), rating("<q:Other>ko-KR</q:Other>"), false),
+            ("qualifier namespace", rating("<q:lang>ko-KR</q:lang>"), rating("<other:lang>ko-KR</other:lang>"), false),
+            ("xml:lang to qualifier", "<ftx:Ratings><rdf:Seq><rdf:li xml:lang=\"ko-KR\">five</rdf:li></rdf:Seq></ftx:Ratings>",
+             rating("<q:lang>ko-KR</q:lang>"), false),
+            ("qualifier missing", rating("<q:lang>ko-KR</q:lang>"), "<ftx:Ratings><rdf:Seq><rdf:li>five</rdf:li></rdf:Seq></ftx:Ratings>", false),
+            ("field prefix alias", record, record.replacingOccurrences(of: "q:", with: "alias:"), true),
+            ("field local name", record, record.replacingOccurrences(of: "q:City", with: "q:Town"), false),
+            ("field namespace", record, record.replacingOccurrences(of: "q:City", with: "other:City"), false),
+            ("extra field", record, record.replacingOccurrences(of: "</ftx:Record>", with: "<q:Code>11</q:Code></ftx:Record>"), true),
+            ("bag order", tags, "<ftx:Tags><rdf:Bag><rdf:li>beta</rdf:li><rdf:li>alpha</rdf:li><rdf:li>alpha</rdf:li></rdf:Bag></ftx:Tags>", true),
+            ("bag duplicate missing", tags, tags.replacingOccurrences(of: "<rdf:li>alpha</rdf:li><rdf:li>alpha</rdf:li>", with: "<rdf:li>alpha</rdf:li>"), false),
+            ("sequence order", steps, steps.replacingOccurrences(of: "first</rdf:li><rdf:li>second", with: "second</rdf:li><rdf:li>first"), false),
+        ]
+        for (index, (name, reference, candidate, kept)) in cases.enumerated() {
+            XCTAssertNotEqual(reference == candidate, name != "qualifier unchanged", name)
+            let metadata = try XCTUnwrap(CGImageMetadataCreateFromXMPData(Data(packet(reference).utf8) as CFData), name)
+            let referenceFile = try file("\(index)-reference", reference), candidateFile = try file("\(index)-candidate", candidate)
+            XCTAssertEqual(AvifEncoder.keepsTags(of: metadata, candidateFile, comparedTo: referenceFile), kept, name)
         }
     }
 

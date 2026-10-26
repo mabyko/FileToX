@@ -27,6 +27,9 @@ that are not all gray. It keeps the helper's file only when both hold:
 - Read back by ImageIO, it keeps every top-level tag of the picture's metadata that ImageIO's file kept.
   - The whole value must be kept: equal text, and every item, field and qualifier (such as a language) of arrays,
     alternatives and structures, in order where the array is ordered.
+  - Qualifiers and fields count by namespace and local name, whatever prefix spells them.
+  - This is ImageIO's reading, one view of Exif and XMP together: dc:creator, for one, also comes back from the Exif
+    Artist. It does not compare the raw Exif and XMP containers, or what other readers see.
   - The pixel dimensions are the exception: the helper's file records the picture's own size, while ImageIO copies
     the source's.
 
