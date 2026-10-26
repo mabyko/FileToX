@@ -139,4 +139,60 @@ final class CalibreEbookTests: EbookTestCase {
         let back = try await convert(lit, "lit", "epub", Preset(), CalibreConverter()), book = try EpubReader.readBook(back, folder), text = PlainTextWriter.write(book.document)
         XCTAssertTrue(text.contains("밤하늘에")); XCTAssertTrue(text.contains("주석 내용입니다."))
     }
+    func testLitKeepsNonSpineNavigationStyles() async throws {
+        try useCalibre()
+        let epub = try EbookBuilders.epub(folder)
+        let lit = try await convert(epub, "epub", "lit", Preset(), CalibreConverter())
+        let original = try Data(contentsOf: URL(fileURLWithPath: lit))
+        let back = try await convert(lit, "lit", "epub", Preset(), CalibreConverter())
+        let extracted = path("navigation-styles")
+        try EbookFiles.extract(ZipReader(path: back), extracted)
+        let opfPath = try OpfPackage.rootFile(extracted), opf = try XDocument.load(opfPath)
+        let toc = try XCTUnwrap(opf.root.descendants().first { $0.name.localName == "reference" && $0.attributeValue("type") == "toc" })
+        let tocPath = try XCTUnwrap(EbookFiles.safePath(FilePath.directoryName(opfPath)!, try XCTUnwrap(toc.attributeValue("href"))))
+        let html = try XDocument.load(tocPath)
+        let styles = html.root.descendants().filter { $0.name.localName == "link" && $0.attributeValue("rel") == "stylesheet" }
+        XCTAssertFalse(styles.isEmpty)
+        var css = ""
+        for style in styles {
+            let target = try XCTUnwrap(EbookFiles.safePath(FilePath.directoryName(tocPath)!, try XCTUnwrap(style.attributeValue("href"))))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: target), "Missing linked stylesheet: \(target)")
+            if FileManager.default.fileExists(atPath: target) { css += try String(contentsOfFile: target, encoding: .utf8) }
+        }
+        XCTAssertTrue(css.contains(".calibre_toc_header"))
+        XCTAssertTrue(css.contains("text-align: center"))
+        XCTAssertTrue(css.contains("margin-left: 1.2em"))
+        XCTAssertTrue(css.contains("text-indent: -1.2em"))
+        let package = try OpfPackage.load(opfPath)
+        XCTAssertFalse(package.spine.contains { $0.path == tocPath }, "Preserve the input's reading order")
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: lit)), original)
+        let text = PlainTextWriter.write(try EpubReader.readBook(back, folder).document)
+        for expected in ["첫 번째 장", "두 번째 장", "주석 내용입니다."] { XCTAssertTrue(text.contains(expected)) }
+    }
+    func testLitUsesSelectedCompanionAndRejectsIncompleteInstallation() async throws {
+        let actual = path("selected"), aliases = path("aliases")
+        for directory in [actual, aliases] { try FileManager.default.createDirectoryIfNeeded(directory) }
+        let executable = FilePath.combine(actual, "ebook-convert")
+        try Data("#!/bin/sh\nexit 8\n".utf8).write(to: URL(fileURLWithPath: executable))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable)
+        try FileManager.default.createSymbolicLink(atPath: FilePath.combine(aliases, "ebook-convert"), withDestinationPath: executable)
+        let unrelated = FilePath.combine(aliases, "calibre-debug")
+        try Data("#!/bin/sh\nprintf wrong-installation > \"$5\"\n".utf8).write(to: URL(fileURLWithPath: unrelated))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: unrelated)
+        EngineEnvironment.ownCopies = ["calibre": aliases]
+        let input = try save("source.lit", Data("selected-installation".utf8))
+        do { _ = try await convert(input, "lit", "epub", Preset(), CalibreConverter()); XCTFail("Expected missing selected companion failure") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("LIT style preservation requires calibre-debug")) }
+        let companion = FilePath.combine(actual, "calibre-debug")
+        let script = """
+        #!/bin/sh
+        test "$1" = -e && test "$3" = -- && test "$#" = 5 || exit 9
+        test -f "$2" && test -d "$CALIBRE_CONFIG_DIRECTORY" || exit 7
+        cp "$4" "$5"
+        """
+        try Data(script.utf8).write(to: URL(fileURLWithPath: companion))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: companion)
+        let output = try await convert(input, "lit", "epub", Preset(), CalibreConverter())
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: output)), Data("selected-installation".utf8))
+    }
 }
