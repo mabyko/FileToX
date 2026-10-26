@@ -70,12 +70,18 @@ Markdown 최적화는 기존 AST와 출력 의미를 유지하며 중복 탐색�
 | `ffmpeg` | 외부 FFmpeg | 같은 실행 파일 | 하 |
 | `cad` | ACadSharp·SkiaSharp | DXF 읽기·쓰기, DWG 읽기(AC1014–AC1032)·쓰기(AC1032), 장면·렌더링을 Swift·CoreGraphics로 이식 완료. 세부는 4절 | 상 |
 | `ebook` | 자체 코드 + ImageMagick·PdfSharp·PDFtoImage·SharpCompress | 이식 + ImageIO·PDFKit(쪽 편집)·PDFium(래스터)·7-Zip | 중 |
-| `pandoc`, `ghostscript`, `calibre`, `libreoffice` | 외부 프로그램 | 기존 프로그램 유지. Calibre TCR 쓰기는 아래 압축 손상 우회 적용 | 하 |
+| `pandoc`, `ghostscript`, `calibre`, `libreoffice` | 외부 프로그램 | 기존 프로그램 유지. Calibre는 아래 목차 스타일 보존·TCR 압축 손상 우회 적용 | 하 |
 
 Calibre의 TCR 쓰기는 기존 문서 해석·텍스트 작성기를 유지하면서 압축 직전 바이트를 확보하고 Swift TCR
-압축기로 저장한다. Calibre 9.15.0 압축기의 내용 손상을 피하기 위한 변경이다. 선택한 `ebook-convert`의
-심볼릭 링크를 해석한 디렉터리에 `calibre-debug`가 함께 있어야 한다. 없으면 완전한 Calibre 설치본을
-선택하라는 오류를 내고 출력을 확정하지 않는다. 별도 시스템 Python은 필요 없다.
+압축기로 저장한다. Calibre 9.15.0 압축기의 내용 손상을 피하기 위한 변경이다. 모든 Calibre 변환에서는
+읽기 순서 밖의 목차 등 HTML 문서도 기존 CSS 처리기에 전달해 스타일시트 교체 때 서식이 사라지는 것을
+막는다. 실제 읽기 순서와 본문의 글꼴 기준 크기는 유지하며, LIT → EPUB → AZW3처럼 여러 단계를 거치는
+경우에도 매 단계 적용한다.
+
+선택한 `ebook-convert`의 심볼릭 링크를 해석한 디렉터리에 `calibre-debug`가 함께 있어야 한다. 없으면
+완전한 Calibre 설치본을 선택하라는 오류를 내고 출력을 확정하지 않는다. 별도 시스템 Python은 필요 없다.
+CSS 보완은 자식 프로세스에서만 적용하는 Calibre 내부 API 패치이며, 검증한 버전은 번들의 9.15.0이다.
+사용자가 선택하는 다른 버전까지 호환성을 보장하지 않으므로 Calibre 갱신 시 다시 검증해야 한다.
 
 코어와 host도 Swift로 옮긴다: 형식 레지스트리, 프리셋·출력 규칙·이름 바꾸기, 프로필 선택, 경로 탐색(`RoutePlanner`·`ConverterCatalog`), 작업 큐와 출력 staging·확정(패치 0001), 설정·프리셋·프로필·이력 저장소(`UserDataStore`의 JSON 형식과 스키마 이전 그대로), 지역화, NDJSON 프로토콜·잠금·journal 정리.
 
