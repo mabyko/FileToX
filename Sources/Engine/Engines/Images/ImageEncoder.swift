@@ -1,8 +1,8 @@
 // Port of Filee.Engines/Magick/ImageEncoder.cs: applies preset ImageOptions and writes frames in the requested format.
 // Used by MagickImageConverter and by every engine that writes raster images (PDF pages, SVG, CAD, ICNS, Ghostscript).
 // ImageMagick is replaced by ImageIO for the formats this Mac encodes, libjpeg-turbo set up like ImageMagick for JPEG,
-// libwebp / libjxl for WebP and JPEG XL, OpenJPEG for lossy JP2 codestreams, Swift codecs for Netpbm and PSD/PSB,
-// and ImageMagick's resize ported to Swift.
+// libwebp / libjxl for WebP and JPEG XL, libavif for 8-bit colour AVIF (AvifEncoder), OpenJPEG for lossy JP2 codestreams,
+// Swift codecs for Netpbm and PSD/PSB, and ImageMagick's resize ported to Swift.
 
 import CoreGraphics
 import Foundation
@@ -30,7 +30,7 @@ struct ImageFrame {
     static let icoSizesKey = "FileToXIcoSizes" as CFString
     /// Lossless WebP requested (`ImageOptions.webpLossless`).
     static let losslessKey = "FileToXLossless" as CFString
-    /// Preset quality 1…100 for the JPEG, JP2, WebP and JPEG XL encoders (ImageMagick's `image.Quality`).
+    /// Preset quality 1…100 for the JPEG, JP2, WebP, JPEG XL and AVIF encoders (ImageMagick's `image.Quality`).
     static let qualityKey = "FileToXQuality" as CFString
     /// Sampling factors of a JPEG source, [h, v] per component (ImageMagick's "jpeg:sampling-factor" property).
     static let jpegSamplingKey = "FileToXJpegSampling" as CFString
@@ -193,6 +193,7 @@ enum ImageEncoder {
         case "avif":
             // ImageIO's AVIF encoder rejects 1.0.
             frame.properties[kCGImageDestinationLossyCompressionQuality] = min(Double(quality) / 100, 0.99)
+            frame.properties[ImageFrame.qualityKey] = quality
         case "jxl":
             // 100 means lossless (JPEG XL distance 0).
             frame.properties[ImageFrame.qualityKey] = quality
@@ -274,6 +275,10 @@ enum ImageEncoder {
             try JpegXlEncoder.write(first, to: path)
         case "jpg":
             try JpegEncoder.write(first, to: path)
+        case "avif":
+            // ImageIO's file stays unless libavif's keeps more of the picture (AvifEncoder).
+            try writeImageIO(frames, to: path, format: format)
+            try AvifEncoder.improve(frames, at: path)
         default:
             try writeImageIO(frames, to: path, format: format)
         }

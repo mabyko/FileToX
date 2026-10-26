@@ -52,6 +52,21 @@ SIG = {"png": b"\x89PNG", "jpg": b"\xff\xd8", "pdf": b"%PDF", "zip": b"PK", "doc
        "tiff": (b"II*\0", b"MM\0*"), "woff2": b"wOF2", "csv": None, "html": None, "hwp": b"\xd0\xcf\x11\xe0", "md": None, "txt": None,
        "svg": None, "epub": b"PK", "webp": b"RIFF"}
 results = []
+def colour_subsampling(path):
+    """(x, y) chroma subsampling of each colour (not monochrome) av1C property in an AVIF's meta box."""
+    b, found = pathlib.Path(path).read_bytes(), []
+    def boxes(start, end):
+        while start + 8 <= end:
+            size = int.from_bytes(b[start:start + 4], "big")
+            if size < 8 or start + size > end: return
+            yield b[start + 4:start + 8], start + 8, start + size
+            start += size
+    for kind, s, e in boxes(0, len(b)):
+        for kind, s, e in (boxes(s + 4, e) if kind == b"meta" else ()):
+            for kind, s, e in (boxes(s, e) if kind == b"iprp" else ()):
+                for kind, s, e in (boxes(s, e) if kind == b"ipco" else ()):
+                    if kind == b"av1C" and not b[s + 2] & 0x10: found.append((b[s + 2] >> 3 & 1, b[s + 2] >> 2 & 1))
+    return found
 def check(name, data, ext=None, count=None, expect_unavailable=None):
     outs = [o["path"] for f in data["files"] for o in (f.get("outputs") or [])]
     ok = data["state"] == "completed" and outs
@@ -72,6 +87,12 @@ unavailable = {e["id"]: e.get("reasonKey") for e in catalog["engines"] if not e[
 
 a = png(files / "photo.png", 64, 48)
 check("png→jpg", convert([a], targetFormat="jpg"), "jpg")
+# The AVIF encoder process next to the host replaces ImageIO's 4:2:0 file with its 4:4:4 one for this colour picture.
+helper = host.parent / "FileToXAvifEncoder"
+arch = subprocess.run(["/usr/bin/lipo", "-archs", str(helper)], capture_output=True, text=True).stdout.strip() if helper.is_file() else None
+avif = convert([a], targetFormat="avif"); outs = [o["path"] for f in avif["files"] for o in (f.get("outputs") or [])]
+native = avif["state"] == "completed" and len(outs) == 1 and pathlib.Path(outs[0]).read_bytes()[4:12] == b"ftypavif" and colour_subsampling(outs[0]) == [(0, 0)]
+results.append(("png→avif (FileToXAvifEncoder, 4:4:4)", native and arch == "arm64", avif["state"], outs, [("helper", str(helper), arch)]))
 subprocess.run(["sips", "-s", "format", "heic", str(a), "--out", str(files / "photo.heic")], capture_output=True)
 if (files / "photo.heic").exists():
     check("heic→png", convert([files / "photo.heic"], targetFormat="png"), "png")
