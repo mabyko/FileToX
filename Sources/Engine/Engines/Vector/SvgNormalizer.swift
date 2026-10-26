@@ -467,6 +467,12 @@ enum SvgNormalizer {
         var currentPath: TextPathShape?
         var pathStarts = false
         var resume: CGPoint?
+        /// Inside a textPath that draws nothing: its characters still take part in white space and positions.
+        var suppressed = 0
+        /// The suppressed characters ended with a space; it disappears with them instead of collapsing the next one.
+        var suppressedTrailingSpace = false
+        /// A unicode-bidi other than normal somewhere in horizontal text.
+        var bidiEmbedding = false
 
         init(_ element: XElement, _ style: TextStyle, _ targets: TextPathTargets) {
             self.element = element
@@ -481,6 +487,12 @@ enum SvgNormalizer {
             if style.values["xml:space"] != "preserve", let last = runs.indices.last {
                 runs[last].text = String(runs[last].text.reversed().drop { $0 == " " }.reversed())
             }
+            // shortcut: unicode-bidi embedding, overrides and isolation are not applied to the outlines, so text whose
+            // order they can change (right-to-left characters, bidi controls or a right-to-left direction) stays with CoreSVG.
+            if bidiEmbedding && runs.contains(where: { run in
+                run.style.values["direction"]?.lowercased() == "rtl"
+                    || SvgNormalizer.bidirectionalCharacters.firstMatch(in: run.text, range: NSRange(location: 0, length: (run.text as NSString).length)) != nil
+            }) { return nil }
             // shortcut: styled vertical or on-path bidi chunks, and right-to-left text on a path, stay with CoreSVG until
             // shaping spans the whole anchored chunk.
             var chunkRuns = 0, bidirectional = false
@@ -504,19 +516,25 @@ enum SvgNormalizer {
             if !isRoot && node.attributeValue("display") == "none" { return }
             // shortcut: mixed vertical/horizontal inlines stay with CoreSVG until orthogonal inline layout is implemented.
             if self.style.vertical && !style.vertical { unsupported = true }
-            if self.style.vertical, let bidi = node.attributeValue("unicode-bidi"), bidi.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "normal" { unsupported = true }
+            if let bidi = node.attributeValue("unicode-bidi"), bidi.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "normal" {
+                if self.style.vertical { unsupported = true } else { bidiEmbedding = true }
+            }
             let size = style.fontSize
             var shape: TextPathShape?
+            var suppress = false
             if node.name.localName == "textPath" {
                 // A textPath belongs directly in its text; nested ones and missing or invalid references draw nothing.
-                guard node.parent === element else { return }
-                switch SvgNormalizer.textPathReference(node, targets: targets, fontSize: size) {
-                case .shape(let path): shape = path
-                case .invalid: return
-                case .unsupported: unsupported = true; return
+                if node.parent !== element || suppressed > 0 {
+                    suppress = true
+                } else {
+                    switch SvgNormalizer.textPathReference(node, targets: targets, fontSize: size) {
+                    case .shape(let path): shape = path
+                    case .invalid: suppress = true
+                    case .unsupported: unsupported = true; return
+                    }
                 }
                 // shortcut: vertical text on a path stays with CoreSVG until glyph orientation along a path is implemented.
-                if self.style.vertical { unsupported = true; return }
+                if shape != nil && self.style.vertical { unsupported = true; return }
             } else {
                 // Positions of the element apply to its first characters; a textPath has none of its own.
                 let x = SvgNormalizer.lengths(node.attributeValue("x"), fontSize: size), y = SvgNormalizer.lengths(node.attributeValue("y"), fontSize: size)
@@ -540,8 +558,16 @@ enum SvgNormalizer {
                 // The path's characters start a chunk at its start, offset across it from zero.
                 currentPath = shape; pathStarts = true; penY = 0; resume = nil
             }
+            if suppress {
+                if suppressed == 0 { suppressedTrailingSpace = false }
+                suppressed += 1
+            }
             defer {
-                if let shape { currentPath = nil; pathStarts = false; resume = shape.end }
+                if let shape { currentPath = nil; pathStarts = false; resume = shape.continuation }
+                if suppress {
+                    suppressed -= 1
+                    if suppressed == 0 && suppressedTrailingSpace { lastWasSpace = false }
+                }
             }
             for child in node.nodes {
                 switch child {
@@ -575,6 +601,17 @@ enum SvgNormalizer {
                     lastWasSpace = c == " "
                 }
                 text.append(c)
+            }
+            if suppressed > 0 {
+                if let last = text.last { suppressedTrailingSpace = last == " " && !preserve }
+                // Characters that draw nothing still use up the positions given for them.
+                for _ in text where !pendingX.isEmpty || !pendingY.isEmpty || !pendingDX.isEmpty || !pendingDY.isEmpty {
+                    if !pendingX.isEmpty { pendingX.removeFirst() }
+                    if !pendingY.isEmpty { pendingY.removeFirst() }
+                    if !pendingDX.isEmpty { pendingDX.removeFirst() }
+                    if !pendingDY.isEmpty { pendingDY.removeFirst() }
+                }
+                return
             }
             for character in text {
                 let positioned = !pendingX.isEmpty || !pendingY.isEmpty || !pendingDX.isEmpty || !pendingDY.isEmpty
@@ -658,7 +695,7 @@ enum SvgNormalizer {
             }
         }
 
-        private func build() -> XElement {
+        private func build() -> XElement? {
             let group = XElement(SvgNormalizer.svg + "g")
             // The text's own (not inherited) attributes stay on the group: id, transform, clip-path, mask, filter, opacity …
             let textAttributes: Set<String> = ["x", "y", "dx", "dy", "rotate", "textLength", "lengthAdjust", "font-family", "font-size", "font-weight",
@@ -668,7 +705,8 @@ enum SvgNormalizer {
                 group.setAttributeValue(attribute.name, attribute.value)
             }
             for run in runs where !run.text.isEmpty && run.style.values["visibility"] != "hidden" {
-                for node in SvgNormalizer.outline(run) { group.add(node) }
+                guard let nodes = SvgNormalizer.outline(run) else { return nil }
+                for node in nodes { group.add(node) }
             }
             return group
         }
@@ -741,17 +779,14 @@ enum SvgNormalizer {
     }
 
     /// The run as paths (glyph outlines and decoration lines) with its paint; glyphs without outlines (colour emoji)
-    /// stay text.
-    private static func outline(_ run: TextLayout.Run) -> [XElement] {
+    /// stay text. Nil when text on a path can't be placed, which keeps the whole text with CoreSVG.
+    private static func outline(_ run: TextLayout.Run) -> [XElement]? {
         let ctLine = line(run.text, run.font, run.style, vertical: run.vertical)
         let path = CGMutablePath()
         var leftovers: [XElement] = []
         let wantsItalic = run.style.italic
-        for glyphRun in (CTLineGetGlyphRuns(ctLine) as? [CTRun]) ?? [] {
-            if let shape = run.path {
-                placeOnPath(glyphRun, run, shape, path, &leftovers)
-                continue
-            }
+        if let shape = run.path, !placeOnPath(ctLine, run, shape, path, &leftovers) { return nil }
+        for glyphRun in run.path == nil ? (CTLineGetGlyphRuns(ctLine) as? [CTRun]) ?? [] : [] {
             let count = CTRunGetGlyphCount(glyphRun)
             guard count > 0, let attributes = CTRunGetAttributes(glyphRun) as? [String: Any],
                   let value = attributes[kCTFontAttributeName as String] else { continue }
@@ -825,58 +860,115 @@ enum SvgNormalizer {
         return [element] + leftovers
     }
 
-    /// Text on a path: each cluster's advance midpoint goes to that distance along the path, turned with the path's
-    /// tangent and offset across it (SVG 2 "Position on path"). Clusters past the path's ends aren't drawn; decoration
-    /// lines are drawn per cluster so they follow the path.
-    private static func placeOnPath(_ glyphRun: CTRun, _ run: TextLayout.Run, _ shape: TextPathShape, _ path: CGMutablePath, _ leftovers: inout [XElement]) {
-        let count = CTRunGetGlyphCount(glyphRun)
-        guard count > 0, let attributes = CTRunGetAttributes(glyphRun) as? [String: Any],
-              let value = attributes[kCTFontAttributeName as String] else { return }
-        let font = value as! CTFont
-        var glyphs = [CGGlyph](repeating: 0, count: count)
-        var positions = [CGPoint](repeating: .zero, count: count)
-        var advances = [CGSize](repeating: .zero, count: count)
-        var indices = [CFIndex](repeating: 0, count: count)
-        CTRunGetGlyphs(glyphRun, CFRange(location: 0, length: count), &glyphs)
-        CTRunGetPositions(glyphRun, CFRange(location: 0, length: count), &positions)
-        CTRunGetAdvances(glyphRun, CFRange(location: 0, length: count), &advances)
-        CTRunGetStringIndices(glyphRun, CFRange(location: 0, length: count), &indices)
-        let slant: CGFloat = run.style.italic && !CTFontGetSymbolicTraits(font).contains(.traitItalic) ? 0.21 : 0
-        // Letter spacing follows a character; the character itself is centred on its own advance.
+    /// Text on a path. Each typographic cluster (a grapheme joined with every character a glyph covers, such as a
+    /// ligature, across the font runs it is shaped in) keeps its shaped layout and moves rigidly: the midpoint of its
+    /// advance cell goes to that distance along the path, turned with the tangent and offset across it (SVG 2 "Position
+    /// on path"). Clusters past an open path's ends aren't drawn; decorations are drawn per cluster so they follow the
+    /// path. False when a cluster's advance cell can't be recovered from the shaped line.
+    private static func placeOnPath(_ ctLine: CTLine, _ run: TextLayout.Run, _ shape: TextPathShape, _ path: CGMutablePath, _ leftovers: inout [XElement]) -> Bool {
+        let source = run.text as NSString
+        let count = source.length
+        var parent = Array(0..<count)
+        func root(_ index: Int) -> Int {
+            var index = index
+            while parent[index] != index { parent[index] = parent[parent[index]]; index = parent[index] }
+            return index
+        }
+        func join(_ a: Int, _ b: Int) {
+            let x = root(a), y = root(b)
+            if x != y { parent[max(x, y)] = min(x, y) }
+        }
+        var location = 0
+        while location < count {
+            let grapheme = source.rangeOfComposedCharacterSequence(at: location)
+            for index in grapheme.location..<NSMaxRange(grapheme) { join(grapheme.location, index) }
+            location = max(NSMaxRange(grapheme), location + 1)
+        }
+        struct Glyph {
+            let font: CTFont, glyph: CGGlyph, position: CGPoint, index: Int
+            /// The pen positions before and after the glyph's advance, apart from any offset of the glyph itself.
+            let cell: (low: CGFloat, high: CGFloat)
+        }
+        var glyphs: [Glyph] = []
+        for glyphRun in (CTLineGetGlyphRuns(ctLine) as? [CTRun]) ?? [] {
+            let glyphCount = CTRunGetGlyphCount(glyphRun)
+            guard glyphCount > 0, let attributes = CTRunGetAttributes(glyphRun) as? [String: Any],
+                  let value = attributes[kCTFontAttributeName as String] else { continue }
+            let font = value as! CTFont
+            var ids = [CGGlyph](repeating: 0, count: glyphCount)
+            var positions = [CGPoint](repeating: .zero, count: glyphCount)
+            var indices = [CFIndex](repeating: 0, count: glyphCount)
+            var advances = [CGSize](repeating: .zero, count: glyphCount)
+            var origins = [CGPoint](repeating: .zero, count: glyphCount)
+            CTRunGetGlyphs(glyphRun, CFRange(location: 0, length: glyphCount), &ids)
+            CTRunGetPositions(glyphRun, CFRange(location: 0, length: glyphCount), &positions)
+            CTRunGetStringIndices(glyphRun, CFRange(location: 0, length: glyphCount), &indices)
+            CTRunGetBaseAdvancesAndOrigins(glyphRun, CFRange(location: 0, length: glyphCount), &advances, &origins)
+            // A glyph covers the characters from its index up to the run's next glyph index.
+            let range = CTRunGetStringRange(glyphRun)
+            let starts = Set(indices).sorted()
+            for (k, start) in starts.enumerated() {
+                let end = k + 1 < starts.count ? starts[k + 1] : range.location + range.length
+                guard start >= 0, start < end, end <= count else { return false }
+                for index in start..<end { join(start, index) }
+            }
+            for i in 0..<glyphCount {
+                let pen = positions[i].x - origins[i].x, next = pen + advances[i].width
+                glyphs.append(Glyph(font: font, glyph: ids[i], position: positions[i], index: indices[i], cell: (min(pen, next), max(pen, next))))
+            }
+        }
+        let clusters = (0..<count).map(root)
+        // A cluster's advance cell spans its glyphs' cells, so offsets (marks, enclosing marks, glyphs another font
+        // shaped) stay where shaping put them inside it.
+        var low: [Int: CGFloat] = [:], high: [Int: CGFloat] = [:]
+        for glyph in glyphs {
+            let cluster = clusters[glyph.index]
+            low[cluster] = min(low[cluster] ?? glyph.cell.low, glyph.cell.low)
+            high[cluster] = max(high[cluster] ?? glyph.cell.high, glyph.cell.high)
+        }
+        // Letter spacing ends a character's advance cell; the character centres on its own advance.
         var spacing: CGFloat = 0
         if let value = run.style.values["letter-spacing"], value != "normal" {
             spacing = CGFloat(length(value, fontSize: run.style.fontSize, percentOf: run.style.fontSize) ?? 0)
         }
-        let source = run.text as NSString
-        var start = 0
-        while start < count {
-            // The glyphs of a grapheme cluster (base and marks) move together.
-            let cluster = source.rangeOfComposedCharacterSequence(at: indices[start])
-            var end = start + 1
-            while end < count && NSLocationInRange(indices[end], cluster) { end += 1 }
-            defer { start = end }
-            let left = (start..<end).map { positions[$0].x }.min() ?? 0
-            let advance = (start..<end).reduce(CGFloat(0)) { $0 + advances[$1].width }
-            let width = max(advance - spacing, 0)
-            guard let placement = shape.place(run.x + Double(left + width / 2) + shape.offset, anchor: run.anchor) else { continue }
-            let frame = CGAffineTransform(rotationAngle: placement.angle).concatenating(CGAffineTransform(translationX: placement.point.x, y: placement.point.y))
-            for i in start..<end {
-                let x = positions[i].x - left - width / 2, y = CGFloat(run.y) - positions[i].y
-                var transform = CGAffineTransform(a: 1, b: 0, c: slant, d: -1, tx: x, ty: y).concatenating(frame)
-                if let glyph = CTFontCreatePathForGlyph(font, glyphs[i], &transform) {
-                    path.addPath(glyph)
-                } else if i == start && CTFontGetSymbolicTraits(font).contains(.traitColorGlyphs) {
-                    let place = CGAffineTransform(translationX: x, y: y).concatenating(frame)
-                    let text = XElement(svg + "text", XAttribute("x", 0), XAttribute("y", 0),
-                                        XAttribute("font-family", CTFontCopyFamilyName(font) as String), XAttribute("font-size", run.style.fontSize),
-                                        XAttribute("text-anchor", "start"), XAttribute("direction", "ltr"),
-                                        XAttribute("transform", "matrix(\(place.a) \(place.b) \(place.c) \(place.d) \(place.tx) \(place.ty))"))
-                    text.add(source.substring(with: cluster))
-                    leftovers.append(text)
-                }
-            }
-            decorateLine(run, path, left: -width / 2, width: advance, transform: frame)
+        var frames: [Int: (frame: CGAffineTransform, middle: CGFloat)] = [:], order: [Int] = [], hidden = Set<Int>()
+        for glyph in glyphs {
+            let cluster = clusters[glyph.index]
+            guard frames[cluster] == nil, !hidden.contains(cluster) else { continue }
+            guard let cellLow = low[cluster], let cellHigh = high[cluster], cellLow.isFinite, cellHigh.isFinite, cellLow <= cellHigh else { return false }
+            let middle = (cellLow + cellHigh - min(spacing, cellHigh - cellLow)) / 2
+            guard let placement = shape.place(run.x + Double(middle) + shape.offset, anchor: run.anchor) else { hidden.insert(cluster); continue }
+            frames[cluster] = (CGAffineTransform(rotationAngle: placement.angle).concatenating(CGAffineTransform(translationX: placement.point.x, y: placement.point.y)), middle)
+            order.append(cluster)
         }
+        var characters: [Int: NSRange] = [:]
+        for index in 0..<count { characters[clusters[index]] = characters[clusters[index]].map { NSUnionRange($0, NSRange(location: index, length: 1)) } ?? NSRange(location: index, length: 1) }
+        var emitted = Set<Int>()
+        for glyph in glyphs {
+            let cluster = clusters[glyph.index]
+            guard let placed = frames[cluster] else { continue }
+            let (frame, middle) = placed
+            // A family without an italic face gets the slant Skia gives it.
+            let slant: CGFloat = run.style.italic && !CTFontGetSymbolicTraits(glyph.font).contains(.traitItalic) ? 0.21 : 0
+            let x = glyph.position.x - middle, y = CGFloat(run.y) - glyph.position.y
+            var transform = CGAffineTransform(a: 1, b: 0, c: slant, d: -1, tx: x, ty: y).concatenating(frame)
+            if let outline = CTFontCreatePathForGlyph(glyph.font, glyph.glyph, &transform) {
+                path.addPath(outline)
+            } else if CTFontGetSymbolicTraits(glyph.font).contains(.traitColorGlyphs), emitted.insert(cluster).inserted, let range = characters[cluster] {
+                let place = CGAffineTransform(translationX: x, y: y).concatenating(frame)
+                let text = XElement(svg + "text", XAttribute("x", 0), XAttribute("y", 0),
+                                    XAttribute("font-family", CTFontCopyFamilyName(glyph.font) as String), XAttribute("font-size", run.style.fontSize),
+                                    XAttribute("text-anchor", "start"), XAttribute("direction", "ltr"),
+                                    XAttribute("transform", "matrix(\(place.a) \(place.b) \(place.c) \(place.d) \(place.tx) \(place.ty))"))
+                text.add(source.substring(with: range))
+                leftovers.append(text)
+            }
+        }
+        for cluster in order {
+            guard let placed = frames[cluster], let cellLow = low[cluster], let cellHigh = high[cluster] else { continue }
+            decorateLine(run, path, left: cellLow - placed.middle, width: cellHigh - cellLow, transform: placed.frame)
+        }
+        return true
     }
 
     /// Underline, overline and line-through as rectangles of the font's underline thickness.

@@ -1011,7 +1011,7 @@ extension VectorTests {
     }
 
     func testPathsPastTheFlatteningBudgetStayWithTheRenderer() throws {
-        // 66,000 curves of at least 64 pieces each exceed the drawing's 4,194,304-piece budget.
+        // 66,000 curves of at least 64 pieces each exceed the drawing's 2,097,152-unit work budget.
         let curves = String(repeating: "c1 1 2 2 3 0", count: 66_000)
         let source = textPathSource("<path id='p' d='M0 50 \(curves)'/><text><textPath href='#p'>AB</textPath></text><text><textPath href='#p'>CD</textPath></text>")
         let root = try XDocument.load(data: SvgNormalizer.normalize(source, baseDirectory: dir)).root
@@ -1029,5 +1029,132 @@ extension VectorTests {
             let root = try XDocument.load(data: SvgNormalizer.normalize(textPathSource("<path id='p' d='M10 50 H190'/>" + body), baseDirectory: dir)).root
             XCTAssertNotNil(root.descendants().first { $0.name.localName == "textPath" }, body)
         }
+    }
+
+    /// Every point of the outlines' path data, in order.
+    private func outlinePoints(_ body: String) throws -> [CGPoint] {
+        try textPathOutlines(body).flatMap { data in
+            (SvgNormalizer.pathSegments(data) ?? []).flatMap { segment -> [CGPoint] in
+                switch segment {
+                case .move(let p), .line(let p): [p]
+                case .quad(let c, let p): [c, p]
+                case .cubic(let a, let b, let p): [a, b, p]
+                case .close: []
+                }
+            }
+        }
+    }
+
+    func testCurvedClustersMoveRigidlyWithTheirShapedAdvance() throws {
+        // A composed character keeps its shaped layout: its outline is the ordinary one moved so the midpoint of its
+        // advance sits on the curve and turned with the tangent, also when shaping offsets its first glyph (U+20DD),
+        // gives it a negative advance (U+20DE) or splits it across fonts (U+1AB0). Letter spacing stays outside the
+        // character's own advance.
+        let curve = "M100 100A30 30 0 0 1 130 130"
+        guard case .shape(let shape) = SvgNormalizer.textPathReference(XElement("textPath", XAttribute("path", curve)), targets: .init([:]), fontSize: 32) else {
+            return XCTFail("the curve is a path")
+        }
+        let font = CTFontCreateWithName("Helvetica" as CFString, 32, nil)
+        for (value, spacing) in [("A\u{20DD}", 0.0), ("A\u{20DE}", 0.0), ("a\u{1AB0}", 0.0), ("q\u{301}", 0.0), ("T", 30.0)] {
+            var attributes: [NSAttributedString.Key: Any] = [.init(kCTFontAttributeName as String): font]
+            if spacing != 0 { attributes[.init(kCTKernAttributeName as String)] = spacing }
+            let advance = CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: value, attributes: attributes)), nil, nil, nil)
+            let middle = (advance - spacing) / 2
+            let place = try XCTUnwrap(shape.place(middle, anchor: "start"))
+            let frame = CGAffineTransform(translationX: -middle, y: 0).concatenating(CGAffineTransform(rotationAngle: place.angle))
+                .concatenating(CGAffineTransform(translationX: place.point.x, y: place.point.y))
+            let style = spacing == 0 ? "font-size='32'" : "font-size='32' letter-spacing='\(spacing)'"
+            let flat = try outlinePoints("<text x='0' y='0' \(style)>\(value)</text>").map { $0.applying(frame) }
+            let curved = try outlinePoints("<text \(style)><textPath path='\(curve)'>\(value)</textPath></text>")
+            XCTAssertEqual(flat.count, curved.count, value)
+            XCTAssertLessThan(zip(flat, curved).map { hypot($0.x - $1.x, $0.y - $1.y) }.max() ?? .infinity, 0.03, value)
+        }
+    }
+
+    func testUnicodeBidiThatCanReorderHorizontalTextStaysWithTheRenderer() throws {
+        // Embedding, overrides and isolation aren't applied to outlines, so the whole text stays with CoreSVG when they
+        // can change its order: on the root, a textPath or a descendant, on a path or not.
+        let path = "<path id='p' d='M10 50 H190'/>"
+        for body in ["<text direction='ltr' unicode-bidi='bidi-override'><textPath href='#p'>\u{5D0}\u{5D1}\u{5D2}</textPath></text>",
+                     "<text><textPath href='#p' unicode-bidi='isolate'>ab\u{5D0}</textPath></text>",
+                     "<text><textPath href='#p'>a<tspan unicode-bidi='embed'>\u{5D0}\u{5D1}</tspan></textPath></text>",
+                     "<text x='10' y='50' direction='ltr' unicode-bidi='bidi-override'>\u{5D0}\u{5D1}</text>",
+                     "<text x='10' y='50'>a<tspan unicode-bidi='isolate-override' direction='rtl'>bc</tspan></text>"] {
+            let root = try XDocument.load(data: SvgNormalizer.normalize(textPathSource(path + body), baseDirectory: dir)).root
+            XCTAssertTrue(root.descendants().contains { $0.name.localName == "text" }, body)
+        }
+        // With nothing it can reorder, unicode-bidi changes nothing and the text is still outlined.
+        XCTAssertEqual(try textPathOutlines(path + "<text unicode-bidi='isolate'><textPath href='#p'>Path text</textPath></text>"),
+                       try textPathOutlines("<text x='10' y='50'>Path text</text>"))
+    }
+
+    func testTextAfterAClosedLoopContinuesFromItsStartOffset() throws {
+        // SVG 2: following text starts at the end of the path, adjusted for startOffset on a single closed loop.
+        let loop = "M10 50H110V150H10Z"
+        for (offset, side, x, y) in [("50", "left", 60, 50), ("50", "right", 10, 100), ("25%", "left", 110, 50), ("450", "left", 60, 50)] {
+            XCTAssertEqual(try textPathOutlines("<text><textPath path='\(loop)' startOffset='\(offset)' side='\(side)'>A</textPath>B</text>").last,
+                           try textPathOutlines("<text x='\(x)' y='\(y)'>B</text>").last, "\(offset) \(side)")
+        }
+        // Explicit positions still win, and an open path's following text starts at its end whatever the offset.
+        XCTAssertEqual(try textPathOutlines("<text><textPath path='\(loop)' startOffset='50'>A</textPath><tspan x='30' y='70'>B</tspan></text>").last,
+                       try textPathOutlines("<text x='30' y='70'>B</text>").last)
+        XCTAssertEqual(try textPathOutlines("<text><textPath path='M10 50H110' startOffset='50'>A</textPath>B</text>").last,
+                       try textPathOutlines("<text x='110' y='50'>B</text>").last)
+    }
+
+    func testReferencedGeometryInRelativeUnitsOrCssStaysWithTheRenderer() throws {
+        // Font- and viewport-relative lengths depend on the shape's own context, and CSS geometry isn't read here.
+        for shape in ["<line id='p' font-size='40' x1='1em' y1='2em' x2='8em' y2='2em'/>",
+                      "<g font-size='40'><line id='p' x1='1em' y1='2em' x2='8em' y2='2em'/></g>",
+                      "<style>.big {font-size:40px}</style><line id='p' class='big' x1='1em' y1='2em' x2='8em' y2='2em'/>",
+                      "<rect id='p' x='1ex' y='10' width='100' height='20'/>",
+                      "<rect id='p' x='10' y='10' width='50vw' height='20'/>",
+                      "<circle id='p' cx='50' cy='50' r='2rem'/>",
+                      "<circle id='p' cx='50' cy='50' style='r:20'/>",
+                      "<path id='p' d='M10 50 H190' style='transform:translate(5px,0)'/>"] {
+            let root = try XDocument.load(data: SvgNormalizer.normalize(textPathSource(shape + "<text><textPath href='#p'>AB</textPath></text>"), baseDirectory: dir)).root
+            XCTAssertNotNil(root.descendants().first { $0.name.localName == "textPath" }, shape)
+        }
+        // Absolute units still measure.
+        XCTAssertEqual(try textPathOutlines("<line id='p' x1='7.5pt' y1='37.5pt' x2='190px' y2='50'/><text><textPath href='#p'>Path text</textPath></text>"),
+                       try textPathOutlines("<text x='10' y='50'>Path text</text>"))
+    }
+
+    func testSuppressedTextPathsKeepWhiteSpaceAndPositions() throws {
+        // White space is processed before an invalid textPath is suppressed, so its neighbours keep both spaces, and
+        // the suppressed text's own trailing space doesn't swallow the next one.
+        let spaced = try textPathOutlines("<text x='10' y='50' xml:space='preserve'>Some  text</text>")
+        XCTAssertEqual(try textPathOutlines("<text x='10' y='50'>Some <textPath>long</textPath> text</text>"), spaced)
+        XCTAssertEqual(try textPathOutlines("<text x='10' y='50'>\n  Some\n  <textPath>\n    long\n  </textPath>\n  text\n</text>"), spaced)
+        // Characters that draw nothing still use up their positions.
+        XCTAssertEqual(try textPathOutlines("<text x='10 30 50' y='50'>A<textPath>B</textPath>C</text>"),
+                       try textPathOutlines("<text x='10' y='50'>A</text><text x='50' y='50'>C</text>"))
+    }
+
+    func testReferencedGeometryIsMeasuredOnceAndSpentWorkRetainsNothing() throws {
+        // Move-only geometry referenced by texts of 128 sizes is parsed once: one entry, charged for itself and its moves.
+        let textPath = XElement("textPath", XAttribute("href", "#p"))
+        let moves = SvgNormalizer.TextPathTargets(["p": XElement("path", XAttribute("id", "p"), XAttribute("d", String(repeating: "M0 0", count: 2048)))])
+        let available = moves.remainingWork
+        for size in 1...128 {
+            guard case .invalid = SvgNormalizer.textPathReference(textPath, targets: moves, fontSize: Double(size)) else { return XCTFail("\(size)") }
+        }
+        XCTAssertEqual(moves.measured.count, 1)
+        XCTAssertEqual(available - moves.remainingWork, 2049)
+        // Spent work parses and caches nothing more.
+        let spent = SvgNormalizer.TextPathTargets(["p": XElement("path", XAttribute("id", "p"), XAttribute("d", "M0 50" + String(repeating: "h1", count: 4096)))])
+        spent.remainingWork = 0
+        for size in 1...64 {
+            guard case .unsupported = SvgNormalizer.textPathReference(textPath, targets: spent, fontSize: Double(size)) else { return XCTFail("\(size)") }
+        }
+        XCTAssertTrue(spent.measured.isEmpty)
+        // Path data needing more segments than the work left is over budget, never a truncated path, and isn't cached.
+        var work = 10
+        guard case .overBudget = SvgNormalizer.pathData("M0 0" + String(repeating: " h1", count: 20), work: &work) else { return XCTFail("over budget") }
+        XCTAssertEqual(work, 0)
+        let short = SvgNormalizer.TextPathTargets(["p": XElement("path", XAttribute("id", "p"), XAttribute("d", "M0 0" + String(repeating: " h1", count: 20)))])
+        short.remainingWork = 10
+        guard case .unsupported = SvgNormalizer.textPathReference(textPath, targets: short, fontSize: 16) else { return XCTFail("unsupported") }
+        XCTAssertTrue(short.measured.isEmpty)
     }
 }
