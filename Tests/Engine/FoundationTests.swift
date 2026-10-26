@@ -235,6 +235,31 @@ final class ProcessRunnerTests: XCTestCase {
         XCTAssertEqual(try ProcessRunner.runBlocking("/bin/echo", ["hi"], timeout: 5).standardOutput, "hi\n")
         XCTAssertThrowsError(try ProcessRunner.runBlocking("/bin/sleep", ["5"], timeout: 0.5))
     }
+
+    func testCancellableBlockingRunKillsTheTreeOnceCancelled() throws {
+        let folder = FilePath.combine(NSTemporaryDirectory(), "ftx-blocking-" + UUID().uuidString)
+        try FileManager.default.createDirectoryIfNeeded(folder)
+        defer { FileManager.default.removeIfPresent(folder) }
+        let started = Date()
+        XCTAssertThrowsError(try ProcessRunner.runBlocking("/bin/sh", ["-c", "/bin/sleep 43.25 & echo $! > '\(folder)/pid'; wait"], timeout: 60,
+                                                           isCancelled: { Date().timeIntervalSince(started) > 0.3 })) { XCTAssertTrue($0 is CancellationError, "\($0)") }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+        // The background sleep died with its shell (then launchd reaps it).
+        let pid = try XCTUnwrap(pid_t(String(contentsOfFile: folder + "/pid", encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
+        var gone = false
+        for _ in 0..<200 where !gone {
+            gone = kill(pid, 0) != 0 && errno == ESRCH
+            if !gone { usleep(10_000) }
+        }
+        XCTAssertTrue(gone)
+        // Not cancelled: the exit code and the time limit work as without the check; already cancelled: nothing starts.
+        XCTAssertEqual(try ProcessRunner.runBlocking("/bin/sh", ["-c", "exit 4"], timeout: 5, isCancelled: { false }).exitCode, 4)
+        XCTAssertThrowsError(try ProcessRunner.runBlocking("/bin/sleep", ["5"], timeout: 0.5, isCancelled: { false })) { XCTAssertTrue($0 is ProcessTimeoutError, "\($0)") }
+        XCTAssertThrowsError(try ProcessRunner.runBlocking("/bin/sh", ["-c", "touch '\(folder)/started'"], timeout: 5, isCancelled: { true })) {
+            XCTAssertTrue($0 is CancellationError, "\($0)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder + "/started"))
+    }
 }
 
 final class TextEncodingTests: XCTestCase {

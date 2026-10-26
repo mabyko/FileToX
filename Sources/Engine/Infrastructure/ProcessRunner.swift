@@ -62,19 +62,24 @@ public enum ProcessRunner {
         }
     }
 
-    /// Synchronous variant for engine status probes (`--version`, filter lists), which run outside Swift concurrency.
+    /// Synchronous variant for engine status probes (`--version`, filter lists), which run outside Swift concurrency, and
+    /// for synchronous encoders inside a task: `isCancelled` is then checked every 10 ms, and once it returns true the
+    /// process tree is killed and `CancellationError` thrown.
     public static func runBlocking(
         _ executable: String,
         _ arguments: [String],
         timeout: TimeInterval,
         workingDirectory: String? = nil,
-        environment: [String: String]? = nil
+        environment: [String: String]? = nil,
+        isCancelled: (() -> Bool)? = nil
     ) throws -> ProcessResult {
+        if isCancelled?() == true { throw CancellationError() }
         let child = try SpawnedProcess(executable: executable, arguments: arguments,
                                        workingDirectory: workingDirectory ?? FilePath.directoryName(executable) ?? "/",
                                        environment: environment, onOutput: nil)
-        let status = child.waitBlocking(timeout: timeout)
+        let status = child.waitBlocking(timeout: timeout, isCancelled: isCancelled)
         let (stdout, stderr) = child.drainOutput()
+        if child.stopReason == .cancelled { throw CancellationError() }
         if child.stopReason != nil {
             throw ProcessTimeoutError(message: "\(FilePath.fileName(executable)) did not finish within \(Int(timeout.rounded())) s.")
         }
@@ -189,8 +194,17 @@ private final class SpawnedProcess: @unchecked Sendable {
         }
     }
 
-    func waitBlocking(timeout: TimeInterval) -> Int32 {
-        if exitSignal.wait(timeout: .now() + max(0, timeout)) == .timedOut {
+    func waitBlocking(timeout: TimeInterval, isCancelled: (() -> Bool)? = nil) -> Int32 {
+        let deadline = DispatchTime.now() + max(0, timeout)
+        if let isCancelled {
+            while exitSignal.wait(timeout: min(deadline, .now() + .milliseconds(10))) == .timedOut {
+                let cancelled = isCancelled()
+                guard cancelled || DispatchTime.now() >= deadline else { continue }
+                stop(reason: cancelled ? .cancelled : .timeout)
+                exitSignal.wait()
+                break
+            }
+        } else if exitSignal.wait(timeout: deadline) == .timedOut {
             stop(reason: .timeout)
             exitSignal.wait()
         }
