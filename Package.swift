@@ -6,6 +6,8 @@ let nativeSvgLibraryPath = URL(fileURLWithPath: #filePath).deletingLastPathCompo
 
 let pdfiumLibraryPath = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/PDFium/lib").path
 
+let libAvifArchive = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Vendor/LibAVIF/lib/libavif.a").path
+
 // The engine is a line-by-line port of C# (Filee); Swift 5 mode keeps its many shared mutable engine objects
 // compiling while the queue and host do their own locking.
 let engineSettings: [SwiftSetting] = [.swiftLanguageMode(.v5)]
@@ -24,6 +26,7 @@ let package = Package(
         // For the Xcode test bundle, which imports LibRaw's header directly (CameraRawTests).
         .library(name: "CLibRaw", targets: ["CLibRaw"]),
         .executable(name: "FileToXEngine", targets: ["FileToXEngine"]),
+        .executable(name: "FileToXAvifEncoder", targets: ["FileToXAvifEncoder"]),
     ],
     dependencies: [
         // WebP and JPEG XL encoders (ImageIO only decodes them): Google's libwebp and libjxl, built from source.
@@ -87,6 +90,15 @@ let package = Package(
             linkerSettings: [.linkedLibrary("xml2"), .linkedLibrary("z")]
         ),
         .executableTarget(name: "FileToXEngine", dependencies: ["FileToXEngineKit"], path: "Sources/EngineMain", swiftSettings: engineSettings),
+        // The AVIF encoder process the engine starts (libavif 1.4.2 + libaom 3.14.1, Vendor/LibAVIF/README.FileToX.md).
+        .executableTarget(
+            name: "FileToXAvifEncoder",
+            path: "Vendor/LibAVIF",
+            exclude: ["lib", "headers", "LICENSES", "build.py", "PROVENANCE.json", "README.FileToX.md"],
+            sources: ["FileToX/avifenc.c"],
+            cSettings: [.headerSearchPath("headers")],
+            linkerSettings: [.unsafeFlags([libAvifArchive])]
+        ),
         .testTarget(name: "FileToXCoreTests", dependencies: ["FileToXCore"], path: "Tests/Core"),
         .testTarget(
             name: "FileToXEngineTests",

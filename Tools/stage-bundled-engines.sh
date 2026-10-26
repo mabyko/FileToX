@@ -1,7 +1,8 @@
 #!/bin/bash
 # Xcode build phase of the FileToXEngine helper: puts the pinned rhwp and 7-Zip (Tools/fetch-bundled-engines.py,
 # downloaded once into build/) into FileToXEngine.app/Contents/MacOS/engines and signs them before Xcode signs the
-# helper. EngineEnvironment.findBundled looks for them next to the executable.
+# helper. EngineEnvironment.findBundled looks for them next to the executable. The AVIF encoder process, built by the
+# FileToXAvifEncoder target, goes next to the helper executable (AvifEncoder.helper).
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -38,11 +39,15 @@ while IFS= read -r -d '' file; do
     fi
 done < <(find "$source" -type f -print0)
 # Replace the embed phase's universal copy and sign the selected slice before the helper is signed.
-: "${FRAMEWORKS_FOLDER_PATH:?run from Xcode}"
+: "${FRAMEWORKS_FOLDER_PATH:?run from Xcode}" "${BUILT_PRODUCTS_DIR:?run from Xcode}"
 stage_code "$root/Vendor/PDFium/lib/libpdfium.dylib" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/libpdfium.dylib"
+stage_code "$BUILT_PRODUCTS_DIR/FileToXAvifEncoder" "$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/FileToXAvifEncoder"
 cp "$root/Resources/Filee.LICENSE" "$notices/Filee.LICENSE"
 # LibRaw and libjpeg-turbo are compiled into the helper (their licences and notices ship with the binary).
 cp "$root/docs/upstream/LibRaw.LICENSE" "$root/docs/upstream/LibRaw.THIRD-PARTY-NOTICES.md" "$notices/"
 cp "$root/docs/upstream/PDFium.LICENSE" "$root/docs/upstream/PDFium.THIRD-PARTY-NOTICES.md" "$notices/"
 cp "$root/docs/upstream/libjpeg-turbo.LICENSE" "$root/docs/upstream/libjpeg-turbo.THIRD-PARTY-NOTICES.md" "$notices/"
+# libavif (with its libyuv subset) and libaom are compiled into the AVIF encoder.
+mkdir -p "$notices/LibAVIF"
+cp "$root"/Vendor/LibAVIF/LICENSES/* "$notices/LibAVIF/"
 echo "Bundled engines staged: $destination"

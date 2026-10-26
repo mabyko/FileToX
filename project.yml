@@ -82,6 +82,10 @@ targets:
       - framework: Vendor/PDFium/lib/libpdfium.dylib
         embed: true
         codeSign: true
+      # Built first; the staging script copies and signs it into Contents/MacOS.
+      - target: FileToXAvifEncoder
+        embed: false
+        link: false
     settings:
       base:
         LD_RUNPATH_SEARCH_PATHS: [$(inherited), "@executable_path/../Frameworks", "@loader_path/../Frameworks"]
@@ -110,10 +114,28 @@ targets:
         script: |
           python3 -I "$SRCROOT/Tools/prepare-engine-entitlements.py" "$SCRIPT_OUTPUT_FILE_0" "${EXPANDED_CODE_SIGN_IDENTITY:--}"
     postBuildScripts:
-      - name: Stage bundled engines (rhwp, 7-Zip)
+      - name: Stage bundled engines (rhwp, 7-Zip, AVIF encoder)
         basedOnDependencyAnalysis: false
         script: |
           "$SRCROOT/Tools/stage-bundled-engines.sh"
+  # The AVIF encoder process the engine helper starts (libavif + libaom, Vendor/LibAVIF); SwiftPM builds the same target.
+  FileToXAvifEncoder:
+    type: tool
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - path: Vendor/LibAVIF/FileToX/avifenc.c
+    settings:
+      base:
+        PRODUCT_NAME: FileToXAvifEncoder
+        HEADER_SEARCH_PATHS: [$(SRCROOT)/Vendor/LibAVIF/headers]
+        OTHER_LDFLAGS: [$(SRCROOT)/Vendor/LibAVIF/lib/libavif.a]
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
   FileToXEngineTests:
     type: bundle.unit-test
     platform: macOS

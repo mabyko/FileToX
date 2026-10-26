@@ -1,0 +1,44 @@
+{
+  "libavif": {
+    "version": "1.4.2",
+    "tarball": "https://github.com/AOMediaCodec/libavif/archive/refs/tags/v1.4.2.tar.gz",
+    "tarballSha256": "2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d",
+    "headerSha256": "43ec2563fcc739a4d5ca18e22f74bc15e76a11f8c9a82bd7e1ee572bff7afc04"
+  },
+  "libaom": {
+    "tag": "v3.14.1",
+    "commit": "03087864cf4bea6abb0d28f95cf7843511413d8f",
+    "repository": "https://aomedia.googlesource.com/aom.git"
+  },
+  "archive": {
+    "path": "lib/libavif.a",
+    "sha256": "6b272f7ed8335aaa489e1b2b48e7f1aa1cbbd5388f80c489aa540d8d2313c4ca",
+    "bytes": 8448480,
+    "architecture": "arm64",
+    "deploymentTarget": "15.0",
+    "compiler": "Apple clang 21.0.0 (clang-2100.3.34.2, __apple_build_version__ 21000334), Xcode 27.1 (27A9275), MacOSX27.0 SDK",
+    "cmake": "3.31.6",
+    "contents": "libavif with its bundled libyuv subset and libaom's AV1 encoder (with third_party/fastfeat and third_party/vector); links only libSystem"
+  },
+  "cmakeOptions": [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBUILD_SHARED_LIBS=OFF",
+    "-DCMAKE_OSX_ARCHITECTURES=arm64",
+    "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0",
+    "-DAVIF_CODEC_AOM=LOCAL",
+    "-DAVIF_CODEC_AOM_DECODE=OFF",
+    "-DAVIF_CODEC_AOM_ENCODE=ON",
+    "-DAVIF_LIBYUV=OFF",
+    "-DAVIF_LIBSHARPYUV=OFF",
+    "-DAVIF_BUILD_APPS=OFF",
+    "-DAVIF_BUILD_EXAMPLES=OFF",
+    "-DAVIF_BUILD_TESTS=OFF"
+  ],
+  "licenses": {
+    "LICENSES/libavif.LICENSE": "165abf92cc04b39e80d29cadea7a6a7e8fddf59407d4ad2616507a7ebe8216f9",
+    "LICENSES/libaom.LICENSE": "4764a286d8b2faeaf42f4418e7d7a28d58fc8fd4d00a3d0a7f44b0a4099de7f2",
+    "LICENSES/libaom.PATENTS": "661fb8e504744e95587b556b94a58343448300606a41bea8c7a9b97125696e61",
+    "LICENSES/libaom-fastfeat.LICENSE": "499041ddee5227b6f29ca06c17803e5fe24d60f243c69635cd76b7ba08d0ddd5",
+    "LICENSES/libaom-vector.LICENSE": "ff6c857ce2708e87701323078aef115c1872a1f80a9649f86dc899b48083bc60"
+  }
+}
