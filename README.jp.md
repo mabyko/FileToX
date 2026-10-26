@@ -62,14 +62,15 @@ xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
 open 'build/DerivedData/Build/Products/Debug/FileToX Dev.app'
 ```
 
-Xcodeはルートの`Package.swift`にあるエンジン・Core製品を使用し、Swift helper・PDFium・同梱ツールを署名して組み込みます。アプリ・helper・テストはarm64のみを対象とし、ダウンロードツールはx64を拒否します。初回に固定バージョンのlibwebp・libjxlソースを取得し、rhwp・7-Zipは検証済みキャッシュがない場合だけ取得します。LibRaw・libjpeg-turbo・OpenJPEGのソース、元のuniversal PDFium dylib、arm64専用Skia SVG静的ライブラリを保持します。staging時にPDFium・同梱ツールからarm64のみを抽出して署名し、検証済み原本は変更しません。Skiaは限定した基本図形に使用し、その他のSVG機能とベクターPDFにはCoreSVGを使います。出典とライセンス告知を保持します.
+Xcodeはルートの`Package.swift`にあるエンジン・Core製品を使用し、Swift helper・PDFium・同梱ツールを署名して組み込みます。アプリ・helper・テストはarm64のみを対象とし、ダウンロードツールはx64を拒否します。初回に固定バージョンのlibwebp・libjxlソースを取得し、rhwp・7-Zipは検証済みキャッシュがない場合だけ取得します。LibRaw・libjpeg-turbo・OpenJPEGのソース、元のuniversal PDFium dylib、arm64専用Skia SVG静的ライブラリを保持します。staging時にPDFium・同梱ツールからarm64のみを抽出して署名し、検証済み原本は変更しません。Skiaは限定した基本図形に使用し、その他のSVG機能とベクターPDFにはCoreSVGを使います。出典とライセンス告知を保持します. 固定されたlibavif 1.4.2・libaom 3.14.1の静的ライブラリを使うarm64の`FileToXAvifEncoder`と、そのライセンス告知も同梱します。
 
 ```sh
+swift build -c release --product FileToXAvifEncoder
 swift build -c release --product FileToXEngine
 python3 Tools/fetch-optional-engines.py --help
 ```
 
-DebugのバンドルIDは`forked.filetox.local.dev`、Releaseは`forked.filetox.local`です。個人設定はGitの対象外となる`Config/Local.xcconfig`に保存します。Debug・Releaseの既定値はローカル用のad-hoc署名です。arm64 Releaseは既存チームの開発証明書による実際のXcodeビルド、deep/strict署名検証、およびリポジトリと.NET SDKへのアクセスを拒否した再配置実行22項目を通過しました。Developer ID署名・公証は未検証です。検証環境はM2 Max/macOS 27で、M1実機やmacOS 15での実行結果ではありません。範囲と残る差異は[最新の検証記録](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)に記載しています。
+DebugのバンドルIDは`forked.filetox.local.dev`、Releaseは`forked.filetox.local`です。個人設定はGitの対象外となる`Config/Local.xcconfig`に保存します。Debug・Releaseの既定値はローカル用のad-hoc署名です。arm64 Releaseは既存チームの開発証明書による実際のXcodeビルド、deep/strict署名検証、およびリポジトリと.NET SDKへのアクセスを拒否した再配置実行23項目を通過しました。Developer ID署名・公証は未検証です。検証環境はM2 Max/macOS 27で、M1実機やmacOS 15での実行結果ではありません。範囲と残る差異は[最新の検証記録](docs/design/engine-differential-triage.md#remaining-work-integration-2026-10-26)に記載しています。
 
 ## 検証
 
@@ -91,18 +92,15 @@ python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optiona
 
 以前のアプリ検証ではApple siliconで、Xcodeテスト32件、Swift Packageテスト12件、内蔵エンジンの検証22件（実変換20件・選択判定2件）、追加エンジン・動画・音声・処理中のキャンセル・添付画像の衝突を含むサンプル11件が成功しました。Swiftとの通信でも、PNG→JPG、PDF結合→複数PNG、不明な形式のファイル・フォルダ→ZIP→展開、履歴を確認しました。実行中のアプリでは、円形メニューのJPGクリック→結果生成→最近の履歴を確認しました。実際のFinder Optionドラッグでは、遅い動き、元ファイルの保持、ドロップ後のFinderのフォーカス維持を確認しました。韓国語のHWP・DOCXから生成したPDFのテキスト抽出とPNG描画も確認しています。英語・韓国語・日本語の切り替えは、実行中のアプリとhelperにすぐ反映されます。標準カラーピッカーで選んだ色の再起動後の保持、組み込みプリセット名の翻訳、ユーザーが付けた名前の保持も確認しました。
 
-**過去の比較記録：** 全849件の変換比較は578 PASS / 263 WARN / 8 FAILでした。その後、Calibre TCR圧縮による内容破損を回避し、RGB/グレースケールJPEGの読み込みにlibjpeg-turboを適用しました。全体比較の件数はこの変更前の結果です。当時のテスト・C/C++候補比較・残る制限は[後続検証記録](docs/design/engine-differential-triage.md#native-library-follow-up-2026-10-23)、ユーザーデータ・隔離・署名の検証は[統合記録](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)を参照してください。安全なTCR出力には、シンボリックリンクを解決した`ebook-convert`と同じ場所に`calibre-debug`がある完全なCalibre環境が必要です。別途Pythonをインストールする必要はありません。
-
-2026-10-25のarm64エンジンで**全849件**を実行しました。786件完了・基準と同じ63件失敗で、状態・エラーキー・出力数の変更はありません。WOFF2の5出力は変換を繰り返さず検査器を修正して再検査し、最終検査エラーは0件です。従来ポリシーでのC#比較は**580 PASS / 264 WARN / 5 FAIL**、TCR内容・PDF描画検査を強化した別ポリシーでは**585 / 255 / 9**です。基準の画像参照欠落4件やCalibreの自動表紙差異を免除していません。WARNは見た目やレイアウトの同等性を証明しません。コマンド、画像品質、署名、残る制限は[以前のarm64検証記録](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)を参照してください。以前のIntelクロスビルドの証拠は現在のサポート・検証要件ではありません.
-
 **設定 → 監視フォルダ**で入力フォルダとプリセットを選び、ルールを有効にして保存します。**監視中**になってからファイルを追加してください。起動時に存在するファイルは変更せず、アプリの実行中に新規・変更ファイルを処理します。出力先の既定値は`converted`で、原本は保持します。選択すると、変換に成功し変更されていない原本を`originals`へ移動します。パッケージ内部と一時ダウンロードフォルダは除外します。3秒の安定待ちはヒューリスティックです。長い書き込み停止がある場合は、完成したファイルをatomic renameで渡してください。スキャンは10,000項目、ジョブは入力128件までです。
 
-すべての形式の組み合わせ・コーデックを検証したわけではありません。このマシンにはGhostscriptがなく、FFmpegにも一部のエンコーダーがありません。ログイン項目と通知は実装済みですが、実際のログアウト・ログイン後の自動起動と通知配信は未検証です。外部exFAT・SMBボリューム、配布用公証、TCCの再起動時の動作も未検証です。上記の比較件数は以前のスナップショットの結果です。
+すべての形式の組み合わせ・コーデックを検証したわけではありません。このマシンにはGhostscriptがなく、FFmpegにも一部のエンコーダーがありません。ログイン項目と通知は実装済みですが、実際のログアウト・ログイン後の自動起動と通知配信は未検証です。外部exFAT・SMBボリューム、配布用公証、TCCの再起動時の動作も未検証です。
 
-直前の検証ソース`5f9486a`は、SDKアクセスを遮断したXcode clean build・エンジン644件（57 skip）、別のclean環境のアプリ74件、開発証明書署名・再配置22件の検査に合格しました。Mach-O 5個はarm64のみで、.NET・Homebrewの動的依存はありません。CMYK JPEGの反転、PSD/PSBのCMYK・ICC保持、BMPの物理解像度を修正し、PSDの長さ超過は保存前にエラーにします。画像の厳密一致は**103→112/135件**（TGA検査だけを修正した別集計では113件）で、既存の一致が失われたケースはありません。新しい849件は**786完了・既存63失敗**、検査エラー0、V2でのC#比較は**586 PASS / 255 WARN / 8 FAIL**です。失敗は免除していません。PDF検査器V2のサンプリング修正と旧V1の数値は分けて記録しています。PDF・Markdownの速度は再測定せず、Markdown TXTの目標未達は残ります。[最新の修正・検証・制限](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)を参照してください。
+最終統合ソース`bff5988`には、画像メタデータ保持の拡張、TGAの色処理、SVGテキストの正規化、Markdownの最適化、独立したAVIFエンコーダーを反映しました。clean build、Swiftエンジン728件（14 skip）・Core18件、Xcodeエンジン728件（58 skip）・アプリ81件、開発証明書の署名と再配置23項目の検査を、失敗なく完了しました。バンドル内のMach-O 6個はすべてarm64で、.NETファイルやHomebrewへの動的リンクはありません。
 
+新しい849件の実行は786件完了・従来と同じ63件失敗で、harness・検査エラーは0です。拡張した意味検査でのC#比較は**599 PASS / 202 WARN / 48 FAIL**です。過去の判定方針とは区別し、FAILを免除していません。順次測定したMarkdown TXT・PDF TXTの中央値は**0.556秒・0.603秒**で、各5回すべてで0.60秒・0.84秒の目標を満たしました。
 
-最終追加ソース`d9b260d`では、Pandoc・LibreOffice・Calibreの管理対象インストール、PSD/PSBのIPTC保持、大きなメッセージの分割転送を統合しました。最終アプリのclean build・アプリ81テスト・開発証明書の署名・再配置22チェックに合格しました。変更のないエンジン/Coreソースは、エンジン669件と別実行のプロセス終了1件、Core18件に合格しています。署名済みの再配置helperから実際のHTTPS PandocインストールとDOCX内容も確認しました。849件の新しい実行に新規の厳密FAIL IDはなく、V2のC#比較は**587 PASS / 254 WARN / 8 FAIL**です。画像の画素は直前の承認済み出力と同じで、PSD/PSBのメタデータ2件にだけIPTCが追加されました。逐次測定のPDF TXTは**0.547秒**、Markdown TXTは**0.665秒**で、後者の0.60秒目標は未達です。[最終追加記録](docs/design/engine-differential-triage.md#managed-engine-installation-and-final-follow-up-2026-10-25)にソース・実行ファイルの対応と制限を記載しています。
+AVIFの選択基準はImageIOで読み込んだ色・アルファの標本誤差と限定的なメタデータ保持です。追加の時間・メモリ、入れ子のメタデータ、Q8・SVGの差異は残ります。ソースと実行ファイルの対応、厳密な比較結果、検証範囲は[最新の統合検証](docs/design/engine-differential-triage.md#remaining-work-integration-2026-10-26)を参照してください。過去の比較も同じ記録に保存しています。安全なTCR出力には、解決済みの`ebook-convert`と同じ場所に`calibre-debug`がある完全なCalibre環境が必要で、別途Pythonのインストールは不要です。
 
 ## ソースと設計
 

@@ -1,5 +1,9 @@
 # C# / Swift engine differential triage
 
+Latest validation: [remaining-work integration, 2026-10-26](#remaining-work-integration-2026-10-26).
+Earlier sections preserve historical snapshots; their “final” results and remaining-work lists
+describe those dates, not the current integrated source. Raw comparison verdicts remain preserved.
+
 Date: 2026-10-23. Original triage branch: `fix/swift-engine-differential`;
 current integration branch: `refactor/swift-conversion-engine`.
 
@@ -10,7 +14,7 @@ comparator noise, confirmed engine defects, previously accepted differences, and
 backend differences that still need an acceptance decision. A raw FAIL is not
 automatically a Swift defect; matching failures can also receive PASS.
 
-The final full optimisation replay (`a064ab8`) is **578 PASS / 263 WARN / 8 FAIL**.
+The historical full optimisation replay (`a064ab8`) is **578 PASS / 263 WARN / 8 FAIL**.
 Additional readback exposed a Calibre TCR content-corruption defect, reproduced directly without either host.
 A subsequent scoped change bypasses that compressor and adds native RGB/grayscale JPEG decoding; see
 [the native-library follow-up](#native-library-follow-up-2026-10-23). The full replay counts predate those changes
@@ -2008,3 +2012,97 @@ C# 엄격·시각 일치는 112/135이며 TGA 검사 오류만 고친 별도 정
 PDF TXT의 0.84초 목표는 충족하지만 Markdown TXT의 0.60초 목표는 미달이다. AVIF 네이티브 대안은 앞 절의 회색조 회귀·alpha 크기·메모리·취소·패키징 문제 때문에 앱에 넣지 않았다. 복잡한 SVG·세로쓰기, JPEG/PNG 밖의 일부 ICC/메타데이터, 검사기가 없는 바이너리 의미, 실제 M1/macOS 15·SMB/exFAT/TCC·로그인/알림 실기와 배포 공증도 남아 있다.
 
 별도 AVIF 후속 실험에서는 기존 `ProcessRunner.swift`와 작은 scratch helper 대체물을 사용해 외부 인코더의 프로세스 그룹 취소를 검사했다. 24 MP·q75·인코더 2스레드에서 정상 인코딩은 2.46초, 실행 중 세 번의 취소는 5.3/7.6/8.8ms, 외부 그룹 종료의 재측정은 8.2ms였다. 여섯 인코더 호출에서 게시·staging 파일은 남지 않았으며 정상 출력은 이전 native 출력과 바이트가 같다. 인자 파싱 실패 네 번은 인코더를 시작하기 전 실패로 따로 남겼다. 이는 앱 큐·staging 통합이나 최종 파일 쓰기 도중 강제 종료 검증이 아니다. 회색조 0.42–0.96dB 회귀, 24 MP에서 ImageIO보다 큰 메모리·시간 비용, alpha 크기, 화소·메타데이터 전달과 별도 서명 helper 패키징은 해결하지 않았다. `build/avif-proto/REPORT.md`의 후속 절에 근거를 남겼으며 앱 소스·의존성은 바꾸지 않았다.
+
+## Remaining work integration (2026-10-26)
+
+이번 통합은 이미지 메타데이터·TGA·SVG 텍스트·Markdown 성능, 별도 AVIF 인코더와 의미 검사 확대를 반영한다. 실행 소스는 `bff5988d18b28d40ce27baddcbece31d44213ce6`이며, 검증 환경은 M2 Max/macOS 27.0.1이다. 현재 후보만 실행하고 C#·직전 Swift 결과는 보존된 파일로 비교했다. C# host와 과거 기준선 host를 다시 실행하지 않았다. 아래 결과는 모든 형식의 화소·레이아웃·메타데이터 동등성을 뜻하지 않는다.
+
+### 변경과 독립 검토
+
+- 이미지 메타데이터 변경 13개를 통합했다. 출력 크기·방향·DPI에 맞춘 EXIF, PNG raw-profile iTXt와 주석, PSD/PSB의 허용된 EXIF·XMP·IPTC·caption·copyright·URL, 추가 입력 형식의 ICC 보존을 다룬다. TIFF 페이지별 태그, PSD 누적 ICC 16 MiB 한도, EXIF DPI와 BMP V5 내장 프로필의 후속 수정은 `51845cd`의 독립 R3 검토에서 통과했다. BMP의 제한된 24/32비트 내장 RGB ICC 경로는 픽셀 범위·마스크·프로필 겹침을 검사하며 링크된 프로필을 읽지 않는다. 모든 형식의 태그를 복사하는 일반 보존 기능은 아니다.
+- TGA 출력은 비-sRGB RGB/색인 입력을 8비트 sRGB로 변환한 뒤 프로필 없는 형식에 기록한다. 알파를 보존하고 이미 sRGB인 입력과 회색조 경로를 유지한다. 독립 검토와 실제 출력 검증을 통과했다.
+- SVG의 상대 `font` 단축 속성, 상속·대소문자·공백, 세로쓰기와 글리프 방향을 보완했다. 표현할 수 없는 bidi·baseline 조합은 기존 렌더러로 되돌린다. `ae83640`의 독립 R5는 새로운 지적 없이 20개 쌍을 통과했다. C# 글꼴·세로 라틴 문자 방향 차이까지 해소한 것은 아니다.
+- Markdown은 중복 탐색과 중간 할당을 줄이고 기존 노드 소유권·변형 의미를 유지했다. 119,792개 엄격 출력, 6,000개 AST와 5,830개 실제 host 출력 검증을 보존했다. 최종 통합 실행 파일의 대용량 성능·출력 검증은 아래에 별도로 기록한다.
+- AVIF는 고정한 libavif 1.4.2/libaom 3.14.1을 별도 arm64 `FileToXAvifEncoder`로 실행한다. 단일 8비트 RGB 입력의 ImageIO 결과를 먼저 만든 뒤 네이티브 후보와 비교한다. ImageIO로 읽은 premultiplied 표본의 색·알파 SSE가 모두 증가하지 않고 하나 이상 감소하며 메타데이터 가드를 통과할 때만 후보를 쓴다. 회색조·색인·고정밀·다중 프레임·도구 없는 경로는 ImageIO를 유지한다. 취소는 도구의 프로세스 트리를 종료하고 전용 0700 임시 폴더를 정리한다.
+- AVIF R1에서 큰 EXIF를 JPEG 메타데이터 전달 경로가 조용히 누락하는 문제가 발견됐다. 입력 중 ImageIO가 보존한 태그와 문자열 값을 후보에서 확인하고, 손실되면 ImageIO 파일을 유지하도록 수정했다. `8c205d7`의 독립 R2는 13쌍/26개 새 변환에서 100,007자 EXIF·GPS 보존, 짧은·중첩 XMP, 회전·DPI·strip 경로를 확인했다. 배열·구조 값은 최상위 태그의 존재만 확인하므로 깊은 메타데이터 동등성은 보장하지 않는다. EXIF 픽셀 치수는 출력 크기 수정 때문에 이 비교에서 제외한다.
+- PDF 주석·액션·폼과 지원하는 바이너리 형식의 독립 readback 검사를 추가했다. 주석 객체·appearance 회귀 표본과 바이너리 검사 테스트를 통과했다. 새 검사가 드러낸 UUID·메타데이터·순서·텍스트·표지 차이도 엄격 판정에 남기며, 단순히 검사기가 생겼다는 이유로 동등하다고 판정하지 않는다.
+
+SVG·메타데이터·AVIF의 마지막 검토에는 수정이 필요한 새 지적이 없었다. 각 검토는 지정된 소스·표본·가드의 범위에 한정되며 보편적 품질 보증이 아니다. AVIF의 518조건 확장 검사는 메타데이터 가드 추가 전 증거다. 가드 추가 후에는 집중 회귀·새 독립 26건·최종 통합 검증을 실행했으며 518조건 전체를 다시 실행했다고 세지 않는다.
+
+### 소스·실행 파일과 빌드
+
+전체 증거 루트는 `build/resume/remaining-complete-20261025/`다. `final-host/capture.json`은 실행 소스 992개와 SwiftPM 런타임 파일 14개를 SHA-256으로 고정한다. 후속 문서 커밋은 이 소스·실행 파일을 바꾸지 않으며 `final-doc-source-binding.json`으로 연결한다.
+
+| 실행 파일 | SHA-256 |
+| --- | --- |
+| SwiftPM Release engine | `959ca44e879bcc74b4f30815ae2f4ad278cff365d1da49fcf0626f9834a16f99` |
+| SwiftPM AVIF 도구 | `f5247f168dd96e09d38e465355ec38f137b1e68a70d3c915b440ec2b447c7b73` |
+| Apple Development Xcode Release engine | `9346866996c4c360fc132b97a91d9826046de650c84e834a52c351825de7cd08` |
+| Xcode Release 앱 실행 파일 | `6d34f9f4e0fe7992aa510446aef97f2195b8ca76ffb81e9587bfb29ec7d101d2` |
+
+- .NET SDK 접근 차단 Swift 엔진 728개(14개 skip)·Core 18개와 별도 빈 HOME의 프로세스 트리 종료 검사 1개가 실패 없이 완료됐다. 선택 도구·표본 미설정 skip은 통과로 세지 않는다.
+- .NET SDK 접근 차단 Xcode 클린 빌드·엔진 728개(58개 skip), 별도 clean 환경 앱 81개와 기존 팀 Apple Development 인증서의 Release 빌드가 통과했다.
+- 번들 Mach-O 6개는 모두 arm64이며 .NET 파일·Homebrew 동적 링크가 없다. 내부 코드의 같은 Team ID, library-validation 예외 없는 helper와 deep/strict 서명을 확인했다. AVIF 도구의 고지 5개는 원문과 바이트가 같다. 앱 파일 합계는 76,609,264바이트, 엔진 실행 파일은 35,426,272바이트다.
+- 저장소·.NET 경로 접근을 차단한 재배치 앱의 23개 실행 검사가 통과했다. 새 도구의 실제 AVIF 4:4:4 변환을 포함하며 staging 잔여물은 없다. 이는 Developer ID 배포 서명·공증 검증이 아니다.
+
+명령·종료 코드는 `swift-final-results.json`, `xcode-reviewed/xcode-final-results.json`에, 배포 감사는 `release-final-audit.json`, `release-final-relocated-proof.json`과 로그에 남겼다. 중간 소스의 `candidate-965f9f8/` 결과는 최종 증거로 대체해 세지 않는다. 사용자의 .NET/NuGet 폴더·설치 앱·실제 설정은 변경하지 않았다.
+
+### 849건 재실행과 비교 정책
+
+최종 유효 실행은 `replay-validation-20261026-corrected/`다. **786개 완료·기존과 같은 63개 변환 실패**, harness·검사 오류 0이다. 상태·오류 키·출력 수·이름은 직전 Swift와 같았다. 오류 상세 21건의 차이는 실행 루트와 `.filee-out-` 임시 식별자에만 있고, 한정된 경로 정규화로 확인했다. TCR 7개는 직전 Swift와 바이트가 같다.
+
+첫 실행 `replay-validation-20261026/`은 새 검증 래퍼의 광범위한 쓰기 차단으로 LibreOffice 45건이 추가 실패했다(741개 완료/108개 실패). 같은 고정 실행 파일과 입력으로 쓰기 제한이 있는 경우 실패, SDK 접근만 차단한 경우 성공을 재현했다. 성공 ODT의 `content.xml`은 직전 결과와 바이트가 같았다. 잘못된 환경의 실행·감사 결과를 보존하고, 전용 HOME/TMP와 SDK 접근 차단을 유지한 새 경로에서 전체 849건을 다시 실행했다. 첫 시도의 수치를 생산 회귀로 세지 않는다.
+
+| 비교 정책과 대상 | PASS | WARN | FAIL |
+| --- | ---: | ---: | ---: |
+| Legacy 대 C# | 582 | 261 | 6 |
+| Legacy 대 직전 Swift | 746 | 101 | 2 |
+| 확장 의미 검사 대 C# | 599 | 202 | 48 |
+| 확장 의미 검사 대 직전 Swift | 758 | 53 | 38 |
+| 같은 확장 정책으로 보존된 직전 Swift 대 C#만 재검사 | 599 | 204 | 46 |
+
+마지막 행은 변환기를 다시 실행하지 않은 정책 대조군이다. 보존된 같은 출력에서 기존 WARN 38개가 FAIL, 12개가 PASS로 바뀐다. 따라서 이전 V2의 `587/254/8`과 현재 `599/202/48`을 직접 비교해 새 회귀 40건이라고 해석하면 안 된다. 반대로 새 FAIL을 모두 무시해서도 안 된다. **문턱값을 낮추거나 실패를 면제하지 않았다.** 동일하게 실패한 변환도 비교 PASS에 포함되므로 PASS는 변환 성공 수가 아니다. WARN 역시 시각·내용 동등성의 증거가 아니다.
+
+동일한 확장 정책의 대조군보다 추가된 C# FAIL은 두 건이며 해소된 FAIL은 없다.
+
+- `auto-043-m4v-to-avif`: C#와의 PSNR은 45.4505→24.0188 dB로 낮아져 FAIL이다. 실제 추출 프레임은 태그 없는 sRGB 160×120 PNG다. 현재 후보와 도구를 뺀 동일 후보의 ImageIO 대조군이 각각 최종·직전 파일을 바이트 그대로 재현했다. 입력 대비 ImageIO 디코딩 PSNR은 native 45.9055 dB, 직전 22.7268 dB, C# 22.7199 dB다. Q8 독립 디코딩도 native 46.97 dB, 직전 42.39 dB, C# 41.51 dB로 같은 방향이다. 공통 sRGB와 원래 표본 공간의 값도 같다. 이전 4:2:0 출력의 색 경계 손실을 4:4:4가 줄인 사례이며, 원래 C# 비교 FAIL 판정은 유지한다. 저장된 원본 버퍼와 파일 해시를 이용한 독립 재계산에서도 SSE 96,151 대 19,990,566/20,022,470을 확인했다. 근거는 `m4v-source-audit/result.json`과 AVIF 구현 작업의 `build/avif/m4v-043/`에 있다.
+- `auto-063-snb-to-rb`: 텍스트는 유지되지만 Calibre 자동 표지가 달라졌다(최종 C# 비교 PSNR 26.72 dB, SSIM 0.94729). 생성 표지 변동으로 분류하되 FAIL을 유지한다. Legacy의 직전 Swift 대비 다른 FAIL인 `auto-067-tcr-to-txtz`도 자동 표지 차이다.
+
+검사기는 비교별 바이너리 출력 61개를 readback했고 오류는 0이다. PDF 19개는 래스터와 주석 객체 검사를 거쳤지만 이 19개에는 주석이 없으므로 코퍼스의 주석 보존 실증으로 말하지 않는다. 주석 표본 검증은 별도의 집중 테스트 증거다. 바이너리 검사도 지원하는 디코더·필드의 범위에 한정된다.
+
+실제 파일 감사는 입력 사본 864개, 결과 항목 794개에 해당하는 실제 출력 파일 802개와 sidecar 18개를 확인했다. 직전 Swift 대비 결과 항목 303개(302개 case)와 sidecar 3개가 바이트 변경됐고 추가·삭제된 결과는 없다. 런타임 14개·소스 992개·기준선·입력·도구는 전후 해시가 같고 private HOME/TMP·staging은 비어 있다. `final-handoff.json`, `per-case-deltas.json`, `comparison-analysis.json`, `inspection-coverage.json`, `raw-audit.json`과 `integrity-final-check.json`에 판정·귀속·감사를 보존한다. 감사 summary SHA-256은 `8a45f4c32e6daa3d55a3f2211c79908995296e7fbc00c49a30e278beb4654e1e`다.
+
+### 이미지·메타데이터·SVG 보충 검증
+
+최종 실행 파일로 이미지 161건을 실행해 160개 성공·의도된 초과 ICC 거부 1개를 확인했다. 성공 파일 160개는 검토된 AVIF 구현의 `cases5`와 바이트가 같다. 기존 135개 매트릭스는 C#와 raw·visible 엄격 일치가 각각 112개이며, 직전 Swift와 달라진 화소 출력은 AVIF 3개(`cmyk-all`, `cmyk-profile-all`, `metadata-all`)다. 이 수치를 전체 이미지 동등성으로 확대하지 않는다.
+
+별도 TGA 17건은 모두 검증을 통과했다. 프로필 RGB JPEG/PNG의 sRGB 독립 oracle 대비 최대 채널 오차는 각각 52→0, 48→0이며 기존 매트릭스의 TGA 3개는 바이트가 같다. SVG 실제 출력 66개와 R5의 40건/20쌍은 보존된 검토 결과와 화소·파일이 같고 기존 정규화 63개도 유지됐다. 보충 PNG 한 파일의 바이트 차이는 추가된 tEXt 2개뿐이며 IDAT·렌더링은 같고 메타데이터 구현 결과와도 일치한다.
+
+메타데이터 부분집합 64건/66개 출력에서 태그·속성 차이나 누락은 없다. 65개 파일은 검토된 메타데이터 구현과 바이트가 같고 `builtin-to-avif` 1개는 인코딩 바이트가 다르다. 이 출력의 입력 대비 색 SSE는 103,895→20,120, 알파 오차는 0이며 Q8 PSNR은 41.4971→49.1552 dB다. raw byte `REVIEW_REQUIRED`는 보존하고 이 한 표본의 근거를 붙였다. 첫 849건과 수정한 재실행의 이 부분집합 64건·입력 발생 65개·출력 66개는 전부 바이트가 같아서 보충 메타데이터 증거도 최종 재실행에 적용된다.
+
+근거는 `image-supplement-final/final-audit/REPORT.md`, `image-supplement-final/corrected-replay-binding/REPORT.md`와 연결된 JSON에 있다. 이미지 감사의 보호 경로 2,973개는 바뀌지 않았다. 앞 절에 기록한 C# CMYK 오류·ICC/코덱 차이와 미지원 태그·형식은 이 검증으로 면제되지 않는다.
+
+### 최종 후보 성능
+
+다른 작업의 빌드·변환을 끝낸 뒤 동일 후보만 6종 × 5회, 총 30회 순차 실행했다. .NET SDK 접근 차단과 전용 HOME/TMP를 사용했다. 이전 시간은 역사적 값이며 동시점 A/B 측정이 아니다. 공유 M2 Max의 진단값으로, 다른 사용자의 모든 시스템 부하가 없었다고 주장하지 않는다.
+
+| 입력 → 출력 | 최선 (초) | 중앙값 (초) |
+| --- | ---: | ---: |
+| big.pdf → TXT | 0.580092 | 0.603380 |
+| big.epub → FB2 | 0.407639 | 0.412003 |
+| big.docx → MD | 0.089163 | 0.092700 |
+| big.docx → TXT | 0.081940 | 0.083386 |
+| big.md → HTML | 0.603105 | 0.606248 |
+| big.md → TXT | 0.546107 | 0.556180 |
+
+**Markdown TXT 0.60초와 PDF TXT 0.84초 목표를 각각 5/5회 충족했다.** 최댓값도 각각 0.564790초·0.652617초다. 모든 출력은 보존된 직전 결과와 동등하며 FB2의 검증된 문서 UUID·생성 날짜만 제외한다. 보호 파일 50개가 그대로이고 staging 잔여물은 없다. `performance-reviewed/summary.json`, `raw.json`, `command.json`에 전체 시간과 명령을 남겼다.
+
+첫 성능 시도는 PDF 5회 뒤 FB2 생성 날짜가 2026-10-25에서 26으로 바뀌어 바이트 비교를 중단했다. 원래 시도와 파일은 `performance/`에 보존했다. 재귀 XML 비교로 차이가 문서 UUID와 `document-info/date` 두 필드뿐임을 확인한 뒤, 문서 날짜 하나의 속성과 본문이 일치하고 보존된 두 날짜 중 하나인 경우만 제외했다. 본문 변경·중복 날짜·다른 날짜는 거부하는 self-check 6개도 통과했다. 이는 변환 코드나 일반 비교기의 완화가 아니며 근거는 `performance-date-attribution.json`, `performance-date-selfcheck/result.json`이다.
+
+### 남아 있는 한계
+
+AVIF 선택 가드는 ImageIO 디코딩 표본 오차와 한정된 메타데이터만 비교한다. 확장 Q8 검사에서 q1 CMYK 한 조건의 0.1862 dB 저하는 그대로 남는다. 네이티브 후보를 버리는 경우에도 첫 ImageIO 인코딩·네이티브 인코딩·두 디코딩의 비용을 지불한다. 최종 가드 전 진단에서 8.8/24/36 MP의 중앙 시간은 ImageIO 0.29/0.43/0.42초에서 후보 비교 포함 1.89/3.62/2.48초로 늘었다. host 피크는 최대 약 1.44 GB, 별도 도구 피크는 약 1.1 GB였다. 서로 다른 프로세스의 피크를 동시에 측정한 총 메모리로 합산하지 않는다. 저품질에서 ImageIO가 버리는 ICC를 보존해 파일이 8.07배인 사례도 있으며 무조건 작은 파일을 보장하지 않는다.
+
+SVG shorthand 표본의 C# 대비 SSIM은 0.375165→0.300399, PSNR은 15.6966→16.2245 dB로 엇갈린다. serif·세로 라틴 방향 차이와 복잡한 SVG는 남아 있다. 메타데이터는 누적 크기 제한·허용된 리소스·형식별 지원에 한정되며 BigTIFF·ICO 프레임 매핑·XCF 원본 ICC와 모든 중첩 태그 보존을 보장하지 않는다. 새로운 바이너리 의미 검사도 모든 문서 기능의 동등성을 증명하지 않는다.
+
+물리 M1/macOS 15, 외장 exFAT·SMB·TCC 재실행과 실제 로그아웃/로그인 후 자동 실행·알림은 검증하지 않았다. Ghostscript가 없고 FFmpeg 일부 인코더도 없으므로 관련 skip·변환 실패가 남는다. Developer ID 서명·공증은 이번 작업에서 제외했다. 앞의 역사적 기록과 이 절의 raw FAIL·WARN을 보존하며 완전한 시각·내용 동등성이나 배포 완료로 표현하지 않는다.

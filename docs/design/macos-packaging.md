@@ -1,9 +1,9 @@
 # macOS 앱·변환 엔진 배포 설계
 
-## 현재 Swift helper 패키징 (2026-10-25)
+## 현재 Swift helper 패키징 (2026-10-26)
 
 현재 빌드 입력은 `Package.swift`, `project.yml`, `Tools/stage-bundled-engines.sh`다.
-엔진·helper 실행 파일·테스트·네이티브 라이브러리(LibRaw, PDFium, libjpeg-turbo, libwebp, libjxl, OpenJPEG, Skia SVG)는 `Package.swift` 한 곳에만 정의한다.
+엔진·helper 실행 파일·테스트·네이티브 라이브러리(LibRaw, PDFium, libjpeg-turbo, libwebp, libjxl, OpenJPEG, Skia SVG, libavif/libaom)는 `Package.swift` 한 곳에만 정의한다.
 앱이 helper와 통신하는 `Sources/Core`(`FileToXCore`)도 패키지 제품이며 앱 타깃은 `import FileToXCore`로 쓴다(그래서 Core의 API는 `public`이다). `project.yml`은 그 패키지를 로컬 패키지로 참조하고, SwiftPM이 만들 수 없는 것만 더한다: 앱 번들 두 개(앱, helper), 서명, PDFium dylib 포함, rhwp·7-Zip 스테이징, 앱 테스트 번들. 엔진 리소스는 패키지의 리소스 번들(`FileToX_FileToXEngineKit.bundle`)로 helper와 테스트 번들에 복사된다.
 변환 helper는 Swift 실행 파일이며 .NET runtime·NuGet DLL·JIT entitlement를 포함하지 않는다.
 **Apple Silicon M1 이상(arm64), macOS 15 이상만 지원한다.** 최소 OS는 유지한다. `project.yml`의 공통 `ARCHS: arm64`가 앱·helper·테스트에 적용되고 `Tools/stage-bundled-engines.sh`는 arm64 외의 입력을 거부한다. Intel Mac·Rosetta 실행과 그 검증은 현재 지원 범위에 포함하지 않는다.
@@ -12,11 +12,15 @@
 ```text
 FileToX.app/Contents/Helpers/FileToXEngine.app/Contents/
   MacOS/FileToXEngine                  # Swift helper, host-wire-v1 NDJSON
+  MacOS/FileToXAvifEncoder             # arm64 libavif/libaom 인코더 도구
   MacOS/engines/{rhwp,7zip}/...         # osx-arm64 pinned 실행 파일
   Frameworks/libpdfium.dylib           # arm64 추출 후 서명한 배포 사본
   Resources/FileToX_FileToXEngineKit.bundle/... # 엔진 카탈로그·번역·템플릿·Skia 고지
   Resources/Notices/...                # Filee, rhwp/7-Zip, LibRaw, PDFium 고지
+  Resources/Notices/LibAVIF/...         # libavif, libaom, 특허·third-party 고지
 ```
+
+`FileToXAvifEncoder`는 고정한 libavif 1.4.2·libaom 3.14.1 정적 라이브러리를 쓰는 별도 arm64 실행 파일이며 libSystem에만 동적 링크한다. Xcode가 도구를 빌드하고 staging이 helper의 `Contents/MacOS`에 복사해 hardened runtime으로 서명한다. SwiftPM에서 독립 실행 파일을 만들 때는 `FileToXEngine`과 `FileToXAvifEncoder` 두 제품을 빌드한다. 도구가 없으면 AVIF는 ImageIO 경로를 유지한다. 오프라인 재빌드 입력·해시·고지는 [Vendor README](../../Vendor/LibAVIF/README.FileToX.md)와 provenance에 고정했다.
 
 PDF → 래스터는 C# PDFtoImage 5.2.1과 같은 PDFium을 사용한다. PDFium의 macOS universal
 prebuilt dylib·공개 헤더·버전·빌드 설정을 `Vendor/PDFium`에 체크인했다. 원본 release asset의
@@ -30,7 +34,7 @@ XcodeGen이 dylib를 helper의 `Contents/Frameworks`에 복사하고 **Code Sign
 install name은 `@rpath/libpdfium.dylib`, helper rpath는 `@executable_path/../Frameworks`와
 `@loader_path/../Frameworks`다. PDFium 로딩은 소스 트리의 라이브러리 경로에 의존하지 않는다.
 Debug 빌드에는 Xcode가 패키지 산출물 rpath도 추가하지만 PDFium은 번들의 상대 경로에서 로드한다.
-이전 검증에서는 helper를 `/tmp`로 복사해 PDFium 로드·실제 렌더링·서명을 다시 검증했다. 동일 dylib를 엔진 XCTest 번들에도 포함한다. 서명 순서는 dylib·외부 엔진 → helper → 부모 앱이다.
+이전 검증에서는 helper를 `/tmp`로 복사해 PDFium 로드·실제 렌더링·서명을 다시 검증했다. 동일 dylib를 엔진 XCTest 번들에도 포함한다. 서명 순서는 dylib·외부 엔진·AVIF 도구 → helper → 부모 앱이다.
 Developer ID 배포에서는 모든 내부 Mach-O에 같은 Team ID를 사용하고 hardened runtime·타임스탬프·
 공증·staple을 별도로 검증해야 한다. 로컬 ad-hoc 검증은 공증 검증을 대신하지 않는다.
 
@@ -46,7 +50,7 @@ Swift package 의존성 빌드에도 적용되도록 Xcode 명령에 destination
 PDFium의 43건 비교 수치와 검증 결과는 [differential triage](engine-differential-triage.md#pdfkit-versus-pdfiumskia-rasterization)에 있다.
 앱 내부는 서명 후 읽기 전용으로 유지한다. 설정·선택 엔진·임시/결과 경로의 기존 경계를 바꾸지 않는다.
 
-Intel 정리 후 staging은 PDFium·번들 도구의 arm64만 추출하고 다시 서명한다. Skia 정적 bridge·재빌드도 arm64 전용이다. 검증된 PDFium·도구 원본과 고지는 그대로 두며 배포 앱의 Mach-O 5개는 모두 arm64임을 확인했다. [후속 검증](engine-differential-triage.md#intel-support-cleanup-2026-10-25)을 따른다.
+staging은 PDFium·번들 도구의 arm64만 추출하고 다시 서명한다. Skia 정적 bridge·재빌드도 arm64 전용이며 검증된 PDFium·도구 원본과 고지는 보존한다. 이전 정리 경위는 [기록](engine-differential-triage.md#intel-support-cleanup-2026-10-25)에 남긴다.
 
 ## 현재 서명·데이터 경계와 검증 상태
 
@@ -54,11 +58,9 @@ Debug·Release의 기본 서명은 로컬 ad-hoc이며 hardened runtime을 켜�
 
 앱은 `~/Library/Application Support/FileToX/{core,engines,tmp}`를 쓰고 helper는 명시한 core·engines 경로와 격리한 TMPDIR을 사용한다. 최종 출력은 선택한 저장 규칙을 따른다. 출력별 staging·원본 보호·부분 실패 보고·시작 시 잔여 staging 정리는 [현재 아키텍처](../architecture.md#데이터-경계와-출력-안전)에 설명한다. 서명 후 앱 번들을 사용자 데이터나 엔진 설치 위치로 수정하지 않는다.
 
-이전 [최종 통합 검증](engine-differential-triage.md#final-native-quality-integration-2026-10-24)에서는 기존 팀의 **개발 인증서로 실제 Xcode Release 빌드**, 내부 코드의 같은 Team ID, library-validation 예외 없는 helper, deep/strict 서명 검사와 재배치한 앱의 22개 검사를 확인했다. 이는 Developer ID 배포 서명·공증 검증이 아니다. 당시 x86_64 Release 교차 컴파일·링크는 통과했고 Intel 실행은 `Bad CPU type in executable`로 불가능했다. Rosetta를 설치하지 않았으며 이 과거 기록이 현재 Intel/Rosetta 검증 의무를 만들지는 않는다.
+최종 소스 `bff5988`의 SDK 접근 차단 Xcode 클린 빌드·엔진 728개(58개 skip)와 별도 clean 환경 앱 81개 테스트는 실패가 없다. 기존 팀의 Apple Development 인증서로 서명한 Release에서 같은 Team ID, library-validation 예외 없는 helper, deep/strict 검사와 저장소·SDK 접근을 막은 재배치 실행 23개를 확인했다. 새 AVIF 도구의 실제 4:4:4 변환도 포함된다. 번들 Mach-O 6개는 arm64이며 .NET 파일·Homebrew 동적 의존성이 없다. 앱 파일 합계는 76,609,264바이트, 엔진 실행 파일은 35,426,272바이트다.
 
-실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [이전 arm64 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
-
-최신 소스 `5f9486a`에서도 SDK 접근 차단 clean build·엔진 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 Release와 재배치 22개 검사가 통과했다. 번들의 Mach-O 5개는 arm64이며 .NET 파일·Homebrew 동적 의존성이 없다. 앱의 파일 크기 합계는 69,561,342바이트다. [최신 검증 기록](engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)에 명령과 실행 파일 해시를 보존한다. Developer ID·공증·물리 M1/macOS 15 검증은 완료하지 않았다.
+명령·해시·후속 문서와의 연결은 [최신 통합 검증](engine-differential-triage.md#remaining-work-integration-2026-10-26)을 따른다. 검증 환경은 M2 Max/macOS 27.0.1이며 물리 M1/macOS 15 실행이나 Developer ID 배포 서명·공증을 증명하지 않는다. 과거 Intel 교차 빌드는 현재 지원 범위 밖의 역사적 기록이다.
 
 배포 전에는 다음을 확인한다.
 
@@ -74,6 +76,8 @@ Filee MIT와 실제 포함한 엔진·라이브러리의 고지를 보존한다.
 
 - Swift helper에 정적 링크하는 LibRaw 0.22.2는 CDDL-1.0으로 사용한다. `docs/upstream/LibRaw.LICENSE`와 `LibRaw.THIRD-PARTY-NOTICES.md`(LibRaw COPYRIGHT, DCB/FBDD BSD, X3F BSD, Adobe DNG SDK MIT, 소스 위치)를 `Tools/stage-bundled-engines.sh`가 helper의 `Resources/Notices`에 넣는다.
 - Swift helper에 정적 링크하는 libjpeg-turbo 3.2.0(libjpeg API 라이브러리, SIMD 없음)은 IJG 라이선스로 사용한다. 바이너리 배포 문서에 "this software is based in part on the work of the Independent JPEG Group"을 밝혀야 하므로 README 세 언어와 `docs/upstream/libjpeg-turbo.THIRD-PARTY-NOTICES.md`(IJG 라이선스 전문, 소스 위치)에 적고, 이 파일과 `libjpeg-turbo.LICENSE`(upstream `LICENSE.md`)를 `Tools/stage-bundled-engines.sh`가 helper의 `Resources/Notices`에 넣는다. 원본에서 뺀 파일은 `Vendor/libjpeg-turbo/README.FileToX.md`에 적는다(IJG 조건 1).
+
+- AVIF 도구의 `Vendor/LibAVIF/LICENSES` 5개 고지를 `Resources/Notices/LibAVIF`에 원문 그대로 포함한다. libavif의 BSD-2·libyuv 고지, libaom의 BSD-2·특허 라이선스와 실제 빌드에 들어간 fastfeat·vector 고지를 유지하며 최종 번들과 바이트를 대조했다.
 
 ## 전환 전 .NET 패키징 조사 기록 (2026-10-11)
 

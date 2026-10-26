@@ -66,14 +66,15 @@ xcodebuild -project FileToX.xcodeproj -scheme FileToX -configuration Debug \
 open 'build/DerivedData/Build/Products/Debug/FileToX Dev.app'
 ```
 
-Xcode는 루트 `Package.swift`의 엔진·Core 제품을 사용하고 Swift helper·PDFium·번들 도구를 서명해 포함한다. 앱·helper·테스트는 arm64를 대상으로 하며 다운로드 도구는 x64를 거부한다. 첫 패키지 해석에서 고정 버전 libwebp·libjxl 소스를 받고, rhwp·7-Zip은 검증된 캐시가 없을 때만 받는다. LibRaw·libjpeg-turbo·OpenJPEG 소스, 원본 universal PDFium dylib와 arm64 전용 Skia SVG 정적 라이브러리를 보관한다. staging은 PDFium·번들 도구의 arm64만 추출한 뒤 서명하며 검증된 원본은 바꾸지 않는다. Skia는 제한된 기본 도형에 사용하고 나머지 SVG 기능·벡터 PDF는 CoreSVG를 유지한다. 출처와 라이선스 고지는 보존한다.
+Xcode는 루트 `Package.swift`의 엔진·Core 제품을 사용하고 Swift helper·PDFium·번들 도구를 서명해 포함한다. 앱·helper·테스트는 arm64를 대상으로 하며 다운로드 도구는 x64를 거부한다. 첫 패키지 해석에서 고정 버전 libwebp·libjxl 소스를 받고, rhwp·7-Zip은 검증된 캐시가 없을 때만 받는다. LibRaw·libjpeg-turbo·OpenJPEG 소스, 원본 universal PDFium dylib와 arm64 전용 Skia SVG 정적 라이브러리를 보관한다. staging은 PDFium·번들 도구의 arm64만 추출한 뒤 서명하며 검증된 원본은 바꾸지 않는다. Skia는 제한된 기본 도형에 사용하고 나머지 SVG 기능·벡터 PDF는 CoreSVG를 유지한다. 출처와 라이선스 고지는 보존한다. 고정된 libavif 1.4.2·libaom 3.14.1 정적 라이브러리를 사용하는 arm64 `FileToXAvifEncoder` 도구와 고지도 함께 포함한다.
 
 ```sh
+swift build -c release --product FileToXAvifEncoder
 swift build -c release --product FileToXEngine
 python3 Tools/fetch-optional-engines.py --help
 ```
 
-개발 식별자는 `forked.filetox.local.dev`, Release는 `forked.filetox.local`이다. 개인 설정은 Git에서 제외하는 `Config/Local.xcconfig`에 둔다. Debug·Release의 기본 서명은 로컬 ad-hoc용이다. arm64 Release는 기존 팀 개발 인증서의 실제 Xcode 빌드·deep/strict 서명 검사와 저장소·.NET SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. Developer ID 서명·공증은 미검증이다. 검증 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행 결과는 아니다. 범위와 남은 차이는 [최신 검증 기록](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)을 따른다.
+개발 식별자는 `forked.filetox.local.dev`, Release는 `forked.filetox.local`이다. 개인 설정은 Git에서 제외하는 `Config/Local.xcconfig`에 둔다. Debug·Release의 기본 서명은 로컬 ad-hoc용이다. arm64 Release는 기존 팀 개발 인증서의 실제 Xcode 빌드·deep/strict 서명 검사와 저장소·.NET SDK 접근을 차단한 재배치 실행 23개 검사를 통과했다. Developer ID 서명·공증은 미검증이다. 검증 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행 결과는 아니다. 범위와 남은 차이는 [최신 검증 기록](docs/design/engine-differential-triage.md#remaining-work-integration-2026-10-26)을 따른다.
 
 ## 검증
 
@@ -95,18 +96,15 @@ python3 Tools/engine-optional-smoke.py "$FILETOX_SMOKE_HOST" "$PWD/build/optiona
 
 이전 앱 검증에서는 Apple silicon에서 Xcode 테스트 32개, Swift Package 테스트 12개, 내장 엔진 검증 22개(실제 변환 20개·선택 판단 2개), 추가 엔진·영상·음성·실행 중 취소·첨부 이미지 충돌 표본 11개를 통과했다. Swift 통신에서도 실제 PNG→JPG, PDF 병합→여러 PNG, unknown 파일·폴더 ZIP→압축 해제와 이력을 확인했다. 실제 앱의 도넛 JPG 클릭→결과 생성→최근 이력도 통과했다. 실제 Finder Option 드래그에서도 느린 움직임, 원본 보존과 드롭 후 Finder 포커스 유지를 확인했다. 한글 HWP·DOCX에서 만든 PDF의 텍스트 추출과 PNG 렌더링도 확인했다. 영어·한국어·일본어 변경은 실행 중인 앱과 helper에 바로 반영된다. 기본 색상 선택기로 고른 색의 재실행 후 유지, 기본 프리셋 이름 번역과 사용자 이름 보존도 확인했다.
 
-**과거 비교 기록:** 전체 변환 849건은 578 PASS / 263 WARN / 8 FAIL이었다. 이후 Calibre TCR 압축 손상을 우회하고 RGB/회색조 JPEG 읽기에 libjpeg-turbo를 적용했다. 위 전체 비교 수치는 이 후속 변경 전 결과다. 당시 테스트·C/C++ 대안 비교·남은 한계는 [후속 검증 기록](docs/design/engine-differential-triage.md#native-library-follow-up-2026-10-23), 기존 사용자 데이터·격리·서명 검증은 [통합 기록](docs/design/engine-differential-triage.md#performance-integration-2026-10-23)을 따른다. 안전한 TCR 쓰기는 심볼릭 링크를 해석한 `ebook-convert` 옆에 `calibre-debug`가 있는 완전한 Calibre 설치본이 필요하며, 별도 Python 설치는 필요 없다.
-
-2026-10-25 arm64 엔진으로 **849건 전체**를 실행했다. 786건 완료·기준선과 같은 63건 실패이며 작업 상태·오류 키·출력 수 변경은 없었다. WOFF2 5개 결과는 변환을 반복하지 않고 검사기만 수정해 재검사했으며 최종 검사 오류는 0건이다. 기존 정책의 C# 비교는 **580 PASS / 264 WARN / 5 FAIL**, TCR 내용·PDF 래스터 검사를 강화한 별도 정책은 **585 / 255 / 9**다. 기준선 그림 참조 누락 4건과 Calibre 자동 표지 차이 등을 면제하지 않았다. WARN은 시각적·레이아웃 동등성을 입증하지 않는다. 명령·이미지 품질·서명·남은 한계는 [이전 arm64 검증 기록](docs/design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다. 이전 Intel 교차 빌드 증거는 현재 지원·검증 의무를 뜻하지 않는다.
-
 **설정 → 자동 변환 폴더**에서 입력 폴더와 프리셋을 지정하고 규칙을 켠 뒤 저장한다. **감시 중** 상태가 된 뒤 파일을 넣는다. 시작할 때 이미 있던 파일은 그대로 두고, 앱이 실행 중일 때 새 파일과 변경된 파일을 처리한다. 기본 출력은 `converted`이며 원본은 유지한다. 선택하면 변환에 성공하고 변경되지 않은 원본을 `originals`로 이동한다. 패키지 내부와 임시 다운로드 폴더는 제외한다. 3초 안정화 대기는 휴리스틱이므로 쓰기 중 오래 멈출 수 있는 프로그램은 완료한 파일을 원자적 rename으로 전달해야 한다. 스캔은 10,000개 항목, 작업은 입력 128개로 제한한다.
 
-모든 형식 조합·코덱을 검사하지 않았다. Ghostscript는 이 머신에 없고, 현재 FFmpeg에는 일부 인코더가 없다. 실제 로그아웃·로그인 후 자동 실행과 알림 전달은 검증하지 않았다. 외장 exFAT·SMB, 배포 공증·TCC 재실행 검증도 남아 있다. 위 비교 수치는 이전 스냅샷의 결과다.
+모든 형식 조합·코덱을 검사하지 않았다. Ghostscript는 이 머신에 없고, 현재 FFmpeg에는 일부 인코더가 없다. 실제 로그아웃·로그인 후 자동 실행과 알림 전달은 검증하지 않았다. 외장 exFAT·SMB, 배포 공증·TCC 재실행 검증도 남아 있다.
 
-직전 검증 소스 `5f9486a`에서 SDK 접근 차단 Xcode clean build·엔진 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 서명·재배치 22개 검사를 통과했다. Mach-O 5개는 arm64이며 .NET·Homebrew 동적 의존성이 없다. CMYK JPEG 반전, PSD/PSB의 CMYK·ICC 보존, BMP 물리 해상도를 수정했고 PSD 길이 초과는 저장 전에 실패시킨다. 이미지 엄격 일치는 **103→112/135건**(TGA 검사 오류만 바로잡은 별도 수치는 113건)이며 기존 일치 결과의 회귀는 없다. 새 849건은 **786완료·기존 63실패**, 검사 오류 0이고 V2 C# 비교는 **586 PASS / 255 WARN / 8 FAIL**이다. 실패를 면제하지 않았으며 PDF 검사기 V2의 표본 추출이 달라 과거 V1 수치와 분리했다. 이전 PDF·Markdown 성능은 재측정하지 않았고 Markdown TXT 목표 미달은 남아 있다. [최신 수정·검증·남은 한계](docs/design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)에 근거를 기록했다.
+최종 통합 소스 `bff5988`에 이미지 메타데이터 보존 확대, TGA 색상 처리, SVG 텍스트 정규화, Markdown 최적화와 별도 AVIF 인코더를 반영했다. 클린 빌드, Swift 엔진 728개(14개 skip)·Core 18개, Xcode 엔진 728개(58개 skip)·앱 81개, 개발 인증서 서명과 재배치 23개 검사를 실패 없이 마쳤다. 번들 Mach-O 6개는 모두 arm64이며 .NET 파일·Homebrew 동적 링크가 없다.
 
+새 849건은 786건 완료·기존과 같은 63건 실패이며 harness·검사 오류는 0이다. 확장 의미 검사의 C# 비교는 **599 PASS / 202 WARN / 48 FAIL**로, 과거 정책 수치와 구분하고 실패를 면제하지 않았다. 순차 Markdown TXT·PDF TXT 중앙값은 각각 **0.556초·0.603초**이며 0.60초·0.84초 목표를 각각 5회 모두 충족했다.
 
-최종 후속 소스 `d9b260d`에 Pandoc·LibreOffice·Calibre 관리형 설치, PSD/PSB IPTC 보존, 대용량 메시지 분할 전송을 통합했다. 최종 앱 클린 빌드·앱 테스트 81개·개발 인증서 서명·재배치 22개 검사가 통과했다. 변경되지 않은 엔진·Core 소스는 엔진 669개와 별도 프로세스 트리 종료 1개·Core 18개 테스트가 통과했다. 서명된 재배치 helper의 실제 HTTPS Pandoc 설치와 DOCX 내용도 확인했다. 새 849건에서 새 엄격 실패 ID는 없으며 V2 C# 비교는 **587 PASS / 254 WARN / 8 FAIL**이다. 이미지 화소는 직전 승인 출력과 같고 PSD/PSB 두 메타데이터 사례에만 IPTC가 추가됐다. 순차 PDF TXT는 **0.547초**, Markdown TXT는 **0.665초**이며 후자의 0.60초 목표는 미달이다. 소스·실행 파일 연결과 한계는 [최종 후속 기록](docs/design/engine-differential-triage.md#managed-engine-installation-and-final-follow-up-2026-10-25)을 따른다.
+AVIF 선택은 ImageIO로 읽은 색·알파 표본 오차와 제한된 메타데이터 보존만 확인한다. 추가 시간·메모리 비용, 중첩 메타데이터와 Q8·SVG 차이는 남아 있다. 소스·실행 파일 연결, 엄격 비교 결과와 한계는 [최신 통합 검증](docs/design/engine-differential-triage.md#remaining-work-integration-2026-10-26)을 따른다. 과거 비교는 같은 문서에 보존했다. 안전한 TCR 쓰기는 심볼릭 링크를 해석한 `ebook-convert` 옆에 `calibre-debug`가 있는 완전한 Calibre 설치본이 필요하며 별도 Python 설치는 필요 없다.
 
 ## 소스와 설계
 

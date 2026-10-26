@@ -1,6 +1,6 @@
 # FileToX 설계
 
-## 현재 구현과 지원 범위 (2026-10-25)
+## 현재 구현과 지원 범위 (2026-10-26)
 
 FileToX는 Filee에서 영감을 받은 Mac 전용 파일 변환 앱이다. **Apple Silicon M1 이상(arm64), macOS 15 이상**을 지원한다. 최소 OS는 바뀌지 않는다. Intel Mac·Rosetta 실행과 그 검증은 제품 지원 범위에 포함하지 않는다.
 
@@ -12,6 +12,7 @@ FileToX는 Filee에서 영감을 받은 Mac 전용 파일 변환 앱이다. **Ap
 - `Sources/Core` → `FileToXCore`: 앱이 사용하는 공개 통신 클라이언트(`EngineHost`), wire 모델과 정적 카탈로그 로더. 변환 엔진을 앱 프로세스에서 실행하지 않는다.
 - `Sources/Engine` → `FileToXEngineKit`: Swift host, 형식·프리셋·프로필·설정·이력, 경로 탐색·작업 큐, 변환기와 외부 도구 실행.
 - `Sources/EngineMain`: `EngineHostMain.run`을 호출하는 `FileToXEngine` 실행 진입점.
+- `Vendor/LibAVIF/FileToX/avifenc.c`: 취소 가능한 별도 `FileToXAvifEncoder` 실행 파일. 고정한 arm64 libavif·libaom 정적 라이브러리를 사용한다.
 - `Package.swift`: Core·EngineKit·helper 실행 제품, 네이티브 라이브러리·리소스·패키지 테스트의 공통 정의.
 - `project.yml`: 로컬 Swift 패키지를 사용하는 앱·helper 번들, 내장 라이브러리·도구·리소스, 서명·Xcode 테스트. 공통 `ARCHS: arm64`를 사용하고 bundled-engine staging도 다른 아키텍처를 거부한다.
 
@@ -24,6 +25,10 @@ PDFium의 검증된 universal 원본과 upstream 출처·고지는 보존한다.
 `Resources/FileeFormats.json`은 앱의 정적 카탈로그용이다. 엔진의 실행 가능 여부나 경로를 이 JSON으로 판단하지 않는다. 형식 목록은 [formats.md](formats.md), 기능별 이식 근거는 [Swift 전환 기록](design/swift-engine-migration.md)에 있다.
 
 내장 변환기는 Swift 코드와 macOS 프레임워크, LibRaw·libjpeg-turbo·libwebp·libjxl·OpenJPEG·PDFium·Skia 등의 네이티브 구성 요소를 사용한다. `MagickImageConverter`·`PdfSharpConverter` 등 기존 id/타입 이름은 호환성을 위해 남아 있으며 해당 NuGet 패키지를 실행한다는 뜻이 아니다. PDF 래스터는 PDFium, PDF 편집·텍스트 처리는 PDFKit을 사용한다. Skia SVG bridge는 허용한 기본 도형만 처리하며 나머지 SVG 기능과 벡터 PDF는 CoreSVG를 유지한다.
+
+AVIF는 ImageIO 결과를 먼저 만들고, 단일 8비트 RGB 이미지의 후보를 별도 `FileToXAvifEncoder` 프로세스(libavif 1.4.2·libaom 3.14.1)로 인코딩한다. 두 결과를 ImageIO로 읽어 입력의 premultiplied 8비트 표본과 비교한다. 색·알파 제곱 오차가 모두 증가하지 않고 하나 이상 감소하며 메타데이터 가드를 통과할 때만 후보를 쓴다. 입력 메타데이터 중 ImageIO가 보존한 최상위 태그와 문자열 값을 확인하되 배열·구조는 존재 여부만 확인한다. 올바른 출력 크기를 기록하기 위해 EXIF 픽셀 치수는 이 비교에서 제외한다. 회색조·색인·고정밀·다중 프레임·도구 없는 빌드는 ImageIO 경로를 유지한다. 이 기준은 시각적·SSIM·전체 메타데이터 동등성을 보장하지 않는다. 인코딩 도구는 취소 때 프로세스 트리와 함께 종료하고 전용 0700 임시 폴더를 정리한다.
+
+SVG 정규화는 상대 `font` 단축 속성, 상속·대소문자·공백, 세로쓰기와 글리프 방향을 보완한다. 표현할 수 없는 양방향 텍스트·baseline 조합은 기존 렌더러로 되돌린다. 기존 63개 정규화 결과, 실제 66개 출력과 독립 R5의 20개 쌍을 연결해 검증한다. 전체 SVG 또는 C# 렌더링과의 일치는 보장하지 않는다.
 
 기본 번들에는 rhwp·7-Zip 실행 파일을 포함한다. 앱의 관리형 설치는 고정된 arm64 Pandoc·LibreOffice·Calibre를 사용자 데이터의 `engines` 아래에 설치한다. FFmpeg·Ghostscript는 시스템 설치나 사용자가 지정한 사본을 사용한다. `EngineEnvironment`는 사용자 지정 → 번들/다운로드 경로 → 시스템 경로 순서로 찾는다. 설치는 사용자 지정 경로 설정을 바꾸지 않으며 기존 폴더를 교체하지 않는다. 없는 엔진과 지원하지 않는 macOS 경로는 사용 불가 이유를 반환한다.
 
@@ -59,19 +64,17 @@ helper는 `core/.lock`으로 같은 데이터 디렉터리의 중복 실행을 �
 
 규칙의 출력 폴더는 물리 경로로 고정하고 할당·게시 단계에서 원본 보관 경로와 겹치지 않는지 다시 확인한다. 선택한 경우 성공한 작업의 변경되지 않은 원본만 `originals`로 독점 rename한다. 병합·압축의 여러 입력도 각각 확인하며 실패·취소된 입력은 이동하지 않는다. 현재 스캔·경로 검증 실패는 대기 작업을 무효화하지만 과거 변환·이동 오류 표시는 정상적인 후속 작업을 취소하지 않는다. `watch.status`는 캐시를 읽고 종료 때 `watch.stop`이 새 감시 작업을 막는다. 설정·이력의 로컬 저장은 여전히 동기식이며, 입력 수 제한이 큰 출력 목록의 wire 크기까지 보장하지는 않는다. 지원하지 않는 독점 rename은 원본을 유지한 채 실패한다.
 
-JPEG·PNG 입력의 실제 ICC를 추적하고, 화소의 색 공간이 달라지면 이전 프로필을 붙이지 않는다. 네이티브 JPEG 디코더의 화소는 번호가 올바른 ICC 조각을 파일 순서와 무관하게 조합해 해석한다. JPEG 프로필은 최대 16,707,345바이트이며 초과하면 출력 게시 전에 실패한다. PNG iCCP 스캔은 손상 스트림의 산출량도 세어 누적 16 MiB에 최대 1 MiB 버퍼 한 개의 추가 해제만 허용한다. TIFF·JP2 등 다른 입력·출력의 추론 프로필과 JXL의 내부 프로필 표현까지 원본 바이트 보존을 보장하지 않는다. BMP 쓰기는 indexed 화소를 RGB로 변환하고 헤더 없는 결과를 거부하며, 확인된 24비트 행 패딩만 0으로 만든다.
+JPEG·PNG 이외에도 TIFF·PSD/PSB·WebP·GIF·HEIF·JPEG XL·JPEG 2000의 지원하는 컨테이너에서 실제 ICC를 추적한다. TIFF는 IFD와 ImageIO 페이지가 일치할 때 페이지별 프로필·IPTC를 연결하며, 확인하지 못한 경로는 디코더가 추정한 색 공간으로 구분한다. 제한된 BMP V5의 내장 RGB ICC도 검증 후 처리한다. 링크된 프로필은 읽지 않는다. EXIF는 출력 크기·방향·해상도에 맞춰 직렬화하고 PSD/PSB의 허용한 EXIF·XMP·IPTC·문서 리소스와 PNG 주석을 보존한다. 비-sRGB RGB/인덱스 그림을 프로필 없는 TGA로 쓸 때는 sRGB로 변환한다. 형식이 표현하지 못하는 태그나 지원하지 않는 컨테이너까지 무손실 보존한다고 주장하지 않는다. JPEG ICC의 16,707,345바이트 제한, PNG 누적 해제량과 PSD ICC의 16 MiB 예산을 지키며 초과·손상 자료는 안전하게 거부하거나 확인 가능한 디코더 경로로 처리한다. TIFF BigTIFF, ICO 프레임 매핑, XCF 프로필 등은 원본 ICC 바이트 보존 범위 밖이다.
 
 ## 현재 UI와 검증 범위
 
 홈에서 파일·폴더와 프리셋/파일 도구를 선택해 실행하거나 원형 메뉴를 연다. Finder 드래그의 기본 호출 키는 Control, 파일 도구 메뉴는 Control+Shift이며 사용자 설정과 호출 순서를 따른다. 앱은 프리셋·프로필·테마·언어·엔진 경로 편집, 진행·취소·실패 재시도·최근 이력을 연결한다. 로그인 항목·메뉴 막대·알림·호출 제외 앱과 자동 변환 폴더도 연결돼 있다. 앱 내 관리형 엔진 다운로드·취소·설치 상태도 연결했다.
 
-이전 최종 통합 기록은 개발 인증서로 서명한 Release 빌드, SDK 접근을 막은 빌드·테스트와 재배치한 앱의 22개 검사를 통과했다. [기록](design/engine-differential-triage.md#final-native-quality-integration-2026-10-24)의 849건 비교는 581 PASS / 264 WARN / 4 FAIL이며 WARN은 시각적 동등성의 증거가 아니다. 과거 x86_64 교차 컴파일·링크 성공과 Intel/Rosetta 실행 불가는 당시 증거로만 보존한다.
+최종 검증 소스는 `bff5988`이다. SDK 접근 차단 Swift 엔진 728개(14개 skip)와 Core 18개, 별도 프로세스 트리 종료 검사, Xcode 클린 빌드·엔진 728개(58개 skip)·앱 81개가 실패 없이 완료됐다. 기존 팀 개발 인증서로 서명한 Release의 Mach-O 6개는 arm64이며, 저장소·SDK 접근을 차단한 재배치 실행 23개에 새 AVIF 도구도 포함된다.
 
-실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [이전 arm64 검증 기록](design/engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
+새 849건은 786건 완료·기존과 같은 63건 실패이며 harness·검사 오류는 0이다. 확장 의미 검사의 C# 비교는 **599 PASS / 202 WARN / 48 FAIL**로, 과거 정책 수치와 구분하고 실패를 면제하지 않았다. 순차 Markdown TXT·PDF TXT 중앙값은 각각 **0.556초·0.603초**이며 0.60초·0.84초 목표를 각각 5회 모두 충족했다.
 
-직전 검증 소스 `5f9486a`는 SDK 접근 차단 clean build·엔진 테스트 644개(57개 skip), 별도 clean 환경 앱 74개, 개발 인증서 Release·서명·재배치 22개 검사를 통과했다. CMYK JPEG 반전·PSD/PSB의 CMYK/ICC·BMP 해상도와 검사기를 보완했다. 새 849건은 786완료·기존 63실패, 검사 오류 0이며 V2 C# 비교는 586 PASS / 255 WARN / 8 FAIL이다. 이전 V1 수치와 구분하며 실패는 면제하지 않았다. 이미지 엄격 일치는 103→112/135건이고 TGA 검사 오류만 수정한 별도 수치는 113건이다. 이전 순차 PDF TXT 0.630초·Markdown TXT 0.667초는 재측정하지 않았다. [최신 수정·검증·남은 한계](design/engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)를 따른다.
-
-최종 후속 앱 소스 `d9b260d`의 클린 빌드·앱 81개·서명·재배치 22개 검사를 통과했다. 엔진은 앞선 전체 Swift 669개(14개 skip)와 별도 프로세스 트리 1개, Core 18개, Xcode 엔진 669개(58개 skip)의 소스와 같다. 관리형 설치의 실제 HTTPS 전송·서명된 helper 실행도 확인했다. 변환 검증 소스 `a5d32f2` 이후 바뀐 것은 AppModel과 그 테스트뿐이며 SwiftPM helper·리소스 13개는 바이트가 같다. Xcode 배포 helper는 별도 빌드·서명·재배치 검사를 수행했다. 새 849건 V2 C# 비교는 587/254/8이고 새 엄격 실패 ID는 없다. PSD/PSB IPTC를 보존하며 다른 화소는 유지한다. 순차 PDF TXT 0.547초·Markdown TXT 0.665초와 남은 제한은 [최종 후속 기록](design/engine-differential-triage.md#managed-engine-installation-and-final-follow-up-2026-10-25)에 구분했다.
+비교 정책별 수치·보존된 실패·소스와 실행 파일 연결은 [최신 통합 검증](design/engine-differential-triage.md#remaining-work-integration-2026-10-26)을 따른다. 검증 환경은 M2 Max/macOS 27.0.1이다. 물리 M1/macOS 15, 외장 exFAT·SMB·TCC 재실행·실제 로그인 후 자동 실행/알림과 Developer ID 서명·공증은 검증하지 않았다. 과거의 Intel 교차 빌드는 현재 지원 범위를 넓히지 않는다.
 
 ## 전환 전 .NET 설계·검증 기록 (2026-10-11)
 

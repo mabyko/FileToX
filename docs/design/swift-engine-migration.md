@@ -1,24 +1,26 @@
 # C# 변환 엔진의 Swift 전환 기록
 
-## 현재 상태 (2026-10-25)
+## 현재 상태 (2026-10-26)
 
-앱은 SwiftUI·AppKit, helper는 `Sources/EngineMain`에서 시작하는 Swift 실행 파일이다. 앱 통신·모델은 `Sources/Core`(`FileToXCore`), host·변환 코어·엔진은 `Sources/Engine`(`FileToXEngineKit`)에 있다. 빌드 정의는 `Package.swift`, 앱·helper 번들·서명·도구 내장은 `project.yml`과 `Tools/stage-bundled-engines.sh`가 담당한다. 현재 빌드·실행에는 .NET SDK·런타임·NuGet 복원이나 과거 C# host가 필요 없다.
+앱은 SwiftUI·AppKit, host는 `Sources/EngineMain`에서 시작하는 Swift 실행 파일이다. 앱 통신·모델은 `Sources/Core`(`FileToXCore`), host·변환 코어·엔진은 `Sources/Engine`(`FileToXEngineKit`)에 있다. `Package.swift`가 공통 빌드 정의이며 `project.yml`과 staging 도구가 앱·helper 번들, AVIF 보조 실행 파일, 서명·고지를 구성한다. 현재 빌드·실행에는 .NET SDK·런타임·NuGet 복원이나 과거 C# host가 필요 없다.
 
-지원 범위는 **Apple Silicon M1 이상(arm64), macOS 15 이상**이다. 최소 OS는 유지하며 Intel·Rosetta 실행과 그 검증은 요구하지 않는다. 앱·helper·테스트는 `ARCHS: arm64`이고 staging도 다른 아키텍처를 거부한다. Xcode 명령에는 `-destination 'platform=macOS,arch=arm64' ARCHS=arm64`를 함께 지정해 Swift package 의존성 빌드도 제한한다. 구체적인 명령과 현재 데이터·취소·출력 안전은 [README](../../README.md), [아키텍처](../architecture.md), [패키징](macos-packaging.md)을 따른다.
+지원 범위는 **Apple Silicon M1 이상(arm64), macOS 15 이상**이다. 앱·helper·테스트는 `ARCHS: arm64`이고 staging도 다른 아키텍처를 거부한다. Xcode 명령에는 `-destination 'platform=macOS,arch=arm64' ARCHS=arm64`를 함께 지정한다. Intel·Rosetta 실행은 지원·검증 범위 밖이다. 구체적인 명령과 데이터·취소·출력 안전은 [README](../../README.md), [아키텍처](../architecture.md), [패키징](macos-packaging.md)을 따른다.
 
-내장 엔진은 Swift 코드·macOS 프레임워크·네이티브 라이브러리를 사용하고 rhwp·7-Zip은 번들 실행 파일을 사용한다. Pandoc·LibreOffice·Calibre는 앱의 관리형 설치 또는 시스템 설치·사용자 지정 사본을 사용한다. FFmpeg·Ghostscript는 시스템 설치나 사용자 지정 사본을 사용한다. 아래 초기 계획의 JPEG 2000 품질 제한 수용, SVG 렌더링 범위와 CMYK 처리 설명은 당시 결정이다. 이후 JPEG 2000 쓰기는 OpenJPEG를 사용하고, 제한된 SVG 기본 도형은 정적 Skia bridge로 처리하며 나머지 SVG 기능과 벡터 PDF는 CoreSVG를 유지한다. 현재 색상 처리·비교 한계는 [이전 단계 최종 통합 기록](engine-differential-triage.md#final-native-quality-integration-2026-10-24)에서 확인한다.
+내장 엔진은 Swift 코드·macOS 프레임워크·네이티브 라이브러리를 사용하며 rhwp·7-Zip은 번들 실행 파일이다. Pandoc·LibreOffice·Calibre는 검증된 고정 arm64 패키지의 관리형 설치 또는 사용자 지정·시스템 사본을 사용한다. FFmpeg·Ghostscript는 사용자 지정·시스템 사본을 사용한다. 감시 폴더 실행·설정 UI와 64 MiB까지의 분할 host 응답도 연결돼 있다. 현재 버전의 경계를 아래 과거 계획의 미구현 설명으로 대체하지 않는다.
 
-PDFium·Skia의 업스트림 버전·원본 해시·고지는 보존한다. 현재 Skia 정적 bridge·재빌드·다운로드는 arm64 전용이고 배포 staging은 PDFium·번들 도구에서도 arm64만 남겨 서명한다. 검증용 PDFium universal 원본은 변경하지 않는다. 이전 universal 출력의 경위와 과거 Intel 검증 기록은 보존하지만 현재 지원·추가 검증 의무는 아니다.
+JPEG 2000 쓰기는 OpenJPEG, PDF 래스터는 PDFium, 제한된 SVG 기본 도형은 Skia bridge를 사용한다. 나머지 SVG 기능·벡터 PDF는 CoreSVG를 유지하며 상대 font shorthand·세로쓰기·방향·상속 정규화를 보완했다. 기존 정규화와 출력, 독립 쌍 비교를 유지했지만 C# 글꼴·세로 방향·일부 SSIM 차이는 남아 있다. PDFium universal 원본과 Skia의 출처·고지는 보존하고 배포 사본은 arm64로 한정한다.
 
-이전 단계에서 SDK 접근 차단 빌드·테스트, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사와 재배치한 앱의 변환 검증을 통과했다. 이는 Developer ID 서명·공증 검증이 아니다. 위 기록의 이전 최종 비교 결과와 WARN·FAIL 한계도 그대로 유지하며 새 검증 결과로 재사용하지 않는다.
+이미지 메타데이터는 출력 크기·방향·DPI에 맞춘 EXIF, PSD/PSB의 허용된 EXIF·XMP·IPTC·문서 리소스, PNG 주석, 추가 입력 형식의 ICC 추적과 페이지별 TIFF 정보를 보완했다. 비-sRGB TGA는 sRGB로 변환한 뒤 프로필 없이 쓴다. 제한된 BMP V5 내장 ICC를 지원하며 링크된 프로필은 읽지 않는다. 모든 형식·태그·색 공간의 무손실 보존을 보장하지는 않는다.
 
-후속 변경으로 감시 폴더 실행·설정 UI를 연결하고, JPEG·PNG의 ICC 추적과 BMP 안전 처리를 보완했다. PDF의 단일 텍스트 상태 검증과 Markdown 조회 캐시 최적화도 통합했다. 임의 색 공간·폼 기본 색 공간 등 확인할 수 없는 PDF는 기존 PDFKit 속성 경로를 유지한다. SVG 상대 font shorthand 변경은 비교 품질이 낮아진 표본 때문에 통합하지 않았다. 후속 소스 `34bc0ae`의 SDK 접근 차단 clean build·테스트·개발 인증서 Release와 재배치 실행, 실제 849개·이미지 검증·순차 성능 측정을 완료했다. PDF TXT 최선 0.630초로 목표를 충족했고 Markdown TXT는 0.667초로 미달이다. 엄격 비교의 기존 실패는 그대로 남겼으며 [후속 검증 기록](engine-differential-triage.md#integrated-watch-icc-and-native-cancellation-follow-up-2026-10-25)에 결과·한계를 구분했다. 아래 `70fff7d` 수치는 앞선 단계의 기록이다. 현재 감시·취소·색상 처리 경계는 [아키텍처](../architecture.md)를 따른다. 이 단계에서는 앱 내 관리형 엔진 다운로드가 미구현이었다. 이후 고정 패키지의 검증·설치·취소·종료 정리와 UI를 추가했다. 전환 전 Mac host에는 설치 요청 API가 없었다.
+AVIF는 libavif 1.4.2·libaom 3.14.1을 사용한 별도 arm64 인코더를 추가했다. ImageIO 결과와 후보를 비교해 정해진 색·알파 표본 오차와 메타데이터 조건을 통과할 때만 후보를 쓴다. 긴 EXIF 손실은 ImageIO 결과를 유지하도록 수정했고 독립 재검토를 통과했다. 중첩 메타데이터는 최상위 태그 존재만 검사하며 추가 시간·메모리와 Q8 차이가 남아 있다. 입력 대비 개선 때문에 C# 기준선과의 비교가 FAIL이 되는 영상 프레임 사례도 별도 근거와 함께 보존한다.
 
-앞선 소스 `5f9486a`에서 표식 없는 CMYK JPEG 반전, PSD/PSB의 CMYK·ICC 보존과 32비트 길이 제한, BMP의 소수점 해상도를 수정했다. SDK 접근 차단 빌드·테스트·서명·재배치와 이미지 135건·전체 849건 재검증을 완료했다. 이미지 엄격 일치는 112/135건, 별도 TGA 검사 수정 수치는 113건이다. PDF 검사기 V2는 144 DPI·media-box 클리핑·회전 판정을 바로잡았으므로 과거 V1 결과와 분리한다. [최신 품질 수정 기록](engine-differential-triage.md#cmyk-bmp-and-inspection-corrections-2026-10-25)에 실제 개선과 남은 차이를 구분했다.
+Markdown 최적화는 기존 AST와 출력 의미를 유지하며 중복 탐색·중간 할당을 줄였다. PDF 주석·액션·폼과 지원하는 바이너리 형식의 독립 의미 검사를 추가했고, UUID·메타데이터·리소스 순서·자동 표지 등 새로 드러난 엄격 차이는 그대로 기록한다. 검사 범위 확장을 생산 코드의 회귀나 완전한 동등성으로 단정하지 않는다.
 
-실행 소스 `70fff7d`에서 arm64 SDK 접근 차단 clean build와 엔진 테스트(581개, 57개 skip, 실패 0), 별도 clean 환경 앱 테스트 74개, 기존 팀 개발 인증서의 실제 Release 빌드·서명 검사, 저장소·SDK 접근을 차단한 재배치 실행 22개 검사를 통과했다. 실행 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행을 주장하지 않는다. Developer ID 서명·공증은 미검증이다. 실제 변환 비교와 남은 차이는 [이전 arm64 검증 기록](engine-differential-triage.md#apple-silicon-only-final-verification-2026-10-25)을 따른다.
+최종 실행 소스 `bff5988`에서 SDK 접근 차단 Swift 엔진 728개(14개 skip)·Core 18개, 별도 프로세스 트리 검사, Xcode 클린 빌드·엔진 728개(58개 skip)·앱 81개와 개발 인증서 Release·재배치 23개 검사를 완료했다.
 
-최종 후속 앱 소스 `d9b260d`에서는 관리형 엔진 3종의 검증·설치·취소·종료 정리와 UI, PSD/PSB IPTC 보존, 64 MiB까지의 분할 응답을 추가했다. 변환 검증 소스 `a5d32f2`의 SwiftPM helper와 최종 소스에서 다시 확인한 SwiftPM helper는 바이트가 같으며 뒤의 변경은 AppModel·앱 테스트뿐이다. 최종 앱 클린 빌드·앱 81개·서명·재배치 22개와 실제 HTTPS Pandoc 설치·DOCX 내용 확인을 통과했다. 새 849건의 V2 C# 비교는 587 PASS / 254 WARN / 8 FAIL이며 기존 실패는 면제하지 않았다. 순차 PDF TXT 0.547초, Markdown TXT 0.665초로 Markdown 목표는 남아 있다. [최종 후속 검증과 미해결 항목](engine-differential-triage.md#managed-engine-installation-and-final-follow-up-2026-10-25)을 따른다.
+새 849건은 786건 완료·기존과 같은 63건 실패이며 harness·검사 오류는 0이다. 확장 의미 검사의 C# 비교는 **599 PASS / 202 WARN / 48 FAIL**로, 과거 정책 수치와 구분하고 실패를 면제하지 않았다. 순차 Markdown TXT·PDF TXT 중앙값은 각각 **0.556초·0.603초**이며 0.60초·0.84초 목표를 각각 5회 모두 충족했다.
+
+ 상세 근거는 [최신 통합 검증](engine-differential-triage.md#remaining-work-integration-2026-10-26)을 따른다. 실행 환경은 M2 Max/macOS 27.0.1이며 물리 M1/macOS 15 증거가 아니다. Developer ID 서명·공증, SMB/exFAT/TCC·실제 로그인/알림 검증은 남아 있다.
 
 ## 과거 전환 계획과 단계별 결정 (2026-10-23)
 
