@@ -44,7 +44,15 @@ def main():
 
     source = args.work / 'src'
     with tarfile.open(args.tarball) as archive:
-        archive.extractall(source, filter='data')
+        if hasattr(tarfile, 'data_filter'):
+            archive.extractall(source, filter='data')
+        else:
+            # Pythons without extraction filters (Xcode's 3.9): the pinned archive holds plain files and folders only.
+            for member in archive.getmembers():
+                name = pathlib.PurePosixPath(member.name)
+                if name.is_absolute() or '..' in name.parts or not (member.isfile() or member.isdir()):
+                    raise SystemExit('Unexpected member in the libavif tarball: ' + member.name)
+            archive.extractall(source)
     source = source / ('libavif-' + libavif['version'])
     build = args.work / 'build'
     environment = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(args.work), 'TMPDIR': str(args.work),
