@@ -5,10 +5,11 @@
 // - read back by ImageIO, it keeps every top-level tag of the frame's metadata that ImageIO's file kept, with equal
 //   string values (arrays and structures by presence only), except the pixel dimensions, which it records from the
 //   picture while ImageIO copies the source's.
-// That bounds these measures, not visual, SSIM or full metadata equivalence. Colour pictures usually gain (ImageIO's
-// 4:2:0 drops chroma detail); ImageIO's file usually stays for gray-like ones. The helper does not run for gray pictures,
-// colour pictures whose samples are all gray, 16-bit and float pictures, several frames, frames not prepared for an AVIF
-// target and pictures beyond libavif's default decoder limits.
+// Like ImageIO's own writer, the helper's file keeps the Exif auxiliary tags (lens, serial number), which Exif cannot
+// hold, as XMP. That bounds these measures, not visual, SSIM or full metadata equivalence. Colour pictures usually gain
+// (ImageIO's 4:2:0 drops chroma detail); ImageIO's file usually stays for gray-like ones. The helper does not run for gray
+// pictures, colour pictures whose samples are all gray, 16-bit and float pictures, several frames, frames not prepared
+// for an AVIF target and pictures beyond libavif's default decoder limits.
 //
 // libaom's encode is one call that cannot be interrupted, so it runs in a helper process (FileToXAvifEncoder) that
 // cancellation kills through ProcessRunner. Samples and metadata reach the helper in a private hand-off file; its result
@@ -51,7 +52,7 @@ enum AvifEncoder {
             let metadata = frame.properties[ImageFrame.metadataKey].flatMap { CFGetTypeID($0 as CFTypeRef) == CGImageMetadataGetTypeID() ? ($0 as! CGImageMetadata) : nil }
             described.properties[ImageFrame.metadataKey] = ImageEncoder.encoderMetadata(metadata ?? CGImageMetadataCreateMutable(), dpi)
         }
-        let blobs = CodecPixels.metadataBlobs(described, colorModel: .rgb)
+        let blobs = CodecPixels.metadataBlobs(described, colorModel: .rgb, auxInXmp: true)
         let icc = blobs.icc ?? Data(), exif = blobs.exif ?? Data(), xmp = blobs.xmp ?? Data()
         guard [icc, exif, xmp].allSatisfy({ $0.count <= maxMetadata }) else { return false }
         try Task.checkCancellation()

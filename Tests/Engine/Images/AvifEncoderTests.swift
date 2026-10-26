@@ -199,6 +199,29 @@ final class AvifEncoderTests: XCTestCase {
         XCTAssertEqual((try GraphicsTestKit.decode(path).properties[0][kCGImagePropertyExifDictionary] as? [CFString: Any])?[kCGImagePropertyExifUserComment] as? String, "structured")
     }
 
+    func testExifAuxiliaryTagsKeepTheNativeFile() throws {
+        // Lens and serial number in the Exif auxiliary namespace, as Adobe's applications write them. Exif cannot hold them;
+        // ImageIO's own AVIF keeps them as XMP, and so does the helper's, which is then used.
+        let folder = GraphicsTestKit.folder(), tiff = folder + "/aux.tiff", path = folder + "/aux.avif"
+        let values = [("Lens", "Probe 24-70mm"), ("SerialNumber", "AUX-123"), ("LensID", "77")]
+        let metadata = CGImageMetadataCreateMutable()
+        for (name, value) in values { XCTAssertTrue(CGImageMetadataSetValueWithPath(metadata, nil, "aux:\(name)" as CFString, value as CFString)) }
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyExifDictionary, kCGImagePropertyExifUserComment, "auxiliary" as CFString)
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(URL(fileURLWithPath: tiff) as CFURL, "public.tiff" as CFString, 1, nil))
+        CGImageDestinationAddImageAndMetadata(destination, Self.colour(65, 39), metadata, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let source = try XCTUnwrap(ImageReader.read(tiff, format: "tiff", preset: Preset()).first)
+        let frame = try ImageEncoder.applyOptions(source, Self.options(quality: 75), targetFormat: "avif")
+        try ImageEncoder.save([frame], to: path, format: "avif")
+        XCTAssertEqual(try AvifBoxes(path).colour.map(\.chroma), [[0, 0]], "the native file")
+        let read = try XCTUnwrap(CGImageSourceCopyMetadataAtIndex(try XCTUnwrap(CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil)), 0, nil))
+        for (name, value) in values { XCTAssertEqual(CGImageMetadataCopyStringValueWithPath(read, nil, "aux:\(name)" as CFString) as String?, value, name) }
+        XCTAssertEqual((try GraphicsTestKit.decode(path).properties[0][kCGImagePropertyExifDictionary] as? [CFString: Any])?[kCGImagePropertyExifUserComment] as? String, "auxiliary")
+        // The other writers' shared serializer is unchanged: its XMP still leaves the auxiliary tags out.
+        let shared = String(decoding: try XCTUnwrap(CodecPixels.metadataBlobs(frame, colorModel: .rgb).xmp), as: UTF8.self)
+        XCTAssertFalse(shared.contains("aux:Lens"))
+    }
+
     func testResolutionIsKeptAsImageIODoes() throws {
         let folder = GraphicsTestKit.folder()
         let png = try ImageEncoder.applyOptions(ImageFrame(image: Self.colour(48, 32), dpi: (300, 300)), Self.options(quality: 60), targetFormat: "avif")

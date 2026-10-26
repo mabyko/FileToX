@@ -43,4 +43,5 @@ This bounds these measures only; it does not establish visual, SSIM or full meta
   count from two (its `test/ethread_test.cc`), so the count changes only the time
 - colour tuned for SSIM (libavif's linear quantizer scale); alpha keeps libavif's default PSNR tuning
 - `nclx` sRGB primaries and transfer for untagged pictures; an ICC profile otherwise
-- Exif and XMP as items, without `irot`/`imir`: the engine already wrote the pixels upright
+- Exif and XMP as items, without `irot`/`imir`: the engine already wrote the pixels upright. The XMP also carries the
+  Exif auxiliary tags (`aux:`, lens and serial number), which Exif cannot hold, as ImageIO's own AVIF does

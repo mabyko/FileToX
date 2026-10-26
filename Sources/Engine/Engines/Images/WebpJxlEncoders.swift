@@ -271,15 +271,16 @@ enum CodecPixels {
         return profile
     }
 
-    /// The frame's ICC profile, EXIF (TIFF-structured, as ImageIO writes it) and XMP (the
-    /// metadata outside the EXIF/TIFF namespaces).
-    static func metadataBlobs(_ frame: ImageFrame, colorModel: CGColorSpaceModel? = nil) -> (icc: Data?, exif: Data?, xmp: Data?) {
+    /// The frame's ICC profile, EXIF (TIFF-structured, as ImageIO writes it) and XMP (the metadata outside the EXIF/TIFF
+    /// namespaces; with `auxInXmp` also the Exif auxiliary tags, which EXIF cannot hold and ImageIO's own JPEG, HEIC and
+    /// AVIF writers keep as XMP).
+    static func metadataBlobs(_ frame: ImageFrame, colorModel: CGColorSpaceModel? = nil, auxInXmp: Bool = false) -> (icc: Data?, exif: Data?, xmp: Data?) {
         let icc = colorProfile(frame, colorModel: colorModel)
         guard let value = frame.properties[ImageFrame.metadataKey], CFGetTypeID(value as CFTypeRef) == CGImageMetadataGetTypeID() else {
             return (icc, nil, nil)
         }
         let metadata = value as! CGImageMetadata
-        return (icc, exif(metadata, frame.image, frame.dpi), xmp(metadata))
+        return (icc, exif(metadata, frame.image, frame.dpi), xmp(metadata, keepingAux: auxInXmp))
     }
 
     private static let exifNamespaces: Set<String> = [kCGImageMetadataNamespaceExif as String, kCGImageMetadataNamespaceExifAux as String,
@@ -338,11 +339,12 @@ enum CodecPixels {
         return Data(bytes)
     }
 
-    private static func xmp(_ metadata: CGImageMetadata) -> Data? {
+    private static func xmp(_ metadata: CGImageMetadata, keepingAux: Bool) -> Data? {
         let rest = CGImageMetadataCreateMutable()
         var any = false
         for tag in (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? [] {
-            guard let namespace = CGImageMetadataTagCopyNamespace(tag) as String?, !exifNamespaces.contains(namespace),
+            guard let namespace = CGImageMetadataTagCopyNamespace(tag) as String?,
+                  !exifNamespaces.contains(namespace) || keepingAux && namespace == kCGImageMetadataNamespaceExifAux as String,
                   let prefix = CGImageMetadataTagCopyPrefix(tag) as String?, let name = CGImageMetadataTagCopyName(tag) as String? else { continue }
             CGImageMetadataRegisterNamespaceForPrefix(rest, namespace as CFString, prefix as CFString, nil)
             if CGImageMetadataSetTagWithPath(rest, nil, "\(prefix):\(name)" as CFString, tag) { any = true }
