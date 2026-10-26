@@ -471,8 +471,10 @@ enum SvgNormalizer {
         var suppressed = 0
         /// The suppressed characters ended with a space; it disappears with them instead of collapsing the next one.
         var suppressedTrailingSpace = false
-        /// A unicode-bidi other than normal somewhere in horizontal text.
-        var bidiEmbedding = false
+        /// The ancestors' position lists where the outermost suppressed subtree began, and how many characters it has
+        /// hidden since, counted in Unicode scalars as SVG addresses characters.
+        var hiddenPositions: (x: [Double], y: [Double], dx: [Double], dy: [Double])?
+        var hiddenScalars = 0
 
         init(_ element: XElement, _ style: TextStyle, _ targets: TextPathTargets) {
             self.element = element
@@ -487,12 +489,6 @@ enum SvgNormalizer {
             if style.values["xml:space"] != "preserve", let last = runs.indices.last {
                 runs[last].text = String(runs[last].text.reversed().drop { $0 == " " }.reversed())
             }
-            // shortcut: unicode-bidi embedding, overrides and isolation are not applied to the outlines, so text whose
-            // order they can change (right-to-left characters, bidi controls or a right-to-left direction) stays with CoreSVG.
-            if bidiEmbedding && runs.contains(where: { run in
-                run.style.values["direction"]?.lowercased() == "rtl"
-                    || SvgNormalizer.bidirectionalCharacters.firstMatch(in: run.text, range: NSRange(location: 0, length: (run.text as NSString).length)) != nil
-            }) { return nil }
             // shortcut: styled vertical or on-path bidi chunks, and right-to-left text on a path, stay with CoreSVG until
             // shaping spans the whole anchored chunk.
             var chunkRuns = 0, bidirectional = false
@@ -516,9 +512,9 @@ enum SvgNormalizer {
             if !isRoot && node.attributeValue("display") == "none" { return }
             // shortcut: mixed vertical/horizontal inlines stay with CoreSVG until orthogonal inline layout is implemented.
             if self.style.vertical && !style.vertical { unsupported = true }
-            if let bidi = node.attributeValue("unicode-bidi"), bidi.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "normal" {
-                if self.style.vertical { unsupported = true } else { bidiEmbedding = true }
-            }
+            // shortcut: unicode-bidi embedding, overrides and isolation aren't applied to outlines, so text declaring any
+            // of them stays with CoreSVG.
+            if let bidi = node.attributeValue("unicode-bidi"), bidi.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "normal" { unsupported = true }
             let size = style.fontSize
             var shape: TextPathShape?
             var suppress = false
@@ -559,14 +555,29 @@ enum SvgNormalizer {
                 currentPath = shape; pathStarts = true; penY = 0; resume = nil
             }
             if suppress {
-                if suppressed == 0 { suppressedTrailingSpace = false }
+                if suppressed == 0 {
+                    suppressedTrailingSpace = false
+                    hiddenPositions = (pendingX, pendingY, pendingDX, pendingDY)
+                    hiddenScalars = 0
+                }
                 suppressed += 1
             }
             defer {
                 if let shape { currentPath = nil; pathStarts = false; resume = shape.continuation }
                 if suppress {
                     suppressed -= 1
-                    if suppressed == 0 && suppressedTrailingSpace { lastWasSpace = false }
+                    if suppressed == 0 {
+                        if suppressedTrailingSpace { lastWasSpace = false }
+                        // The hidden characters use up the ancestors' positions for them; lists given inside the hidden
+                        // subtree apply only there.
+                        if let ancestors = hiddenPositions {
+                            pendingX = Array(ancestors.x.dropFirst(hiddenScalars))
+                            pendingY = Array(ancestors.y.dropFirst(hiddenScalars))
+                            pendingDX = Array(ancestors.dx.dropFirst(hiddenScalars))
+                            pendingDY = Array(ancestors.dy.dropFirst(hiddenScalars))
+                        }
+                        hiddenPositions = nil
+                    }
                 }
             }
             for child in node.nodes {
@@ -603,14 +614,9 @@ enum SvgNormalizer {
                 text.append(c)
             }
             if suppressed > 0 {
+                // Characters that draw nothing still use up positions, one per Unicode scalar (collect settles them).
                 if let last = text.last { suppressedTrailingSpace = last == " " && !preserve }
-                // Characters that draw nothing still use up the positions given for them.
-                for _ in text where !pendingX.isEmpty || !pendingY.isEmpty || !pendingDX.isEmpty || !pendingDY.isEmpty {
-                    if !pendingX.isEmpty { pendingX.removeFirst() }
-                    if !pendingY.isEmpty { pendingY.removeFirst() }
-                    if !pendingDX.isEmpty { pendingDX.removeFirst() }
-                    if !pendingDY.isEmpty { pendingDY.removeFirst() }
-                }
+                hiddenScalars += text.unicodeScalars.count
                 return
             }
             for character in text {

@@ -2,9 +2,9 @@
 // length, so SvgNormalizer can place each typographic character at the midpoint of its advance along the path and turn
 // it with the path's tangent. CoreSVG draws textPath content as straight text at the origin.
 //
-// The work is bounded per drawing: every parsed path segment and every flattened piece is charged to one budget before
-// it is allocated, referenced geometry is measured once per element and direction, and once the budget is spent the
-// remaining text on a path stays with CoreSVG.
+// The counted geometry is bounded per drawing: every parsed path segment and every flattened piece is charged to one
+// budget before it is kept, referenced geometry is measured once per element and direction, and once the budget is spent
+// the remaining text on a path stays with CoreSVG. The XML, attribute text and shaping are outside this budget.
 
 import CoreGraphics
 import Foundation
@@ -35,8 +35,8 @@ extension SvgNormalizer {
         }
 
         let ids: [String: XElement]
-        /// Units of work for the whole drawing: one per cache entry, per parsed path segment (moves and closes too) and per
-        /// flattened piece, charged before each is allocated. 2,097,152 units keep the retained pieces under about 100 MB.
+        /// Units of counted work for the whole drawing: one per cache entry, per parsed path segment (moves and closes too)
+        /// and per flattened piece, charged before each is kept. 2,097,152 units keep the retained pieces under about 100 MB.
         var remainingWork = 1 << 21
         /// Referenced geometry by element and direction, measured once whatever the text's font size. Nothing is added
         /// once the work is spent.

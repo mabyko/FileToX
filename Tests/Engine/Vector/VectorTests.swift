@@ -1071,21 +1071,53 @@ extension VectorTests {
         }
     }
 
-    func testUnicodeBidiThatCanReorderHorizontalTextStaysWithTheRenderer() throws {
-        // Embedding, overrides and isolation aren't applied to outlines, so the whole text stays with CoreSVG when they
-        // can change its order: on the root, a textPath or a descendant, on a path or not.
+    func testUnicodeBidiOtherThanNormalKeepsTheWholeTextWithTheRenderer() throws {
+        // Embedding, overrides and isolation aren't applied to outlines, so text declaring any of them stays with CoreSVG:
+        // on the root, a textPath or a descendant, from an attribute or CSS, on a path or not, with Hebrew, with
+        // Arabic-Indic digits (bidi class AN, whose groups an override reorders) and with Latin only.
         let path = "<path id='p' d='M10 50 H190'/>"
+        let digits = "\u{661}\u{662} \u{663}\u{664}"
         for body in ["<text direction='ltr' unicode-bidi='bidi-override'><textPath href='#p'>\u{5D0}\u{5D1}\u{5D2}</textPath></text>",
-                     "<text><textPath href='#p' unicode-bidi='isolate'>ab\u{5D0}</textPath></text>",
+                     "<text direction='ltr' unicode-bidi='bidi-override'><textPath href='#p'>\(digits)</textPath></text>",
+                     "<text><textPath href='#p' direction='ltr' unicode-bidi='bidi-override'>\(digits)</textPath></text>",
+                     "<text><textPath href='#p'><tspan direction='ltr' unicode-bidi='bidi-override'>\(digits)</tspan></textPath></text>",
                      "<text><textPath href='#p'>a<tspan unicode-bidi='embed'>\u{5D0}\u{5D1}</tspan></textPath></text>",
-                     "<text x='10' y='50' direction='ltr' unicode-bidi='bidi-override'>\u{5D0}\u{5D1}</text>",
-                     "<text x='10' y='50'>a<tspan unicode-bidi='isolate-override' direction='rtl'>bc</tspan></text>"] {
+                     "<text x='10' y='50' direction='ltr' unicode-bidi='bidi-override'>\(digits)</text>",
+                     "<text x='10' y='50'>a<tspan unicode-bidi='isolate-override' direction='rtl'>bc</tspan></text>",
+                     "<text unicode-bidi='isolate'><textPath href='#p'>Path text</textPath></text>",
+                     "<style>.p {unicode-bidi:plaintext}</style><text x='10' y='50'><tspan class='p'>Latin</tspan></text>"] {
             let root = try XDocument.load(data: SvgNormalizer.normalize(textPathSource(path + body), baseDirectory: dir)).root
             XCTAssertTrue(root.descendants().contains { $0.name.localName == "text" }, body)
         }
-        // With nothing it can reorder, unicode-bidi changes nothing and the text is still outlined.
-        XCTAssertEqual(try textPathOutlines(path + "<text unicode-bidi='isolate'><textPath href='#p'>Path text</textPath></text>"),
-                       try textPathOutlines("<text x='10' y='50'>Path text</text>"))
+        // Without it, or with normal, Latin text is still outlined.
+        for declaration in ["", " unicode-bidi='normal'", " unicode-bidi=' NORMAL '"] {
+            XCTAssertEqual(try textPathOutlines(path + "<text\(declaration)><textPath href='#p'>Path text</textPath></text>"),
+                           try textPathOutlines("<text x='10' y='50'>Path text</text>"), declaration)
+            XCTAssertEqual(try textPathOutlines("<text x='10' y='50'\(declaration)>Plain text</text>").count, 1, declaration)
+        }
+    }
+
+    func testHiddenTextPathCharactersUseOnlyTheirOwnPositions() throws {
+        // A hidden subtree uses up its ancestors' x/y/dx/dy entries, one per Unicode scalar (q + U+0301 is two,
+        // U+1F600 one), and lists declared inside it neither replace those entries nor reach the text after it.
+        let at90 = try textPathOutlines("<text x='10' y='50'>A</text><text x='90' y='50'>C</text>")
+        for body in ["<text x='10 30 90' y='50'>A<textPath><tspan x='200'>B</tspan></textPath>C</text>",
+                     "<text x='10 20 90' y='50'>A<textPath><tspan x='200 300'>B</tspan></textPath>C</text>",
+                     "<text x='10 20 30 90' y='50'>A<textPath>q\u{301}</textPath>C</text>",
+                     "<text x='10 20 90' y='50'>A<textPath>\u{1F600}</textPath>C</text>",
+                     "<text x='10 20 30 90' y='50'>A<textPath>B<textPath>D</textPath></textPath>C</text>"] {
+            XCTAssertEqual(try textPathOutlines(body), at90, body)
+        }
+        XCTAssertEqual(try textPathOutlines("<text x='10 30 90' y='50 70 110'>A<textPath><tspan y='200'>B</tspan></textPath>C</text>"),
+                       try textPathOutlines("<text x='10' y='50'>A</text><text x='90' y='110'>C</text>"))
+        for list in ["dx", "dy"] {
+            XCTAssertEqual(try textPathOutlines("<text x='10' y='50'>A<textPath><tspan \(list)='300 400'>B</tspan></textPath>C</text>"),
+                           try textPathOutlines("<text x='10' y='50'>AC</text>"), list)
+        }
+        for (hidden, dx) in [("q\u{301}", "0 1 2 20"), ("\u{1F600}", "0 1 20")] {
+            XCTAssertEqual(try textPathOutlines("<text x='10' y='50' dx='\(dx)'>A<textPath>\(hidden)</textPath>C</text>"),
+                           try textPathOutlines("<text x='10' y='50'>A<tspan dx='20'>C</tspan></text>"), hidden)
+        }
     }
 
     func testTextAfterAClosedLoopContinuesFromItsStartOffset() throws {
