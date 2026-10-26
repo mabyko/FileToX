@@ -1,11 +1,14 @@
 // AVIF writing with libavif 1.4.2 + libaom 3.14.1 (Vendor/LibAVIF) for 8-bit colour pictures. ImageIO still writes every
-// AVIF first. libavif's 4:4:4 encode at ImageIO's AV1 quantizers then replaces that file only when, with both files
-// decoded by ImageIO and compared with the encoder's input as premultiplied 8-bit samples in their own colour space, its
-// summed squared error is no larger for colour and for alpha and smaller for one of them. That bounds this one measure,
-// not visual, SSIM or metadata equivalence. Colour pictures usually gain (ImageIO's 4:2:0 drops chroma detail); ImageIO's
-// file usually stays for gray-like ones. The helper does not run for gray pictures, colour pictures whose samples are all
-// gray, 16-bit and float pictures, several frames, frames not prepared for an AVIF target and pictures beyond libavif's
-// default decoder limits.
+// AVIF first. libavif's 4:4:4 encode at ImageIO's AV1 quantizers then replaces that file only when both hold:
+// - with both files decoded by ImageIO and compared with the encoder's input as premultiplied 8-bit samples in their own
+//   colour space, its summed squared error is no larger for colour and for alpha, and smaller for one of them;
+// - read back by ImageIO, it keeps every top-level tag of the frame's metadata that ImageIO's file kept, with equal
+//   string values (arrays and structures by presence only), except the pixel dimensions, which it records from the
+//   picture while ImageIO copies the source's.
+// That bounds these measures, not visual, SSIM or full metadata equivalence. Colour pictures usually gain (ImageIO's
+// 4:2:0 drops chroma detail); ImageIO's file usually stays for gray-like ones. The helper does not run for gray pictures,
+// colour pictures whose samples are all gray, 16-bit and float pictures, several frames, frames not prepared for an AVIF
+// target and pictures beyond libavif's default decoder limits.
 //
 // libaom's encode is one call that cannot be interrupted, so it runs in a helper process (FileToXAvifEncoder) that
 // cancellation kills through ProcessRunner. Samples and metadata reach the helper in a private hand-off file; its result
@@ -31,7 +34,8 @@ enum AvifEncoder {
     private final class Marker {}
 
     /// Replaces ImageIO's AVIF of the frames at `path` with the helper's when the helper's has no larger squared error for
-    /// colour and alpha and a smaller one for either (see above), and returns whether it did.
+    /// colour and alpha and a smaller one for either, and keeps the metadata tags ImageIO's kept (see above); returns
+    /// whether it did.
     @discardableResult
     static func improve(_ frames: [ImageFrame], at path: String, helper: String? = helper) throws -> Bool {
         guard let helper, frames.count == 1, let frame = frames.first, let quality = frame.properties[ImageFrame.qualityKey] as? Int,
@@ -70,10 +74,15 @@ enum AvifEncoder {
         guard encoded.count > 12, encoded[4..<12] == Data("ftypavif".utf8) else {
             throw ConversionError("The AVIF encoder wrote no AVIF file.")
         }
-        let source = ImagePixels.bitmap(image)
+        let source = ImagePixels.bitmap(image), imageIO = try Data(contentsOf: URL(fileURLWithPath: path))
         guard let mine = errors(encoded, source) else { return false }
-        if let theirs = errors(try Data(contentsOf: URL(fileURLWithPath: path)), source),
+        if let theirs = errors(imageIO, source),
            !(mine.colour <= theirs.colour && mine.alpha <= theirs.alpha && (mine.colour < theirs.colour || mine.alpha < theirs.alpha)) {
+            return false
+        }
+        // The shared serializer drops tags ImageIO's own AVIF writer keeps (a JPEG APP1 segment holds at most 64 KB of Exif).
+        if let metadata = described.properties[ImageFrame.metadataKey], CFGetTypeID(metadata as CFTypeRef) == CGImageMetadataGetTypeID(),
+           !keepsTags(of: metadata as! CGImageMetadata, encoded, comparedTo: imageIO) {
             return false
         }
         try Task.checkCancellation()
@@ -103,6 +112,32 @@ enum AvifEncoder {
             }
         }
         return (colour, alpha)
+    }
+
+    /// True when `file` holds every top-level tag of `metadata` that `reference` holds, both as ImageIO reads them, with the
+    /// same value where it is a string. Arrays and structures are compared by presence only, not item by item. Neither
+    /// writer gets the source's file structure (`encoderMetadata`), and the pixel dimensions are left out: `CodecPixels`
+    /// records the picture's own size, while ImageIO's AVIF writer copies the source's.
+    static func keepsTags(of metadata: CGImageMetadata, _ file: Data, comparedTo reference: Data) -> Bool {
+        func read(_ data: Data) -> [String: String] {
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let metadata = CGImageSourceCopyMetadataAtIndex(source, CGImageSourceGetPrimaryImageIndex(source), nil) else { return [:] }
+            return tags(metadata)
+        }
+        var wanted = tags(ImageEncoder.encoderMetadata(metadata, nil))
+        for name in ["PixelXDimension", "PixelYDimension"] { wanted[(kCGImageMetadataNamespaceExif as String) + " " + name] = nil }
+        let kept = read(file)
+        return read(reference).allSatisfy { key, value in wanted[key] == nil || kept[key] == value }
+    }
+
+    /// Namespace and name of each top-level tag, with its value when that is a string ("" otherwise).
+    private static func tags(_ metadata: CGImageMetadata) -> [String: String] {
+        var result: [String: String] = [:]
+        for tag in (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? [] {
+            guard let namespace = CGImageMetadataTagCopyNamespace(tag) as String?, let name = CGImageMetadataTagCopyName(tag) as String? else { continue }
+            result[namespace + " " + name] = CGImageMetadataTagCopyValue(tag) as? String ?? ""
+        }
+        return result
     }
 
     /// A new folder only this user can open, in the host's temporary folder.

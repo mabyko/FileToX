@@ -20,9 +20,19 @@ static `lib/libavif.a`. The archive contains libavif 1.4.2, its bundled libyuv s
 ## Selection
 
 The engine (`AvifEncoder.improve`) always writes ImageIO's AVIF first and runs the helper only for 8-bit colour pictures
-that are not all gray. It keeps the helper's file only when, with both files decoded by ImageIO and compared with the
-encoder's input as premultiplied 8-bit samples, its summed squared error is no larger for colour and for alpha and
-smaller for one of them. This bounds that one measure; it does not establish visual, SSIM or metadata equivalence.
+that are not all gray. It keeps the helper's file only when both hold:
+
+- With both files decoded by ImageIO and compared with the encoder's input as premultiplied 8-bit samples, its summed
+  squared error is no larger for colour and for alpha, and smaller for one of them.
+- Read back by ImageIO, it keeps every top-level tag of the picture's metadata that ImageIO's file kept.
+  - String values must be equal.
+  - Arrays and structures are compared by presence only; their items are not compared.
+  - The pixel dimensions are the exception: the helper's file records the picture's own size, while ImageIO copies
+    the source's.
+
+  For example, Exif that does not fit the shared serializer's 64 KB JPEG segment keeps ImageIO's file.
+
+This bounds these measures only; it does not establish visual, SSIM or full metadata equivalence.
 
 ## Encoder settings
 

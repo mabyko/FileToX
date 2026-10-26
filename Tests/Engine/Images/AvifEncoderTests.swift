@@ -152,6 +152,53 @@ final class AvifEncoderTests: XCTestCase {
         XCTAssertEqual(strippedProperties[kCGImagePropertyDPIWidth] as? Double, source.dpi?.x)
     }
 
+    func testMetadataImageIOKeepsIsNeverLostToTheNativeFile() throws {
+        // Exif that does not fit the shared serializer's JPEG APP1 segment (64 KB): a 100,005-character comment beside GPS.
+        // ImageIO's AVIF keeps both, so its file stays; a short comment fits and the native file keeps everything.
+        let folder = GraphicsTestKit.folder()
+        for (name, length, keep, native) in [("long", 100_000, true, false), ("short", 100, true, true), ("stripped", 100_000, false, true)] {
+            let tiff = folder + "/\(name).tiff", comment = "test-" + String(repeating: "z", count: length)
+            try Self.writeTiff(Self.colour(65, 39), to: tiff, comment: comment)
+            let source = try XCTUnwrap(ImageReader.read(tiff, format: "tiff", preset: Preset()).first)
+            var options = Self.options(quality: 75)
+            options.keepMetadata = keep
+            let path = folder + "/\(name).avif"
+            try ImageEncoder.save([try ImageEncoder.applyOptions(source, options, targetFormat: "avif")], to: path, format: "avif")
+            XCTAssertEqual(try AvifBoxes(path).colour.map(\.chroma), [native ? [0, 0] : [1, 1]], "\(name): \(native ? "native" : "ImageIO's") file")
+            let properties = try GraphicsTestKit.decode(path).properties[0]
+            let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any], gps = properties[kCGImagePropertyGPSDictionary] as? [CFString: Any]
+            XCTAssertEqual(exif?[kCGImagePropertyExifUserComment] as? String, keep ? comment : nil, name)
+            XCTAssertEqual(gps?[kCGImagePropertyGPSLatitude] as? Double, keep ? 37.5 : nil, name)
+            XCTAssertEqual(gps?[kCGImagePropertyGPSLatitudeRef] as? String, keep ? "N" : nil, name)
+        }
+    }
+
+    func testStructuredMetadataKeepsItsInnerValues() throws {
+        // The tag check compares array and structure values by presence only; this checks their items in the kept file.
+        let folder = GraphicsTestKit.folder(), tiff = folder + "/structured.tiff", path = folder + "/structured.avif"
+        let iptc = "http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/", dc = "http://purl.org/dc/elements/1.1/"
+        let metadata = CGImageMetadataCreateMutable()
+        CGImageMetadataRegisterNamespaceForPrefix(metadata, iptc as CFString, "Iptc4xmpCore" as CFString, nil)
+        CGImageMetadataSetTagWithPath(metadata, nil, "dc:subject" as CFString,
+                                      CGImageMetadataTagCreate(dc as CFString, "dc" as CFString, "subject" as CFString, .arrayUnordered, ["alpha", "beta"] as CFArray)!)
+        CGImageMetadataSetTagWithPath(metadata, nil, "Iptc4xmpCore:CreatorContactInfo" as CFString,
+                                      CGImageMetadataTagCreate(iptc as CFString, "Iptc4xmpCore" as CFString, "CreatorContactInfo" as CFString, .structure,
+                                                               ["CiAdrCity": "Seoul", "CiEmailWork": "avif@example.com"] as CFDictionary)!)
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyExifDictionary, kCGImagePropertyExifUserComment, "structured" as CFString)
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(URL(fileURLWithPath: tiff) as CFURL, "public.tiff" as CFString, 1, nil))
+        CGImageDestinationAddImageAndMetadata(destination, Self.colour(65, 39), metadata, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let source = try XCTUnwrap(ImageReader.read(tiff, format: "tiff", preset: Preset()).first)
+        try ImageEncoder.save([try ImageEncoder.applyOptions(source, Self.options(quality: 75), targetFormat: "avif")], to: path, format: "avif")
+        XCTAssertEqual(try AvifBoxes(path).colour.map(\.chroma), [[0, 0]], "the native file")
+        let read = try XCTUnwrap(CGImageSourceCopyMetadataAtIndex(try XCTUnwrap(CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil)), 0, nil))
+        let subject = Set(["dc:subject[0]", "dc:subject[1]"].compactMap { CGImageMetadataCopyStringValueWithPath(read, nil, $0 as CFString) as String? })
+        XCTAssertEqual(subject, ["alpha", "beta"])
+        XCTAssertEqual(CGImageMetadataCopyStringValueWithPath(read, nil, "Iptc4xmpCore:CreatorContactInfo.Iptc4xmpCore:CiAdrCity" as CFString) as String?, "Seoul")
+        XCTAssertEqual(CGImageMetadataCopyStringValueWithPath(read, nil, "Iptc4xmpCore:CreatorContactInfo.Iptc4xmpCore:CiEmailWork" as CFString) as String?, "avif@example.com")
+        XCTAssertEqual((try GraphicsTestKit.decode(path).properties[0][kCGImagePropertyExifDictionary] as? [CFString: Any])?[kCGImagePropertyExifUserComment] as? String, "structured")
+    }
+
     func testResolutionIsKeptAsImageIODoes() throws {
         let folder = GraphicsTestKit.folder()
         let png = try ImageEncoder.applyOptions(ImageFrame(image: Self.colour(48, 32), dpi: (300, 300)), Self.options(quality: 60), targetFormat: "avif")
@@ -407,6 +454,18 @@ final class AvifEncoderTests: XCTestCase {
         CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyExifDictionary, kCGImagePropertyExifUserComment, "AVIF metadata" as CFString)
         CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFOrientation, orientation as CFNumber)
         CGImageDestinationAddImageAndMetadata(destination, image, metadata, [kCGImageDestinationLossyCompressionQuality: 0.95] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+    }
+
+    /// A TIFF with an EXIF comment, a GPS latitude and an XMP creator tool.
+    static func writeTiff(_ image: CGImage, to path: String, comment: String) throws {
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, "public.tiff" as CFString, 1, nil))
+        let metadata = CGImageMetadataCreateMutable()
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyExifDictionary, kCGImagePropertyExifUserComment, comment as CFString)
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyGPSDictionary, kCGImagePropertyGPSLatitude, 37.5 as CFNumber)
+        CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyGPSDictionary, kCGImagePropertyGPSLatitudeRef, "N" as CFString)
+        CGImageMetadataSetValueWithPath(metadata, nil, "xmp:CreatorTool" as CFString, "FileToX test" as CFString)
+        CGImageDestinationAddImageAndMetadata(destination, image, metadata, nil)
         XCTAssertTrue(CGImageDestinationFinalize(destination))
     }
 
