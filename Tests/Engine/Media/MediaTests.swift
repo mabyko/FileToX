@@ -70,10 +70,14 @@ final class MediaTests: XCTestCase {
     func testEdgesKeepFileesOrderAndCosts() {
         let videos = FormatRegistry.known.filter { $0.category == .video }.count
         let audios = FormatRegistry.known.filter { $0.category == .audio }.count
-        XCTAssertEqual(converter.edges.count, videos * (17 + 18 + 1) + videos + audios * 18 + 3)
+        // Speech → TXT comes after Filee's edges, on macOS 26 or later.
+        var speech = 0
+        if #available(macOS 26.0, *) { speech = videos + audios }
+        XCTAssertEqual(converter.edges.count, videos * (17 + 18 + 1) + videos + audios * 18 + 3 + speech)
         XCTAssertEqual(converter.edges.first, ConversionEdge("mp4", "mp4"))
         XCTAssertEqual(converter.edges[17], ConversionEdge("mp4", "mp3"))
-        XCTAssertEqual(converter.edges.last, ConversionEdge("gif", "mov"))
+        XCTAssertEqual(converter.edges.dropLast(speech).last, ConversionEdge("gif", "mov"))
+        XCTAssertTrue(converter.edges.suffix(speech).allSatisfy { $0.to == "txt" })
     }
 
     // ───────────────────────── Command lines (no FFmpeg needed) ─────────────────────────
@@ -778,6 +782,29 @@ final class MediaTests: XCTestCase {
         let probed = try await probe(try await convert(source, "mp3"))
         XCTAssertEqual(probed.streams.map(\.codec), ["mp3"])
         XCTAssertTrue((1.8...2.3).contains(probed.duration), "\(probed.duration)")
+    }
+
+    func testSpeechOfAVideoBecomesTextAndSilenceIsReported() async throws {
+        try skipUnlessInstalled()
+        guard #available(macOS 26.0, *) else { throw XCTSkip("speech transcription needs macOS 26") }
+        let dir = try newFolder(), spoken = FilePath.combine(dir, "spoken.aiff"), video = FilePath.combine(dir, "talk.mp4")
+        let say = try ProcessRunner.runBlocking("/usr/bin/say", ["-v", "Samantha", "-o", spoken, "The quick brown fox jumps over the lazy dog."], timeout: 60)
+        try XCTSkipUnless(say.exitCode == 0 && FileManager.default.fileExists(spoken), "no system voice to speak the sample")
+        let made = try ProcessRunner.runBlocking(Self.tools!.ffmpeg, MediaEncoding.common + ["-f", "lavfi", "-i", "color=c=blue:s=64x64:d=4", "-i", spoken, "-shortest", video], timeout: 60)
+        XCTAssertEqual(made.exitCode, 0, made.standardError)
+        // The transcript follows the user's first language; an English Mac reads the sentence.
+        let english = await SpeechText.locale().identifier.hasPrefix("en")
+        for source in [video, spoken] {
+            let text = String(decoding: try Data(contentsOf: URL(fileURLWithPath: try await convert(source, "txt"))).dropFirst(3), as: UTF8.self)
+            XCTAssertFalse(text.isEmpty)
+            if english { XCTAssertTrue(text.lowercased().contains("quick brown fox"), text) }
+        }
+        do {
+            _ = try await convert(try await makeClip(try newFolder(), "silent.mp4", audio: false), "txt")
+            XCTFail("a silent video became text")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("no audio track"), error.localizedDescription)
+        }
     }
 
     func testMaxHeightScalesDownOnly() async throws {

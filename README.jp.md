@@ -87,6 +87,21 @@ FILETOX_FFMPEG_BUNDLE="$PWD/build/ffmpeg-new/ffmpeg" xcodebuild -project FileToX
 
 DebugのバンドルIDは`forked.filetox.local.dev`、Releaseは`forked.filetox.local`です。個人設定はGitの対象外となる`Config/Local.xcconfig`に保存します。Debug・Releaseの既定値はローカル用のad-hoc署名です。arm64 Releaseは既存チームの開発証明書による実際のXcodeビルド、deep/strict署名検証、およびリポジトリと.NET SDKへのアクセスを拒否した再配置実行23項目を通過しました。Developer ID署名・公証は未検証です。検証環境はM2 Max/macOS 27で、M1実機やmacOS 15での実行結果ではありません。範囲と残る差異は[最新の検証記録](docs/design/engine-differential-triage.md#remaining-work-integration-2026-10-26)に記載しています。
 
+## 対応していない変換
+
+次の変換先は一覧に出ないか、ファイルの内容によりエラーで終わります。元のアプリ（Filee）でも失敗していたもので、FileToXで外したのはPDBの書き出しだけです。
+
+| 変換 | 動作 | 理由 |
+| --- | --- | --- |
+| 画像・PDF・SVG・CAD・文書 → 音声形式 | 選択できない | 元のファイルに音がありません。音声は動画・音声からのみ作ります。 |
+| PDB（PalmDoc）への書き出し | 選択できない | Windows-1252の文字しか入らず、韓国語・日本語・絵文字が壊れます。PDBの読み込みはできます。 |
+| 動画・音声 → TXT以外の文書（DOCX・MDなど）への文字起こし | 非対応 | 文字起こしはTXTだけです。動画 → 文書・画像は静止フレームの画像になります。 |
+| 動画・音声 → TXT（macOS 15） | 選択できない | 文字起こしはmacOS 26以降のデバイス上の音声認識を使います。 |
+| 話し声のない動画・音声 → TXT | 「No speech was recognised」エラー | 音楽・効果音・無音は文字になりません。字幕トラックは読みません。 |
+| 文字のない画像・スキャンPDF → TXT | 「The PDF contains no text」エラー | 文字レイヤーも認識できる文字もありません。文字のある画像・スキャンはOCRで読みます。 |
+
+文字起こしとOCRの制限: 文字起こしはmacOSの第一言語ひとつだけで聞き取ります（韓国語のMacでは英語の録音は正しく出ません）。話者の区別と時刻はありません。OCRは縦書き、斜めに傾いたページ、手書き、第一言語と異なる日中韓の文字を保証せず、表を表として復元しません。
+
 ## 検証
 
 ```sh

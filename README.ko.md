@@ -91,6 +91,21 @@ FILETOX_FFMPEG_BUNDLE="$PWD/build/ffmpeg-new/ffmpeg" xcodebuild -project FileToX
 
 개발 식별자는 `forked.filetox.local.dev`, Release는 `forked.filetox.local`이다. 개인 설정은 Git에서 제외하는 `Config/Local.xcconfig`에 둔다. Debug·Release의 기본 서명은 로컬 ad-hoc용이다. arm64 Release는 기존 팀 개발 인증서의 실제 Xcode 빌드·deep/strict 서명 검사와 저장소·.NET SDK 접근을 차단한 재배치 실행 23개 검사를 통과했다. Developer ID 서명·공증은 미검증이다. 검증 환경은 M2 Max/macOS 27이며 물리 M1 또는 macOS 15 실행 결과는 아니다. 범위와 남은 차이는 [최신 검증 기록](docs/design/engine-differential-triage.md#remaining-work-integration-2026-10-26)을 따른다.
 
+## 지원하지 않는 변환
+
+아래 대상은 목록에 나오지 않거나, 파일 내용 때문에 오류로 끝난다. 원본 앱(Filee)에서도 실패하던 경우이며 PDB 저장만 FileToX에서 뺐다.
+
+| 변환 | 동작 | 이유 |
+| --- | --- | --- |
+| 그림·PDF·SVG·CAD·문서 → 오디오 형식 | 선택할 수 없음 | 원본에 소리가 없다. 오디오는 영상·오디오에서만 만든다. |
+| PDB(PalmDoc)로 저장 | 선택할 수 없음 | Windows-1252 글자만 담아 한글·일본어·이모지가 깨진다. PDB 읽기는 된다. |
+| 영상·오디오 → TXT 외 문서(DOCX·MD 등)로 받아쓰기 | 지원하지 않음 | 받아쓰기는 TXT로만 만든다. 영상 → 문서·그림은 정지 프레임 그림이다. |
+| 영상·오디오 → TXT (macOS 15) | 선택할 수 없음 | 음성 받아쓰기는 macOS 26 이상의 기기 내 음성 인식을 쓴다. |
+| 말소리가 없는 영상·오디오 → TXT | "No speech was recognised" 오류 | 음악·효과음·무음은 글자가 되지 않는다. 자막 트랙은 읽지 않는다. |
+| 글자가 없는 그림·스캔 PDF → TXT | "The PDF contains no text" 오류 | 글자 층도 인식할 글자도 없다. 글자가 있는 그림·스캔은 OCR로 읽는다. |
+
+받아쓰기와 OCR의 한계: 받아쓰기는 macOS 첫 번째 언어 하나로만 듣는다(한국어 Mac에서 영어 녹음은 틀리게 나온다). 화자 구분·시간 표시는 없다. OCR은 세로쓰기, 비스듬히 기울어진 페이지, 손글씨, 첫 언어와 다른 한중일 문자를 보장하지 않고 표를 표로 복원하지 않는다.
+
 ## 검증
 
 ```sh

@@ -97,6 +97,21 @@ FILETOX_FFMPEG_BUNDLE="$PWD/build/ffmpeg-new/ffmpeg" xcodebuild -project FileToX
 
 The Debug bundle ID is `forked.filetox.local.dev`; Release uses `forked.filetox.local`. Keep personal settings in the Git-excluded `Config/Local.xcconfig`. Debug and Release default to local ad-hoc signing. The earlier arm64 Release also passed an actual Xcode build with the existing team's development certificate, deep/strict signature verification and 23 relocated checks with repository and .NET SDK access denied. Developer ID signing and notarization remain unverified. Validation ran on an M2 Max/macOS 27; physical M1 or macOS 15 execution is not claimed. See the [earlier packaging verification](docs/design/engine-differential-triage.md#remaining-work-integration-2026-10-26) for scope and remaining differences.
 
+## Unsupported conversions
+
+These targets are not offered, or end with an error because of what the file contains. The original app (Filee) failed on them too; only writing PDB was removed in FileToX.
+
+| Conversion | Behaviour | Reason |
+| --- | --- | --- |
+| Pictures, PDF, SVG, CAD, documents → audio formats | Not offered | The source has no sound. Audio comes only from video and audio files. |
+| Writing PDB (PalmDoc) | Not offered | It holds Windows-1252 text only, so Korean, Japanese and emoji break. Reading PDB works. |
+| Video or audio → a transcript in DOCX, MD or other documents | Not supported | Transcripts are written as TXT only. Video → documents and pictures is a still frame. |
+| Video or audio → TXT on macOS 15 | Not offered | Transcription uses the on-device speech recognition of macOS 26 or later. |
+| Video or audio without speech → TXT | "No speech was recognised" error | Music, effects and silence give no text. Subtitle tracks are not read. |
+| Pictures or scanned PDFs without text → TXT | "The PDF contains no text" error | There is no text layer and nothing to recognise. Pictures and scans with text are read with OCR. |
+
+Limits of transcription and OCR: transcription listens in one language, the Mac's first language (an English recording on a Korean Mac comes out wrong), without speakers or timestamps. OCR does not promise vertical writing, skewed pages, handwriting or Chinese, Japanese and Korean scripts other than the first language's, and does not rebuild tables.
+
 ## Verification
 
 ```sh

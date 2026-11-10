@@ -1,6 +1,6 @@
 // Port of Filee.Engines/Media/FfmpegConverter.cs: video and audio conversion with FFmpeg (an optional engine run as a
 // separate program: the user's copy, a downloaded one, or Homebrew's): video ↔ video, video → animated GIF or a still
-// frame, audio extraction, audio ↔ audio and GIF → video. Container and codec choices live in MediaEncoding, the
+// frame, audio extraction, audio ↔ audio, GIF → video, and the speech of a video or audio file as text. Container and codec choices live in MediaEncoding, the
 // process handling in FfmpegRunner.
 
 import Foundation
@@ -35,6 +35,30 @@ final class FfmpegConverter: Converter {
             + videos.map { ConversionEdge($0, "gif", 15) }
             + audios.flatMap { source in MediaEncoding.audioTargets.map { ConversionEdge(source, $0.key) } }
             + MediaEncoding.gifToVideoTargets.map { ConversionEdge("gif", $0) }
+            + speechEdges(videos + audios)
+    }
+
+    /// Video and audio → TXT: the speech, transcribed on the Mac (SpeechText; macOS 26 or later).
+    private static func speechEdges(_ sources: [String]) -> [ConversionEdge] {
+        guard #available(macOS 26.0, *) else { return [] }
+        return sources.map { ConversionEdge($0, "txt") }
+    }
+
+    /// The sound as 16 kHz mono WAV in the work folder, then its speech as text.
+    private func transcribe(_ ffmpeg: String, _ input: String, _ info: MediaInfo, _ step: ConversionStep, _ progress: ProgressHandler?) async throws -> [String] {
+        guard #available(macOS 26.0, *) else { throw ConversionError("Speech transcription needs macOS 26 or later.") }
+        guard info.audio != nil else { throw ConversionError("The file has no audio track.") }
+        let wav = FilePath.combine(step.workDirectory, "speech-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(atPath: wav) }
+        let arguments = MediaEncoding.common + ["-i", input, "-vn", "-map", "0:a:0", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", wav]
+        try await Self.runPass(ffmpeg, FfmpegPass(arguments: arguments, weight: 0.2), info.duration, progress, 0)
+        let text = try await SpeechText.transcribe(wav, duration: info.duration, progress: progress.map { report in { report(0.2 + 0.78 * $0) } })
+        if text.isEmpty { throw ConversionError("No speech was recognised in the file.") }
+        guard let output = try step.output.allocate("txt") else { return [] }
+        // UTF-8 with BOM, like PDF → TXT.
+        try FileManager.default.writeFile(output, Data([0xEF, 0xBB, 0xBF]) + Data(text.utf8))
+        progress?(1)
+        return [output]
     }
 
     func status() -> EngineStatus {
@@ -54,6 +78,7 @@ final class FfmpegConverter: Converter {
         let input = FilePath.fullPath(step.inputPath)
         let info = try await MediaInfo.probe(ffprobe, input)
         progress?(0.02)
+        if step.to == "txt" { return try await transcribe(ffmpeg, input, info, step, progress) }
 
         guard let output = try step.output.allocate(FormatRegistry.get(step.to).primaryExtension) else { return [] }
 

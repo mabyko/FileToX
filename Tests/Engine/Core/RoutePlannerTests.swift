@@ -55,8 +55,15 @@ final class RoutePlannerTests: XCTestCase {
         for (from, to) in [("png", "mp3"), ("gif", "m4a"), ("heic", "wav"), ("pdf", "opus"), ("svg", "ogg"), ("dxf", "flac")] {
             XCTAssertNil(planner.plan(from, to), "\(from) → \(to)")
         }
-        // A video's TXT would be OCR of one still frame; pictures and comics reach TXT through PDF pages and OCR.
-        for from in ["mp4", "MXF", "webm"] { XCTAssertNil(planner.plan(from, "txt"), from) }
+        // A video's or recording's TXT is its speech, never OCR of one still frame; other formats don't go through it.
+        // Pictures and comics reach TXT through PDF pages and OCR.
+        for from in ["mp4", "MXF", "webm", "mp3", "wav"] {
+            if #available(macOS 26.0, *) { XCTAssertEqual(planner.plan(from, "txt")?.steps.map { $0.converter.id }, ["ffmpeg"], from) }
+            else { XCTAssertNil(planner.plan(from, "txt"), from) }
+        }
+        for to in ["md", "docx", "hwpx", "epub"] { XCTAssertNotEqual(planner.plan("mp4", to)?.steps.first?.to, "txt", to) }
+        XCTAssertNil(planner.plan("mp3", "docx"))
+        XCTAssertEqual(planner.plan("gif", "txt")?.steps.last?.converter.id, "pdf-text")
         for from in ["png", "JPG", "psd", "jxl", "cbz", "cbr"] { XCTAssertEqual(planner.plan(from, "txt")?.steps.last?.converter.id, "pdf-text", from) }
         for (from, to) in [("mp4", "mp3"), ("mkv", "wav"), ("wav", "mp3"), ("flac", "flac"), ("svg", "txt"), ("dxf", "txt"),
                            ("pdf", "txt"), ("docx", "txt"), ("epub", "txt"), ("png", "md"), ("png", "epub"), ("cbz", "epub"),
@@ -64,7 +71,7 @@ final class RoutePlannerTests: XCTestCase {
             XCTAssertNotNil(planner.plan(from, to), "\(from) → \(to)")
         }
         // Formats the registry does not know keep the plain graph search.
-        XCTAssertFalse(RoutePlanner.sourceLacksContent("a", "txt"))
+        XCTAssertFalse(RoutePlanner.sourceLacksContent("a", "mp3"))
     }
     func testCatalogAvailabilityPriorityCacheAndAssumptions() {
         let c = CoreFakeConverter("office", ConversionEdge("xlsx", "pdf")); c.available = false

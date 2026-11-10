@@ -27,6 +27,9 @@ public final class RoutePlanner {
                 // Do not discard a rendered page just to bridge between formats. Reading an original PDF's text
                 // or explicitly requesting TXT keeps the existing extraction route, unless a re-plan turns it off.
                 if edge.isTextExtraction, !textExtraction || (node != from && edge.to != to) { continue }
+                // A video or audio file's text is its speech, asked for as TXT: never OCR of a still frame, and never
+                // a transcript on the way to another format or from a source without sound.
+                if edge.to == "txt", edge.isTextExtraction ? Self.media(from) : Self.media(edge.from) && (node != from || to != "txt") { continue }
                 let next = cost + edge.cost
                 if let known = dist[edge.to], known <= next { continue }
                 dist[edge.to] = next; hops[edge.to] = hops[node]! + 1
@@ -39,12 +42,14 @@ public final class RoutePlanner {
         return Route(steps: steps.reversed(), cost: dist[to]!)
     }
 
-    /// Routes that cannot give the target's content are never offered: only video and audio files carry sound, and a
-    /// video's text would be what OCR reads in one still frame (pictures and scans reach TXT through PDF and OCR).
+    /// Routes that cannot give the target's content are never offered: only video and audio files carry sound.
     static func sourceLacksContent(_ from: String, _ to: String) -> Bool {
-        guard let source = FormatRegistry.find(id: from)?.category, let target = FormatRegistry.find(id: to) else { return false }
-        if target.category == .audio { return source != .video && source != .audio }
-        return target.id == "txt" && source == .video
+        FormatRegistry.find(id: to)?.category == .audio && FormatRegistry.find(id: from) != nil && !media(from)
+    }
+
+    private static func media(_ format: String) -> Bool {
+        let category = FormatRegistry.find(id: format)?.category
+        return category == .video || category == .audio
     }
 }
 
