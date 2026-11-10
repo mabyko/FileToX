@@ -106,7 +106,7 @@ final class DocumentExportFixTests: DocumentTestCase {
         let md = MarkdownWriter.write(document(ps)) { _ in nil }
         XCTAssertEqual(md, "- 첫 항목\n    - 하위 항목\n- 둘째 항목\n")
         let source = try write(md, "lists.md")
-        let pandoc = "build/optional-engines/osx-arm64/pandoc/bin/pandoc"
+        let pandoc = FileManager.default.currentDirectoryPath + "/build/optional-engines/osx-arm64/pandoc/bin/pandoc"
         guard FileManager.default.isExecutableFile(atPath: pandoc) else { throw XCTSkip("Development Pandoc is missing") }
         let rendered = try ProcessRunner.runBlocking(pandoc, ["-f", "commonmark_x", "-t", "html", source], timeout: 30)
         XCTAssertEqual(rendered.exitCode, 0)

@@ -47,7 +47,7 @@ class OfficeTestCase: XCTestCase {
     func libreOffice() throws -> LibreOfficeConverter {
         let dev =
             ProcessInfo.processInfo.environment["FILETOX_LIBREOFFICE"]
-            ?? "build/optional-engines/osx-arm64/libreoffice"
+            ?? FileManager.default.currentDirectoryPath + "/build/optional-engines/osx-arm64/libreoffice"
         guard
             let copy = EngineEnvironment.folderWithPrograms("libreoffice", dev)
                 ?? EngineEnvironment.systemCopyFolder("libreoffice")

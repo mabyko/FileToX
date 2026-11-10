@@ -63,7 +63,7 @@ enum MarkupTestSupport {
     /// A Pandoc copy for tests: $FILETOX_PANDOC, the development copy of the FileToX checkout, or one on the Mac.
     static func pandocFolder() -> String? {
         let development = ProcessInfo.processInfo.environment["FILETOX_PANDOC"]
-            ?? "build/optional-engines/osx-arm64/pandoc"
+            ?? FileManager.default.currentDirectoryPath + "/build/optional-engines/osx-arm64/pandoc"
         return EngineEnvironment.folderWithPrograms("pandoc", development) ?? EngineEnvironment.systemCopyFolder("pandoc")
     }
 

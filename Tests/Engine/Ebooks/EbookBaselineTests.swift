@@ -39,7 +39,7 @@ with Host(manifest["host"], copies=manifest.get("copies"), scratch=manifest_path
         let tools = ProcessInfo.processInfo.environment["FILETOX_ENGINE_COMPARE_TOOLS"] ?? FilePath.combine(repo, "Tools/engine-compare")
         guard FileManager.default.fileExists(FilePath.combine(tools, "hostwire.py")) else { throw XCTSkip("comparison harness not merged; set FILETOX_ENGINE_COMPARE_TOOLS to its Tools/engine-compare folder") }
         let manifest = path("baseline-manifest.json"), results = path("baseline-results.json")
-        let data: [String: Any] = ["host": host, "cases": cases, "copies": ["calibre": "build/optional-engines/osx-arm64/calibre/calibre.app"]]
+        let data: [String: Any] = ["host": host, "cases": cases, "copies": ["calibre": FileManager.default.currentDirectoryPath + "/build/optional-engines/osx-arm64/calibre/calibre.app"]]
         try JSONSerialization.data(withJSONObject: data).write(to: URL(fileURLWithPath: manifest))
         let result = try await ProcessRunner.run("/usr/bin/python3", ["-I", "-c", Self.driver, tools, manifest, results], timeout: 600)
         XCTAssertEqual(result.exitCode, 0, result.standardError)

@@ -9,7 +9,7 @@ final class CalibreEbookTests: EbookTestCase {
     override func setUpWithError() throws { try super.setUpWithError(); copies = EngineEnvironment.ownCopies; searchSystem = EngineEnvironment.searchSystem; EngineEnvironment.searchSystem = false }
     override func tearDownWithError() throws { EngineEnvironment.ownCopies = copies; EngineEnvironment.searchSystem = searchSystem; try super.tearDownWithError() }
     private func useCalibre() throws {
-        let calibre = ProcessInfo.processInfo.environment["FILETOX_CALIBRE"] ?? "build/optional-engines/osx-arm64/calibre/calibre.app"
+        let calibre = ProcessInfo.processInfo.environment["FILETOX_CALIBRE"] ?? FileManager.default.currentDirectoryPath + "/build/optional-engines/osx-arm64/calibre/calibre.app"
         guard FileManager.default.fileExists(atPath: calibre) else { throw XCTSkip("Calibre development copy not found; set FILETOX_CALIBRE") }
         EngineEnvironment.ownCopies = ["calibre": calibre]
         XCTAssertTrue(CalibreConverter().status().isAvailable)
