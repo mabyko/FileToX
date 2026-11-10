@@ -385,7 +385,7 @@
 "engines.error.detach" = "ディスクイメージを取り出せませんでした。Finderで取り出してから再試行してください。";
 "engines.error.install" = "インストールに失敗しました。既存のエンジンは保持されています。";
 "engines.guidance.macos" = "このMac用の固定バージョンはダウンロードできません。手動でインストールし、下でプログラムまたはアプリを選択してください。";
-"engines.guidance.macos.ffmpeg" = "HomebrewでFFmpegをインストールし（brew install ffmpeg）、状態を更新するか下でbinフォルダを選択してください。";
+"engines.guidance.macos.ffmpeg" = "HomebrewでFFmpegをインストールし（brew install ffmpeg-full）、brew --prefix ffmpeg-fullで確認したパス内のbinフォルダを選択してください。";
 "engines.guidance.macos.ghostscript" = "HomebrewでGhostscriptをインストールし（brew install ghostscript）、状態を更新するか下でbinフォルダを選択してください。";
 "engines.package.pandoc.name" = "Pandoc";
 "engines.package.calibre.name" = "Calibre";

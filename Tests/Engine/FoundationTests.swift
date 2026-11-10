@@ -5,7 +5,8 @@ import XCTest
 final class FormatRegistryTests: XCTestCase {
     func testRegistryMatchesFileeCatalog() {
         XCTAssertEqual(FormatRegistry.known.count, 172)
-        XCTAssertEqual(FormatRegistry.known.filter { !$0.writable }.count, 58)
+        // Filee marks 58 formats read only; FileToX also stops writing PDB.
+        XCTAssertEqual(FormatRegistry.known.filter { !$0.writable }.count, 59)
         XCTAssertEqual(FormatRegistry.known.first?.id, "png")
         XCTAssertEqual(FormatRegistry.known.last?.id, "eot")
         let extensions = FormatRegistry.known.flatMap(\.extensions).filter { !$0.isEmpty }
@@ -21,7 +22,7 @@ final class FormatRegistryTests: XCTestCase {
         XCTAssertEqual(formats.map { $0["id"] as? String }, FormatRegistry.known.map(\.id))
         for (json, format) in zip(formats, FormatRegistry.known) {
             XCTAssertEqual(json["extensions"] as? [String], format.extensions, format.id)
-            XCTAssertEqual(json["writable"] as? Bool, format.writable, format.id)
+            XCTAssertEqual(json["writable"] as? Bool, format.writable || format.id == "pdb", format.id)
             XCTAssertEqual(json["category"] as? String, format.category.rawValue, format.id)
             XCTAssertEqual(json["displayName"] as? String, format.displayName, format.id)
         }
@@ -209,15 +210,24 @@ final class ProcessRunnerTests: XCTestCase {
     }
 
     func testTimeoutKillsTheWholeTree() async throws {
+        let folder = FilePath.combine(NSTemporaryDirectory(), "ftx-timeout-" + UUID().uuidString)
+        try FileManager.default.createDirectoryIfNeeded(folder)
+        defer { FileManager.default.removeIfPresent(folder) }
         let started = Date()
         do {
-            _ = try await ProcessRunner.run("/bin/sh", ["-c", "(/bin/sleep 41.75; true) & /bin/sleep 42.75"], timeout: 1)
+            let command = "(/bin/sleep 41.75 & echo $! > '\(folder)/grandchild'; wait) & echo $! > '\(folder)/child'; /bin/sleep 42.75 & echo $! > '\(folder)/sleep'; wait"
+            _ = try await ProcessRunner.run("/bin/sh", ["-c", command], timeout: 1)
             XCTFail("expected a timeout")
         } catch is ProcessTimeoutError {}
         XCTAssertLessThan(Date().timeIntervalSince(started), 10)
-        try await Task.sleep(nanoseconds: 300_000_000)
-        let processes = try await ProcessRunner.run("/bin/ps", ["-axo", "command="], timeout: 10).standardOutput
-        let survivors = processes.split(separator: "\n").filter { $0.hasPrefix("/bin/sleep 41.75") || $0.hasPrefix("/bin/sleep 42.75") }
+        let pids = try ["child", "grandchild", "sleep"].map {
+            try XCTUnwrap(pid_t(String(contentsOfFile: folder + "/" + $0, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
+        }
+        var survivors = pids
+        for _ in 0..<200 where !survivors.isEmpty {
+            survivors = survivors.filter { !(kill($0, 0) != 0 && errno == ESRCH) }
+            if !survivors.isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
+        }
         XCTAssertEqual(survivors, [])
     }
 

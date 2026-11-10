@@ -10,7 +10,7 @@ import Foundation
 import PDFKit
 
 extension PdfDocumentReader {
-    // PDFKit constructs attributes through a shared Foundation table; concurrent construction contends on every glyph.
+    // PDFKit's text and font caches are shared across page selections.
     private static let attributedStringLock = NSLock()
 
     /// A letter of the page: one character (or composed sequence) with its glyph box in page space.
@@ -29,18 +29,23 @@ extension PdfDocumentReader {
     }
 
     /// A word: its letters, and from PDFKit's selection of it the pen positions where it starts and ends (PdfPig's word
-    /// boxes for the standard fonts start at the glyph origin) and the baseline.
+    /// boxes for the standard fonts start at the glyph origin), the baseline and its box (the letters' boxes without one).
     struct PageWord {
         var letters: [PageLetter]
         var left: CGFloat
         var right: CGFloat
         var baseline: CGFloat
+        var bounds: CGRect
     }
 
     /// The words of a page in PDFKit's text order: letters between white space, a large gap or a new line.
     /// `characterBounds(at:)` counts the text without the line separators PDFKit puts between lines (its spaces between
-    /// words do count), so its index runs behind the string's by the separators seen so far.
+    /// words do count), so its index runs behind the string's by the separators seen so far; after a glyph that stands
+    /// for several characters (a ligature) it runs ahead, so the letters' boxes may be a neighbour's, but the words'
+    /// selections are right. A letter it gives no box (past the page's last glyph) takes its own selection's.
     static func pageWords(_ page: PDFPage, scan: ContentScan) -> [PageWord] {
+        attributedStringLock.lock()
+        defer { attributedStringLock.unlock() }
         guard let text = page.string, let attributed = attributedString(page, text, scan) else { return [] }
         let string = text as NSString
         guard string.length == attributed.length else { return [] }
@@ -50,12 +55,13 @@ extension PdfDocumentReader {
         func finish() {
             defer { current = [] }
             guard let first = current.first else { return }
-            var word = PageWord(letters: current, left: first.box.minX, right: current.last!.box.maxX, baseline: first.baseline)
+            var word = PageWord(letters: current, left: first.box.minX, right: current.last!.box.maxX, baseline: first.baseline,
+                                bounds: current.dropFirst().reduce(first.box) { $0.union($1.box) })
             if let selection = page.selection(for: NSRange(location: start, length: end - start)) {
                 // The selection box spans the letters' advances, from the font's descender up.
                 let box = selection.bounds(for: page)
                 if box.width > 0 && box.height > 0 {
-                    (word.left, word.right) = (box.minX, box.maxX)
+                    (word.left, word.right, word.bounds) = (box.minX, box.maxX, box)
                     if let font = (attributed.attribute(.font, at: start, effectiveRange: nil) as? NSFont) { word.baseline = box.minY - font.descender }
                 }
             }
@@ -69,9 +75,17 @@ extension PdfDocumentReader {
         var traits: CTFontSymbolicTraits = []
         var color: CGColor?
         while index < string.length {
-            let range = string.rangeOfComposedCharacterSequence(at: index)
+            var range = string.rangeOfComposedCharacterSequence(at: index)
             index = range.location + range.length
-            let character = string.substring(with: range)
+            var character = string.substring(with: range)
+            // A mark PDFKit can't put on a letter comes after a line break, in one composed sequence: the break still ends the word.
+            if character.count > 1, let first = character.first, first == "\n" || first == "\r" || first == "\r\n" {
+                let length = String(first).utf16.count
+                separators += length
+                finish()
+                range = NSRange(location: range.location + length, length: range.length - length)
+                character = string.substring(with: range)
+            }
             if character == "\n" || character == "\r" || character == "\r\n" {
                 separators += range.length
                 finish()
@@ -81,7 +95,10 @@ extension PdfDocumentReader {
                 finish()
                 continue
             }
-            let box = page.characterBounds(at: range.location - separators)
+            var box = page.characterBounds(at: range.location - separators)
+            if !box.width.isFinite || !box.height.isFinite || (box.width == 0 && box.height == 0) {
+                box = page.selection(for: range)?.bounds(for: page) ?? .zero
+            }
             guard box.width.isFinite, box.height.isFinite, !(box.width == 0 && box.height == 0) else { continue }
             if !NSLocationInRange(range.location, attributeRange) {
                 let attributes = attributed.attributes(at: range.location, effectiveRange: &attributeRange)
@@ -132,7 +149,7 @@ extension PdfDocumentReader {
                 return NSAttributedString(string: text, attributes: letter.attributes(at: 0, effectiveRange: nil))
             }
         }
-        return attributedStringLock.withLock { page.attributedString }
+        return page.attributedString
     }
 
     private static func fillColor(_ attributes: [NSAttributedString.Key: Any]) -> CGColor? {
@@ -170,6 +187,10 @@ extension PdfDocumentReader {
 
         var runs: [TextRun] = []
         var images: [PlacedImage] = []
+        /// The scan does not model clipping, extended graphics state or form compositing for separate pictures.
+        var imagesNeedComposition = false
+        /// Painted paths, shadings, inline images or stencil masks: drawings only a rendered page keeps.
+        var drawings = false
         /// The state of the text shown so far, while all of it was shown in one.
         var textState: TextState?
         /// Text was shown in more than one state, or where the scan can't tell (a Type 3 font, replacement text, ...).
@@ -282,7 +303,11 @@ extension PdfDocumentReader {
             CGPDFOperatorTableSetCallback(table, "Tz") { scanner, info in PdfDocumentReader.ScanState.state(info).setNumber(scanner) { $0.horizontalScaling = $1 / 100 } }
             CGPDFOperatorTableSetCallback(table, "TL") { scanner, info in if let v = PdfDocumentReader.ScanState.numbers(scanner, 1) { PdfDocumentReader.ScanState.state(info).graphics.leading = v[0] } }
             CGPDFOperatorTableSetCallback(table, "Ts") { scanner, info in PdfDocumentReader.ScanState.state(info).setNumber(scanner) { $0.rise = $1 } }
-            CGPDFOperatorTableSetCallback(table, "Tr") { scanner, info in PdfDocumentReader.ScanState.state(info).setNumber(scanner) { $0.mode = Int($1) } }
+            CGPDFOperatorTableSetCallback(table, "Tr") { scanner, info in
+                let s = PdfDocumentReader.ScanState.state(info)
+                s.setNumber(scanner) { $0.mode = Int($1) }
+                if s.graphics.mode >= 4 { s.result.imagesNeedComposition = true }
+            }
             CGPDFOperatorTableSetCallback(table, "Td") { scanner, info in if let v = PdfDocumentReader.ScanState.numbers(scanner, 2) { PdfDocumentReader.ScanState.state(info).moveLine(v[0], v[1]) } }
             CGPDFOperatorTableSetCallback(table, "TD") { scanner, info in
                 guard let v = PdfDocumentReader.ScanState.numbers(scanner, 2) else { return }
@@ -352,6 +377,13 @@ extension PdfDocumentReader {
             CGPDFOperatorTableSetCallback(table, "CS") { scanner, info in PdfDocumentReader.ScanState.state(info).setColorSpace(scanner, stroke: true) }
             CGPDFOperatorTableSetCallback(table, "gs") { scanner, info in PdfDocumentReader.ScanState.state(info).setGraphicsState(scanner) }
             CGPDFOperatorTableSetCallback(table, "BDC") { scanner, info in PdfDocumentReader.ScanState.state(info).beginMarkedContent(scanner) }
+            for name in ["W", "W*"] {
+                CGPDFOperatorTableSetCallback(table, name) { _, info in PdfDocumentReader.ScanState.state(info).result.imagesNeedComposition = true }
+            }
+            // Path painting (not n, which only clips), shadings and inline images (EI ends one).
+            for name in ["f", "F", "f*", "B", "B*", "b", "b*", "S", "s", "sh", "EI"] {
+                CGPDFOperatorTableSetCallback(table, name) { _, info in PdfDocumentReader.ScanState.state(info).result.drawings = true }
+            }
         }
 
         /// Tz, Ts, Tr: one number; one that can't be read leaves the text state unknown.
@@ -393,6 +425,7 @@ extension PdfDocumentReader {
 
         /// gs: a font set through the graphics state, or a soft mask (content of its own), is text the scan doesn't follow.
         func setGraphicsState(_ scanner: CGPDFScannerRef) {
+            result.imagesNeedComposition = true
             var name: UnsafePointer<CChar>?
             var state: CGPDFDictionaryRef?
             var font: CGPDFArrayRef?
@@ -484,8 +517,14 @@ extension PdfDocumentReader {
             switch String(cString: subtype) {
             case "Image":
                 let box = CGRect(x: 0, y: 0, width: 1, height: 1).applying(graphics.ctm)
+                if graphics.ctm.a <= 0 || graphics.ctm.d <= 0 || abs(graphics.ctm.b) > 1e-6 || abs(graphics.ctm.c) > 1e-6 {
+                    result.imagesNeedComposition = true // raw samples do not keep rotation, reflection or shear
+                }
                 result.images.append(ContentScan.PlacedImage(box: box, stream: xobject))
+                var mask: CGPDFBoolean = 0
+                if CGPDFDictionaryGetBoolean(dictionary, "ImageMask", &mask), mask != 0 { result.drawings = true } // paint, not a picture to take out
             case "Form" where depth < 8:
+                result.imagesNeedComposition = true // includes the form's BBox clip and inherited graphics state
                 var matrix = CGAffineTransform.identity
                 var array: CGPDFArrayRef?
                 if CGPDFDictionaryGetArray(dictionary, "Matrix", &array), let array, CGPDFArrayGetCount(array) == 6 {
@@ -506,6 +545,7 @@ extension PdfDocumentReader {
                 depth -= 1
                 (graphics, stack, textMatrix, lineMatrix) = saved
             case "Form":
+                result.imagesNeedComposition = true
                 result.mixedText = true // too deep to follow
             default:
                 break

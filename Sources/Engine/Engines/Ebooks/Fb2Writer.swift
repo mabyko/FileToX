@@ -106,7 +106,7 @@ final class Fb2Writer {
         }
     }
     private func paragraph(_ xml: XElement, _ paragraph: HParagraph) {
-        let visible = HDocumentWalker.inlinesOf(paragraph.inlines).contains {
+        let visible = HDocumentWalker.inlines([paragraph]).contains {
             $0 is HImage || $0 is HNote || ($0 as? HText).map { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } == true
         }
         if !visible {

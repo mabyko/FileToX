@@ -429,7 +429,7 @@ extension SvgNormalizer {
     private static let geometryProperties: Set<String> = ["x", "y", "width", "height", "cx", "cy", "r", "rx", "ry", "d", "transform"]
 
     /// The SVG 2 equivalent path of a ‘path’ or basic shape, charging one unit of `work` per segment.
-    private static func equivalentPath(_ element: XElement, work: inout Int) -> ParsedPath {
+    static func equivalentPath(_ element: XElement, work: inout Int) -> ParsedPath {
         let declared = (element.attributeValue("style") ?? "").split(separator: ";").map {
             $0.split(separator: ":", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() } ?? ""
         }
@@ -507,20 +507,22 @@ extension SvgNormalizer {
     }
 
     /// An SVG transform list; identity when it doesn't parse.
-    static func transform(_ text: String?) -> CGAffineTransform {
-        guard let text, !text.isEmpty else { return .identity }
+    static func transform(_ text: String?) -> CGAffineTransform { text.flatMap(parsedTransform) ?? .identity }
+
+    /// An SVG transform list, nil when it doesn't parse.
+    static func parsedTransform(_ text: String) -> CGAffineTransform? {
         var result = CGAffineTransform.identity
         var rest = Substring(text)
         while true {
             rest = rest.drop { $0.isWhitespace || $0 == "," }
             guard !rest.isEmpty else { return result }
-            guard let open = rest.firstIndex(of: "("), let close = rest[open...].firstIndex(of: ")") else { return .identity }
+            guard let open = rest.firstIndex(of: "("), let close = rest[open...].firstIndex(of: ")") else { return nil }
             let name = rest[..<open].trimmingCharacters(in: .whitespaces)
             var scanner = NumberScanner(String(rest[rest.index(after: open)..<close]))
             var values: [Double] = []
             while let value = scanner.number() { values.append(value) }
             scanner.skipSeparators()
-            guard scanner.peek == nil else { return .identity }
+            guard scanner.peek == nil else { return nil }
             let item: CGAffineTransform
             switch (name, values.count) {
             case ("matrix", 6): item = CGAffineTransform(a: values[0], b: values[1], c: values[2], d: values[3], tx: values[4], ty: values[5])
@@ -533,7 +535,7 @@ extension SvgNormalizer {
                     .concatenating(CGAffineTransform(translationX: values[1], y: values[2]))
             case ("skewX", 1): item = CGAffineTransform(a: 1, b: 0, c: tan(values[0] * .pi / 180), d: 1, tx: 0, ty: 0)
             case ("skewY", 1): item = CGAffineTransform(a: 1, b: tan(values[0] * .pi / 180), c: 0, d: 1, tx: 0, ty: 0)
-            default: return .identity
+            default: return nil
             }
             // The list applies right to left: the last transform is nearest the content.
             result = item.concatenating(result)

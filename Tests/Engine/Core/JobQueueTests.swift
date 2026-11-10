@@ -23,6 +23,60 @@ final class JobQueueTests: XCTestCase {
         c.shouldThrow = true
         let failed = await coreRun(q,[try d.file("boom.pdf")],corePreset("png")); XCTAssertEqual(failed.files[0].errorDetail,"boom"); XCTAssertEqual(failed.files[0].errorKey,"error.conversion_failed")
     }
+    func testPdfWithoutTextReplansOnceForPagePictureFormatsOnly() async throws {
+        let d = CoreTempDir(), lock = NSLock(), scan = try d.file("scan.pdf")
+        var log: [String] = [], keeping: [Bool] = [], outcome: () throws -> Void = { throw NoTextError("no text") }
+        let text = CoreFakeConverter(edges:[ConversionEdge("pdf","txt",isTextExtraction:true)]) { step in lock.withLock { log.append("pdf→txt"); keeping.append(step.keepsPages) }; try outcome(); return [] }
+        let documents = CoreFakeConverter(edges:[ConversionEdge("pdf","docx",14),ConversionEdge("docx","epub"),ConversionEdge("txt","epub"),ConversionEdge("docx","mobi"),ConversionEdge("txt","mobi"),ConversionEdge("txt","fb2")]) { step in
+            lock.withLock { log.append(step.from + "→" + step.to); keeping.append(step.keepsPages) }
+            guard let output = try step.output.allocate(step.to) else { return [] }
+            try Data("converted".utf8).write(to:URL(fileURLWithPath:output)); return [output]
+        }
+        let q = JobQueue(ConverterCatalog([text,documents]))
+        let pages = await coreRun(q,[scan],corePreset("epub"))
+        XCTAssertEqual(pages.state,.completed); XCTAssertEqual(log,["pdf→txt","pdf→docx","docx→epub"]); XCTAssertEqual(pages.outputs,[d.path + "/scan.epub"])
+        // Both routes are told the pages can be kept: the text step reports pages it would leave out, the page reader keeps text.
+        XCTAssertEqual(keeping,[true,true,true])
+        // TXT, excluded targets and targets with no alternative route keep the explicit failure.
+        for format in ["txt","mobi","fb2"] {
+            log = []; keeping = []
+            let failed = await coreRun(q,[scan],corePreset(format))
+            XCTAssertEqual(failed.files[0].errorKey,"error.conversion_failed",format); XCTAssertEqual(failed.files[0].errorDetail,"no text",format); XCTAssertEqual(log,["pdf→txt"],format); XCTAssertEqual(keeping,[false],format)
+        }
+        // Other failures and cancellation are never read as "no text", and a cancelled job does not start the re-plan.
+        log = []; outcome = { throw ConversionError("broken") }
+        let broken = await coreRun(q,[scan],corePreset("epub")); XCTAssertEqual(broken.files[0].errorDetail,"broken")
+        outcome = { throw CancellationError() }
+        let stopped = await coreRun(q,[scan],corePreset("epub")); XCTAssertEqual(stopped.files[0].state,.cancelled)
+        let cancelled = ConversionJob([scan],corePreset("epub"),"Test"); outcome = { cancelled.cancel(); throw NoTextError("no text") }
+        await q.run(cancelled)
+        XCTAssertEqual(cancelled.state,.cancelled); XCTAssertEqual(cancelled.files[0].state,.cancelled); XCTAssertEqual(log,["pdf→txt","pdf→txt","pdf→txt"])
+        XCTAssertEqual(try d.names(),["scan.epub","scan.pdf"]); XCTAssertEqual(try d.read("scan.pdf"),"x"); XCTAssertEqual(d.leftovers(),[])
+    }
+    func testPdfTextDoesNotReplanThroughAComicsOnlyRoute() async throws {
+        let d = CoreTempDir(), lock = NSLock(), scan = try d.file("scan.pdf")
+        var keeping: [Bool] = []
+        let text = CoreFakeConverter(edges: [ConversionEdge("pdf", "txt", isTextExtraction: true)]) { step in
+            lock.withLock { keeping.append(step.keepsPages) }
+            if step.keepsPages { throw NoTextError("has pictures") }
+            let output = try XCTUnwrap(step.output.allocate("txt"))
+            try Data("Recognised words".utf8).write(to: URL(fileURLWithPath: output))
+            return [output]
+        }
+        let pages = CoreFakeConverter(edges: [ConversionEdge("pdf", "docx", 14), ConversionEdge("docx", "epub"),
+                                             ConversionEdge("pdf", "cbz", 12), ConversionEdge("cbz", "epub"), ConversionEdge("txt", "epub")]) { step in
+            let output = try XCTUnwrap(step.output.allocate(step.to))
+            try Data(contentsOf: URL(fileURLWithPath: step.inputPath)).write(to: URL(fileURLWithPath: output))
+            return [output]
+        }
+        let catalog = ConverterCatalog([text, pages]), planner = catalog.createPlanner()
+        XCTAssertEqual(planner.plan("pdf", "epub")?.steps.map(\.to), ["txt", "epub"])
+        XCTAssertEqual(planner.plan("pdf", "epub", textExtraction: false)?.steps.map(\.to), ["cbz", "epub"])
+        let job = await coreRun(JobQueue(catalog), [scan], corePreset("epub"))
+        XCTAssertEqual(job.state, .completed)
+        XCTAssertEqual(keeping, [false])
+        XCTAssertEqual(try d.read("scan.epub"), "Recognised words")
+    }
     func testSameSourceAndParallelNames() async throws {
         let d = CoreTempDir(), source = try d.file("a.jpg")
         let c = CoreFakeConverter("magick",ConversionEdge("jpg","jpg"),ConversionEdge("jpg","webp"),ConversionEdge("png","webp")), q = JobQueue(ConverterCatalog([]))

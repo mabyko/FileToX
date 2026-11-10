@@ -127,7 +127,8 @@ public enum FormatRegistry {
         FileFormat(id: "chm", displayName: "CHM", category: .ebook, extensions: ["chm"], writable: false),
         FileFormat(id: "lit", displayName: "LIT", category: .ebook, extensions: ["lit"]),
         FileFormat(id: "lrf", displayName: "LRF", category: .ebook, extensions: ["lrf"]),
-        FileFormat(id: "pdb", displayName: "PDB", category: .ebook, extensions: ["pdb"]),
+        // Read only in FileToX: PalmDoc holds only Windows-1252 text, so Korean books could not be written.
+        FileFormat(id: "pdb", displayName: "PDB", category: .ebook, extensions: ["pdb"], writable: false),
         FileFormat(id: "pml", displayName: "PML", category: .ebook, extensions: ["pml"]),
         FileFormat(id: "rb", displayName: "RB", category: .ebook, extensions: ["rb"]),
         FileFormat(id: "snb", displayName: "SNB", category: .ebook, extensions: ["snb"]),

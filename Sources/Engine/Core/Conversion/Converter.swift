@@ -12,11 +12,14 @@ public struct ConversionEdge: Hashable, Sendable {
     public var from: String
     public var to: String
     public var cost: Int
+    /// Requires real source text; a PDF rendered from another format may contain only pixels or outlines.
+    public var isTextExtraction: Bool
 
-    public init(_ from: String, _ to: String, _ cost: Int = 10) {
+    public init(_ from: String, _ to: String, _ cost: Int = 10, isTextExtraction: Bool = false) {
         self.from = from
         self.to = to
         self.cost = cost
+        self.isTextExtraction = isTextExtraction
     }
 }
 
@@ -72,14 +75,18 @@ public struct ConversionStep {
     public let output: OutputAllocator
     /// Private scratch directory for this job; deleted afterwards.
     public let workDirectory: String
+    /// A rich output can keep an original PDF's pictures and OCR text if the text-only bridge would discard content.
+    public let keepsPages: Bool
 
-    public init(inputPath: String, from: String, to: String, preset: Preset, output: OutputAllocator, workDirectory: String) {
+    public init(inputPath: String, from: String, to: String, preset: Preset, output: OutputAllocator, workDirectory: String,
+                keepsPages: Bool = false) {
         self.inputPath = inputPath
         self.from = from
         self.to = to
         self.preset = preset
         self.output = output
         self.workDirectory = workDirectory
+        self.keepsPages = keepsPages
     }
 }
 
@@ -125,6 +132,14 @@ public protocol FileCombiner: AnyObject {
 
 /// An error whose message is shown to the user as the failure detail (Filee shows `Exception.Message`).
 public struct ConversionError: LocalizedError, CustomStringConvertible, Sendable {
+    public let message: String
+    public init(_ message: String) { self.message = message }
+    public var errorDescription: String? { message }
+    public var description: String { message }
+}
+
+/// A text bridge cannot carry the PDF's content. The queue may retry once through its page pictures.
+public struct NoTextError: LocalizedError, CustomStringConvertible, Sendable {
     public let message: String
     public init(_ message: String) { self.message = message }
     public var errorDescription: String? { message }

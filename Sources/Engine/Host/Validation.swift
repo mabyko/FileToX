@@ -11,7 +11,9 @@ enum Validation {
             return seen.insert(FileSystemPaths.key(p)).inserted
         }
     }
-    static func isTarget(_ format: String) -> Bool { format == BuiltInData.sameAsSource || format == FormatRegistry.folder || FormatRegistry.find(id: format)?.writable == true }
+    /// No longer written (PDB): a saved preset keeps it and shows as unavailable instead of blocking library saves.
+    static let retiredTargets: Set = ["pdb"]
+    static func isTarget(_ format: String) -> Bool { format == BuiltInData.sameAsSource || format == FormatRegistry.folder || FormatRegistry.find(id: format)?.writable == true || retiredTargets.contains(format) }
     static func preset(_ p: Preset) throws {
         if p.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw invalid("A preset needs an id.") }
         if !isTarget(p.targetFormat) { throw invalid("Preset \(p.id): \(p.targetFormat) is not a target format.") }

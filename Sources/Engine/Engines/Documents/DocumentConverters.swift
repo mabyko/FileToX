@@ -75,7 +75,7 @@ public final class HwpxConverter: Converter {
     }
     public func convert(_ step: ConversionStep, progress: ProgressHandler?) async throws -> [String] {
         progress?(0.1)
-        let doc = try await DocumentReaders.readAsync(step.inputPath, step.from, step.workDirectory)
+        let doc = try await DocumentReaders.readAsync(step.inputPath, step.from, step.workDirectory, keepsPages: step.keepsPages)
         progress?(0.6)
         guard let output = try step.output.allocate("hwpx") else { return [] }
         try HwpxWriter.write(doc, output)
@@ -99,7 +99,7 @@ public final class DocxWriterConverter: Converter {
     }
     public func convert(_ step: ConversionStep, progress: ProgressHandler?) async throws -> [String] {
         progress?(0.1)
-        let doc = try await DocumentReaders.readAsync(step.inputPath, step.from, step.workDirectory)
+        let doc = try await DocumentReaders.readAsync(step.inputPath, step.from, step.workDirectory, keepsPages: step.keepsPages)
         progress?(0.6)
         guard let output = try step.output.allocate("docx") else { return [] }
         try Task.checkCancellation()

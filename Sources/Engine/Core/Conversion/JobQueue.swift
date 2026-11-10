@@ -111,10 +111,15 @@ public final class JobQueue: @unchecked Sendable {
         catch { for f in inputs { fail(job, f, "error.conversion_failed", error.localizedDescription) } }
         notify(job)
     }
-    private func runFile(_ job: ConversionJob, _ file: FileResult, _ index: Int, _ planner: RoutePlanner, _ work: String, finalOutput: Bool, intermediate: String = "pdf") async -> [String] {
+    /// Formats that hold a PDF's page pictures through PDF → DOCX, so its pages without text are kept. Other targets, TXT
+    /// included, keep the no-text failure and get only the text.
+    private static let pagePictureFormats: Set = ["odt", "epub", "fb2", "htmlz", "txtz"]
+    private func runFile(_ job: ConversionJob, _ file: FileResult, _ index: Int, _ planner: RoutePlanner, _ work: String, finalOutput: Bool, intermediate: String = "pdf", textExtraction: Bool = true) async -> [String] {
         guard let source = FormatRegistry.detect(file.sourcePath) else { fail(job, file, "error.unsupported_source", "." + FormatRegistry.extensionOf(file.sourcePath)); return [] }
         let target = !finalOutput ? intermediate : job.preset.targetFormat == BuiltInData.sameAsSource ? source.id : job.preset.targetFormat
-        guard let route = planner.plan(source.id, target) else { fail(job, file, "error.no_route", "\(source.id) → \(target)"); return [] }
+        guard let route = planner.plan(source.id, target, textExtraction: textExtraction) else { fail(job, file, "error.no_route", "\(source.id) → \(target)"); return [] }
+        let keepsPages = source.id == "pdf" && Self.pagePictureFormats.contains(target)
+            && planner.plan(source.id, target, textExtraction: false)?.steps.first?.to == "docx"
         job.lock.withLock { file.state = .running }; notify(job)
         var final: FinalAllocator?
         defer { final?.abort() }
@@ -131,7 +136,7 @@ public final class JobQueue: @unchecked Sendable {
                     try await gate.acquire()
                     do {
                         try job.checkCancellation()
-                        let produced = try await step.converter.convert(ConversionStep(inputPath: input, from: step.from, to: step.to, preset: job.preset, output: allocator, workDirectory: work), progress: { p in
+                        let produced = try await step.converter.convert(ConversionStep(inputPath: input, from: step.from, to: step.to, preset: job.preset, output: allocator, workDirectory: work, keepsPages: keepsPages), progress: { p in
                             let value = (Double(s) + min(1, max(0, p))) / Double(route.steps.count)
                             let changed = job.lock.withLock { () -> Bool in if value <= file.progress { return false }; file.progress = value; return true }
                             if changed { self.notify(job) }
@@ -152,6 +157,11 @@ public final class JobQueue: @unchecked Sendable {
             job.lock.withLock { file.state = inputs.isEmpty && finalOutput ? .skipped : .done; file.progress = 1 }; notify(job)
             return inputs
         } catch is CancellationError { job.lock.withLock { file.state = .cancelled }; notify(job); return [] }
+        // Only the text bridge failed (no text, or pages it would leave out), before the last step allocated an output:
+        // plan once more through the page pictures.
+        catch is NoTextError where keepsPages && textExtraction && final == nil {
+            return await runFile(job, file, index, planner, work, finalOutput: finalOutput, intermediate: intermediate, textExtraction: false)
+        }
         catch { fail(job, file, "error.conversion_failed", error.localizedDescription); return [] }
     }
     private func commit(_ job: ConversionJob, _ file: FileResult, _ allocator: FinalAllocator, _ produced: [String]) throws -> Bool {

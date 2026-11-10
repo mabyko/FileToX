@@ -51,9 +51,12 @@ final class VectorTests: XCTestCase {
         PdfContent.collect(page, &content, &images, &fonts)
         XCTAssertNotNil(content.range(of: #"\s(c|l|re)\s"#, options: .regularExpression), "path operators: curves, lines, rectangles")
         XCTAssertNotNil(content.range(of: #"\sf\*?\s"#, options: .regularExpression), "fills")
-        // Text is drawn as glyph outlines (Filee's OutlinedTextPlayback): no fonts in the file.
-        XCTAssertFalse(content.contains("BT"))
-        XCTAssertEqual(fonts, 0)
+        // Text is drawn as glyph outlines (Filee's OutlinedTextPlayback); its characters are also there as invisible
+        // text (rendering mode 3), so the PDF can be searched.
+        XCTAssertNotNil(content.range(of: #"\b3\s+Tr\b"#, options: .regularExpression), "invisible text")
+        XCTAssertGreaterThan(fonts, 0)
+        let text = try XCTUnwrap(document.string)
+        XCTAssertTrue(text.contains("Filee SVG") && text.contains("한글"), text)
         let size = try FileManager.default.attributesOfItem(atPath: output[0])[.size] as! Int
         XCTAssertLessThan(size, 100_000, "the PDF should be small")
         XCTAssertFalse(images.contains { $0.0 > 64 || $0.1 > 64 }, "no picture of the drawing: \(images)")
@@ -882,11 +885,14 @@ extension VectorTests {
             XCTAssertNil(drawing.nativeData)
             let pdf = FilePath.combine(dir, "relative-weight-\(name).pdf")
             try SvgRenderer.writePdf(drawing, pdf, title: "relative weight", pdfA: false)
-            let page = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: pdf))?.page(at: 0)?.pageRef)
+            let document = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: pdf)))
+            let page = try XCTUnwrap(document.page(at: 0)?.pageRef)
             var content = "", images: [(Int, Int)] = [], fonts = 0
             PdfContent.collect(page, &content, &images, &fonts)
             XCTAssertTrue(images.isEmpty, name)
-            XCTAssertEqual(fonts, 0, name)
+            // Outlines, with the outlined characters (only those have a searchable copy) as invisible text.
+            XCTAssertNotNil(content.range(of: #"\b3\s+Tr\b"#, options: .regularExpression), name)
+            XCTAssertEqual(document.string?.contains("Abc"), true, name)
             XCTAssertNotNil(content.range(of: #"\s(c|l|re)\s"#, options: .regularExpression), name)
         }
     }
@@ -1188,5 +1194,223 @@ extension VectorTests {
         short.remainingWork = 10
         guard case .unsupported = SvgNormalizer.textPathReference(textPath, targets: short, fontSize: 16) else { return XCTFail("unsupported") }
         XCTAssertTrue(short.measured.isEmpty)
+    }
+}
+
+extension VectorTests {
+    /// The glyphs `SvgRenderer.load` keeps for the searchable text of a drawing with `body`.
+    private func searchableRuns(_ body: String, size: String = "width='200' height='100'") -> [SvgNormalizer.GlyphRun] {
+        let source = "<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' \(size) font-family='Helvetica' font-size='16'>\(body)</svg>"
+        return SvgNormalizer.prepare(Data(source.utf8), baseDirectory: dir).text?.runs ?? []
+    }
+
+    /// For each glyph of the runs in order, the character of `candidates` it is the font's own glyph for.
+    private func searchableCharacters(_ runs: [SvgNormalizer.GlyphRun], _ candidates: String) -> [Character?] {
+        runs.flatMap { run in
+            run.glyphs.map { glyph in
+                candidates.first { character in
+                    let unit = Array(String(character).utf16)
+                    var mapped: [CGGlyph] = [0]
+                    return unit.count == 1 && CTFontGetGlyphsForCharacters(run.font, unit, &mapped, 1) && mapped[0] == glyph
+                }
+            }
+        }
+    }
+
+    func testSearchableGlyphsStandForTheOutlinedCharactersWhereTheyAreDrawn() throws {
+        // Latin and Korean (another font) in order, a ligature as its own characters, through the group's transform and
+        // a viewBox that scales by 2.
+        let runs = searchableRuns("<g transform='translate(5 5)'><text x='10' y='30'>Hi 한글 fi</text></g>", size: "width='400' height='200' viewBox='0 0 200 100'")
+        XCTAssertEqual(searchableCharacters(runs, "Hi 한글f"), Array("Hi 한글 fi").map(Optional.some))
+        XCTAssertGreaterThan(runs.count, 1, "Korean falls back to another font")
+        let first = try XCTUnwrap(runs.first)
+        XCTAssertEqual(first.positions[0].applying(first.transform).x, 30, accuracy: 1e-6)
+        XCTAssertEqual(first.positions[0].applying(first.transform).y, 70, accuracy: 1e-6)
+        // A rotation about a point, and text-anchor moving the glyphs with the outlines.
+        let turned = try XCTUnwrap(searchableRuns("<text x='40' y='30' transform='rotate(90 40 30)'>AB</text>").first)
+        let expected = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 40, ty: 30).concatenating(SvgNormalizer.transform("rotate(90 40 30)"))
+        for (value, wanted) in zip([turned.transform.a, turned.transform.b, turned.transform.c, turned.transform.d, turned.transform.tx, turned.transform.ty],
+                                   [expected.a, expected.b, expected.c, expected.d, expected.tx, expected.ty]) {
+            XCTAssertEqual(value, wanted, accuracy: 1e-9)
+        }
+        let font = CTFontCreateWithName("Helvetica" as CFString, 16, nil)
+        let width = CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: "AB", attributes: [.init(kCTFontAttributeName as String): font])), nil, nil, nil)
+        XCTAssertEqual(Double(try XCTUnwrap(searchableRuns("<text x='100' y='50' text-anchor='end'>AB</text>").first).transform.tx), 100 - width, accuracy: 1e-6)
+        // Clipped glyphs keep outlines only; text under a pixel tall isn't legible.
+        XCTAssertEqual(searchableCharacters(searchableRuns("<text x='185' y='50'>ABC</text>"), "ABC"), ["A"])
+        XCTAssertTrue(searchableRuns("<text x='195' y='50'>A</text>").isEmpty)
+        XCTAssertTrue(searchableRuns("<text x='10' y='3'>A</text>").isEmpty)
+        XCTAssertTrue(searchableRuns("<text x='10' y='50' transform='matrix(1 1 1 1 0 0)'>A</text>").isEmpty)
+        XCTAssertTrue(searchableRuns("<text x='10' y='50' font-size='0.5'>tiny</text>").isEmpty)
+        // Plain groups, Inkscape's typographic CSS and a parsed identity transform keep it.
+        XCTAssertFalse(searchableRuns("<g display='inline' opacity='1'><text x='10' y='50' transform='rotate(-0 10 50)' style='line-height:1.25;-inkscape-font-specification:Helvetica'>AB</text></g>").isEmpty)
+    }
+
+    func testOnlyPlainlyDrawnTextGetsSearchableGlyphs() throws {
+        // Hidden, see-through, unpainted, clipped, masked, filtered, conditional, not in plain groups up to the root,
+        // vertical, on a path, rotated per character (left to CoreSVG), right to left, colour glyphs, CSS the outlines
+        // don't follow, an unreadable transform and `initial` keep their outlines alone, as before.
+        for body in ["<text x='10' y='50' display='none'>AB</text>", "<g display='none'><text x='10' y='50'>AB</text></g>",
+                     "<g visibility='hidden'><text x='10' y='50' visibility='visible'>AB</text></g>", "<text x='10' y='50'><tspan visibility='collapse'>AB</tspan></text>",
+                     "<g opacity='0.5'><text x='10' y='50'>AB</text></g>", "<text x='10' y='50' fill-opacity='0.5'>AB</text>",
+                     "<text x='10' y='50'><tspan opacity='0'>AB</tspan></text>", "<text x='10' y='50' fill='none' stroke='black'>AB</text>",
+                     "<text x='10' y='50'><tspan opacity='0'><tspan>AB</tspan></tspan></text>",
+                     "<text x='10' y='50'><tspan mask='url(#missing)'>AB</tspan></text>",
+                     "<text x='10' y='50'><tspan clip-path='url(#missing)'>AB</tspan></text>",
+                     "<text x='10' y='50'><tspan style='transform:translate(5px,0)'>AB</tspan></text>",
+                     "<text x='10' y='50'><a>AB</a></text>",
+                     "<g fill='none'><text x='10' y='50' fill='notacolor'>AB</text></g>",
+                     "<text x='10' y='50' fill='transparent'>AB</text>", "<text x='10' y='50' fill='#0008'>AB</text>",
+                     "<linearGradient id='g'/><text x='10' y='50' fill='url(#g)'>AB</text>",
+                     "<g fill='none'><text x='10' y='50'><tspan fill='initial'>AB</tspan></text></g>",
+                     "<clipPath id='c'><rect width='200' height='100'/></clipPath><g clip-path='url(#c)'><text x='10' y='50'>AB</text></g>",
+                     "<mask id='m'><rect width='200' height='100' fill='white'/></mask><text x='10' y='50' mask='url(#m)'>AB</text>",
+                     "<filter id='f'/><text x='10' y='50' filter='url(#f)'>AB</text>", "<text x='10' y='50' systemLanguage='xx'>AB</text>",
+                     "<defs><text id='t' x='10' y='50'>AB</text></defs><use href='#t'/>", "<symbol id='s'><text x='10' y='50'>AB</text></symbol><use href='#s'/>",
+                     "<switch><text x='10' y='50'>AB</text></switch>", "<a href='#x'><text x='10' y='50'>AB</text></a>",
+                     "<svg width='200' height='100'><text x='10' y='50'>AB</text></svg>", "<clipPath id='c'><text x='10' y='50'>AB</text></clipPath>",
+                     "<text x='10' y='50' style='transform:translate(5px,0)'>AB</text>", "<text x='10' y='50' transform='translate(5px)'>AB</text>",
+                     "<text x='10' y='10' writing-mode='tb'>AB</text>", "<path id='p' d='M10 50 H190'/><text><textPath href='#p'>AB</textPath></text>",
+                     "<text x='10' y='50' rotate='10'>AB</text>",
+                     "<text x='10' y='50'>\u{5D0}\u{5D1}</text>", "<text x='10' y='50'>A😀</text>"] {
+            XCTAssertTrue(searchableRuns(body).isEmpty, body)
+        }
+        // So does a viewport the glyphs can't be placed in: a size in percent, none at all, or a viewBox of another shape.
+        for size in ["width='100%' height='100%'", "", "width='200' height='100' viewBox='0 0 100 100'"] {
+            XCTAssertNil(SvgNormalizer.prepare(Data("<svg xmlns='http://www.w3.org/2000/svg' \(size)><text x='10' y='50'>AB</text></svg>".utf8), baseDirectory: dir).text, size)
+        }
+    }
+
+    /// The first page of a PDF rendered at 2×.
+    private func pagePixels(_ path: String) throws -> [UInt8] {
+        let page = try XCTUnwrap(CGPDFDocument(URL(fileURLWithPath: path) as CFURL)?.page(at: 1))
+        let box = page.getBoxRect(.mediaBox)
+        let context = try XCTUnwrap(CGContext(data: nil, width: Int(box.width * 2), height: Int(box.height * 2), bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.scaleBy(x: 2, y: 2)
+        context.drawPDFPage(page)
+        return ImagePixels.bitmap(try XCTUnwrap(context.makeImage())).pixels
+    }
+
+    func testSvgPdfTextIsSearchableOverUnchangedOutlines() throws {
+        let source = try write("searchable.svg", """
+            <svg xmlns='http://www.w3.org/2000/svg' width='400' height='200' viewBox='0 0 200 100' font-family='Helvetica' font-size='10'>
+              <rect width='200' height='100' fill='#eee'/>
+              <g transform='translate(10 0)'><text x='0' y='20'>Hello <tspan fill='#c00'>한글</tspan></text></g>
+              <text x='190' y='40' text-anchor='end'>Office file</text>
+              <text x='10' y='60' display='none'>Undisplayed</text>
+              <g visibility='hidden'><text x='10' y='70'>Invisible</text></g>
+              <g opacity='0'><text x='10' y='80'>Transparent</text></g>
+              <defs><text x='10' y='90'>Defined</text></defs>
+              <text x='300' y='90'>Outside</text>
+            </svg>
+            """)
+        let searchable = FilePath.combine(dir, "searchable.pdf"), outlines = FilePath.combine(dir, "outlines.pdf")
+        try SvgRenderer.writePdf(SvgRenderer.load(source), searchable, title: "searchable", pdfA: false)
+        var outlinesOnly = try SvgRenderer.load(source)
+        XCTAssertFalse(outlinesOnly.text.isEmpty)
+        outlinesOnly.text = []
+        try SvgRenderer.writePdf(outlinesOnly, outlines, title: "searchable", pdfA: false)
+
+        let page = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: searchable))?.page(at: 0))
+        let text = try XCTUnwrap(page.string)
+        for shown in ["Hello", "한글", "Office file"] { XCTAssertTrue(text.contains(shown), text) }
+        for hidden in ["Undisplayed", "Invisible", "Transparent", "Defined", "Outside"] { XCTAssertFalse(text.contains(hidden), text) }
+        // Over the outline: x 10 user units = 20 px = 15 pt and the baseline at y 20 = 40 px = 30 pt below the 150 pt top,
+        // as wide as "Hello" at 10 × 2 px = 15 pt.
+        let font = CTFontCreateWithName("Helvetica" as CFString, 15, nil)
+        let width = CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: "Hello", attributes: [.init(kCTFontAttributeName as String): font])), nil, nil, nil)
+        let hello = try XCTUnwrap(page.selection(for: (text as NSString).range(of: "Hello"))).bounds(for: page)
+        XCTAssertEqual(hello.minX, 15, accuracy: 1)
+        XCTAssertEqual(Double(hello.maxX), 15 + width, accuracy: 1)
+        XCTAssertTrue(hello.minY <= 120.5 && hello.maxY >= 128, "\(hello)")
+        // Invisible: the page looks exactly as with the outlines alone.
+        XCTAssertTrue(try pagePixels(searchable) == pagePixels(outlines), "the invisible text changed the page")
+        // A rich document still reads the drawing as its page picture: invisible text isn't part of the look.
+        let model = try PdfDocumentReader.read(searchable, FilePath.combine(dir, "media"))
+        XCTAssertEqual(PdfDocumentReader.plainText(model), "")
+        XCTAssertEqual(HDocumentWalker.inlines(model.sections.flatMap(\.blocks)).filter { $0 is HImage }.count, 1)
+    }
+
+    func testTextThatLaterPaintMayCoverGetsNoSearchableGlyphs() throws {
+        // Drawn over afterwards, wholly or in part, opaque or see-through, through groups and transforms, clipped or masked
+        // (the unclipped area counts), by a stroke, or by paint whose area isn't measured (a reference, markers, a filter,
+        // an image, text CoreSVG lays out): the PDF must not reveal what the page may hide.
+        let image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC"
+        for later in ["<rect x='0' y='30' width='100' height='30'/>", "<rect x='18' y='40' width='3' height='3' fill='#fff'/>",
+                      "<rect x='0' y='30' width='100' height='30' fill='#000' fill-opacity='0.3'/>", "<rect x='0' y='30' width='100' height='30' opacity='0.2'/>",
+                      "<g transform='translate(100 0)'><rect x='-100' y='30' width='100' height='30'/></g>",
+                      "<g transform='scale(2)'><rect x='5' y='20' width='10' height='5'/></g>",
+                      "<clipPath id='c'><rect width='5' height='5'/></clipPath><rect x='0' y='30' width='100' height='30' clip-path='url(#c)'/>",
+                      "<mask id='m'><rect width='5' height='5' fill='white'/></mask><rect x='0' y='30' width='100' height='30' mask='url(#m)'/>",
+                      "<path d='M0 30 H100 V60 H0 Z'/>", "<circle cx='20' cy='45' r='10'/>", "<ellipse cx='20' cy='45' rx='30' ry='5'/>",
+                      "<line x1='0' y1='44' x2='200' y2='44' stroke='black'/>", "<polyline points='0,44 200,44' fill='none' stroke='red'/>",
+                      "<polygon points='0,30 100,30 100,60'/>", "<rect x='150' y='40' width='5' height='5' stroke='black' stroke-width='300'/>",
+                      "<g stroke='black' stroke-width='300'><rect x='150' y='40' width='5' height='5'/></g>",
+                      "<defs><rect id='r' width='200' height='100'/></defs><use href='#r'/>",
+                      "<marker id='k'><rect width='300' height='300'/></marker><path d='M150 90 H190' stroke='black' marker-start='url(#k)'/>",
+                      "<filter id='f'/><g filter='url(#f)'><rect x='150' y='90' width='10' height='5'/></g>",
+                      "<image x='0' y='0' width='200' height='100' href='\(image)'/>", "<text x='150' y='90' rotate='10'>CD</text>",
+                      "<switch><rect x='150' y='90' width='10' height='5'/></switch>", "<svg x='150' y='90' width='10' height='5'><rect width='10' height='5'/></svg>",
+                      "<foreignObject x='150' y='90' width='10' height='5'/>", "<rect x='0' y='30' width='5em' height='30'/>",
+                      "<g transform='rotate(oops)'><rect x='150' y='90' width='10' height='5'/></g>"] {
+            XCTAssertTrue(searchableRuns("<text x='10' y='50'>AB</text>" + later).isEmpty, later)
+        }
+        // Text over text: the later text stays searchable, the covered one doesn't.
+        XCTAssertEqual(searchableCharacters(searchableRuns("<text x='10' y='50'>AB</text><text x='12' y='52'>CD</text>"), "ABCD"), ["C", "D"])
+        // Paint before the text, beside or below it, hidden, or not drawn where it is (definitions, clip and mask content)
+        // leaves it searchable.
+        for other in ["<rect x='0' y='30' width='100' height='30'/><text x='10' y='50' fill='white'>AB</text>",
+                      "<text x='10' y='50'>AB</text><rect x='150' y='0' width='40' height='20'/>",
+                      "<text x='10' y='50'>AB</text><g transform='translate(0 70)'><rect width='100' height='30'/></g>",
+                      "<text x='10' y='50'>AB</text><rect x='0' y='30' width='200' height='70' display='none'/>",
+                      "<text x='10' y='50'>AB</text><g display='none'><rect x='0' y='30' width='200' height='70'/></g>",
+                      "<text x='10' y='50'>AB</text><defs><rect id='r' width='200' height='100'/></defs>",
+                      "<text x='10' y='50'>AB</text><clipPath id='c'><rect width='200' height='100'/></clipPath><mask id='m'><rect width='200' height='100'/></mask>",
+                      "<text x='10' y='50'>AB</text><linearGradient id='g'><stop offset='0'/></linearGradient><title>AB</title>"] {
+            XCTAssertEqual(searchableCharacters(searchableRuns(other), "AB"), ["A", "B"], other)
+        }
+    }
+
+    func testRootStrokesAndRelativeImagePositionsCannotExposeCoveredText() throws {
+        let text = "<text x='10' y='50' stroke='none'>AB</text>"
+        XCTAssertTrue(searchableRuns(text + "<rect x='150' y='0' width='5' height='100'/>",
+                                     size: "width='200' height='100' stroke='black' stroke-width='300'").isEmpty)
+        let image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC"
+        for position in ["x='70%' y='35'", "x='140' y='40%'", "x='9em' y='35'",
+                         "x='0' y='0' style='x:140px; y:35px'"] {
+            XCTAssertTrue(searchableRuns("<text x='150' y='50'>AB</text><image \(position) width='50' height='25' href='\(image)'/>").isEmpty, position)
+        }
+        XCTAssertEqual(searchableCharacters(searchableRuns(text + "<image x='140' y='35' width='50' height='25' href='\(image)'/>"), "AB"), ["A", "B"])
+    }
+
+    func testCoveredSvgTextStaysOutOfThePdfTextAndTxt() async throws {
+        let source = try write("covered.svg", """
+            <svg xmlns='http://www.w3.org/2000/svg' width='400' height='200' viewBox='0 0 200 100' font-family='Helvetica' font-size='10'>
+              <rect width='200' height='100' fill='#eee'/>
+              <text x='10' y='20'>Visible words</text>
+              <g transform='translate(0 40)'><text x='10' y='20'>Covered words</text></g>
+              <rect x='0' y='45' width='120' height='25' fill='#036'/>
+              <text x='130' y='60'>Beside words</text>
+            </svg>
+            """)
+        let searchable = FilePath.combine(dir, "covered.pdf"), outlines = FilePath.combine(dir, "covered-outlines.pdf")
+        try SvgRenderer.writePdf(SvgRenderer.load(source), searchable, title: "covered", pdfA: false)
+        var outlinesOnly = try SvgRenderer.load(source)
+        outlinesOnly.text = []
+        try SvgRenderer.writePdf(outlinesOnly, outlines, title: "covered", pdfA: false)
+        let text = try XCTUnwrap(PDFDocument(url: URL(fileURLWithPath: searchable))?.page(at: 0)?.string)
+        XCTAssertTrue(text.contains("Visible words") && text.contains("Beside words"), text)
+        XCTAssertFalse(text.contains("Covered"), text)
+        XCTAssertTrue(try pagePixels(searchable) == pagePixels(outlines), "the invisible text changed the page")
+
+        let catalog = ConverterCatalog(EngineRegistry.createAll(EngineEnvironment(dataDirectory: FilePath.combine(dir, "data"))))
+        catalog.priority = AppSettings().enginePriority
+        XCTAssertEqual(catalog.createPlanner().plan("svg", "txt")?.steps.map(\.converter.id), ["vector", "pdf-text"])
+        let job = await coreRun(JobQueue(catalog), [source], corePreset("txt"))
+        XCTAssertEqual(job.state, .completed, "\(job.files.map { $0.errorDetail ?? "" })")
+        let written = String(decoding: try Data(contentsOf: URL(fileURLWithPath: try XCTUnwrap(job.outputs.first))).dropFirst(3), as: UTF8.self)
+        XCTAssertTrue(written.contains("Visible words") && written.contains("Beside words"), written)
+        XCTAssertFalse(written.contains("Covered"), written)
     }
 }

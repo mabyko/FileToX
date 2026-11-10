@@ -9,7 +9,7 @@
 // hold, as XMP. That bounds these measures, not visual, SSIM or full metadata equivalence. Colour pictures usually gain
 // (ImageIO's 4:2:0 drops chroma detail); ImageIO's file usually stays for gray-like ones. The helper does not run for gray
 // pictures, colour pictures whose samples are all gray, 16-bit and float pictures, several frames, frames not prepared
-// for an AVIF target and pictures beyond libavif's default decoder limits.
+// for an AVIF target, pictures beyond libavif's default decoder limits, or when ImageIO's file already has zero error.
 //
 // libaom's encode is one call that cannot be interrupted, so it runs in a helper process (FileToXAvifEncoder) that
 // cancellation kills through ProcessRunner. Samples and metadata reach the helper in a private hand-off file; its result
@@ -46,6 +46,11 @@ enum AvifEncoder {
               image.width <= maxDimension, image.height <= maxDimension, image.width * image.height <= maxPixels else { return false }
         let (samples, channels) = CodecPixels.straight(image)
         guard !isGray(samples, channels) else { return false }
+        try Task.checkCancellation()
+        let imageIO = try Data(contentsOf: URL(fileURLWithPath: path))
+        let theirs = errors(imageIO, ImagePixels.bitmap(image))
+        // No candidate can strictly improve a file whose decoded samples already match.
+        if let theirs, theirs.colour == 0, theirs.alpha == 0 { return false }
         // ImageIO keeps the resolution as Exif, even without other metadata; so does this writer.
         var described = frame
         if let dpi = frame.dpi, dpi.x > 0, dpi.y > 0 {
@@ -75,9 +80,8 @@ enum AvifEncoder {
         guard encoded.count > 12, encoded[4..<12] == Data("ftypavif".utf8) else {
             throw ConversionError("The AVIF encoder wrote no AVIF file.")
         }
-        let source = ImagePixels.bitmap(image), imageIO = try Data(contentsOf: URL(fileURLWithPath: path))
-        guard let mine = errors(encoded, source) else { return false }
-        if let theirs = errors(imageIO, source),
+        guard let mine = errors(encoded, ImagePixels.bitmap(image)) else { return false }
+        if let theirs,
            !(mine.colour <= theirs.colour && mine.alpha <= theirs.alpha && (mine.colour < theirs.colour || mine.alpha < theirs.alpha)) {
             return false
         }

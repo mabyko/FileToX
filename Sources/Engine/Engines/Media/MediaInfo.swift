@@ -16,13 +16,20 @@ struct VideoStreamInfo: Equatable {
     let rotation: Int
     /// Average frames per second, 0 when unknown.
     let frameRate: Double
+    /// The stream's nominal timing rate. Variable-rate video can have much shorter intervals than its average.
+    let nominalFrameRate: Double
+    /// Declared frame count, 0 when the container does not provide it.
+    let frameCount: Int
 
-    init(_ width: Int, _ height: Int, _ sampleAspect: Double, _ rotation: Int, _ frameRate: Double) {
+    init(_ width: Int, _ height: Int, _ sampleAspect: Double, _ rotation: Int, _ frameRate: Double, frameCount: Int = 0,
+         nominalFrameRate: Double = 0) {
         self.width = width
         self.height = height
         self.sampleAspect = sampleAspect
         self.rotation = rotation
         self.frameRate = frameRate
+        self.nominalFrameRate = nominalFrameRate
+        self.frameCount = frameCount
     }
 
     /// True when the picture is shown turned by 90° (FFmpeg rotates it upright while decoding).
@@ -100,7 +107,8 @@ struct MediaInfo: Equatable {
             case "video" where video == nil:
                 let sar = ratio(text(stream, "sample_aspect_ratio"), ":")
                 video = VideoStreamInfo(int(number(stream, "width")), int(number(stream, "height")), sar > 0 ? sar : 1,
-                                        rotationOf(stream), frameRateOf(stream))
+                                        rotationOf(stream), frameRateOf(stream), frameCount: int(number(stream, "nb_frames")),
+                                        nominalFrameRate: nominalFrameRateOf(stream))
             case "audio" where audio == nil:
                 audio = AudioStreamInfo(int(number(stream, "channels")), int(number(stream, "sample_rate")))
             default:
@@ -124,8 +132,12 @@ struct MediaInfo: Equatable {
     private static func frameRateOf(_ stream: [String: Any]) -> Double {
         let average = ratio(text(stream, "avg_frame_rate"), "/")
         if average > 0 && average < 1000 { return average }
-        let nominal = ratio(text(stream, "r_frame_rate"), "/")
-        return nominal > 0 && nominal < 1000 ? nominal : 0
+        return nominalFrameRateOf(stream)
+    }
+
+    private static func nominalFrameRateOf(_ stream: [String: Any]) -> Double {
+        let rate = ratio(text(stream, "r_frame_rate"), "/")
+        return rate > 0 && rate < 1000 ? rate : 0
     }
 
     /// Rotation from the display matrix side data, or the older "rotate" tag.

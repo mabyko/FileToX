@@ -130,18 +130,15 @@ extension ACad {
         }
 
         private func writeObjFreeSpace(_ stream: DwgMemoryStream) {
-            var out: [UInt8] = DwgLE.bytes(Int32(0))
-            // Approximate number of objects in the drawing (number of handles).
-            out += DwgLE.bytes(UInt32(truncatingIfNeeded: handlesMap.count))
-            // R2000+: TDUUPDATE
+            // All supported output versions are R2010+: 64-bit counts and four 128-bit values.
+            // The 53-byte R2007 layout inherited from ACadSharp misaligns these fields in newer files.
+            var out: [UInt8] = DwgLE.bytes(UInt64(0))
+            out += DwgLE.bytes(UInt64(handlesMap.count))
             let j = document.header.universalUpdateDateTime.dwgJulian
             out += DwgLE.bytes(j.jdate)
             out += DwgLE.bytes(j.milliseconds)
-            // Offset of the objects section in the stream.
-            out += DwgLE.bytes(UInt32(0))
-            // Number of 64-bit values that follow (ODA writes 4), and their ODA values.
             out.append(4)
-            for v: UInt32 in [0x32, 0, 0x64, 0, 0x200, 0, 0xFFFF_FFFF, 0] { out += DwgLE.bytes(v) }
+            for v: UInt64 in [0x32, 0, 0x64, 0, 0x200, 0, 0xFFFF_FFFF, 0] { out += DwgLE.bytes(v) }
             stream.write(out)
         }
     }

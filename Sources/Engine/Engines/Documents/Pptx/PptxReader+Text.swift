@@ -224,10 +224,16 @@ extension PptxReader {
     }
     func table(_ c: SlideContext, _ path: String, _ frame: XElement, _ t: Transform) -> HTextBox? {
         let a = Self.a
-        guard let tbl = frame.element(a + "graphic")?.element(a + "graphicData")?.element(a + "tbl"),
-            let b = Self.bounds(frame.element(Self.p + "xfrm"), t)
-        else { return nil }
-        let grid = tbl.element(a + "tblGrid")?.elements(a + "gridCol").map { max(1, Self.hwp(Self.emu($0, "w"))) } ?? []
+        guard let tbl = frame.element(a + "graphic")?.element(a + "graphicData")?.element(a + "tbl") else { return nil }
+        let b = Self.bounds(frame.element(Self.p + "xfrm"), t)
+        let rows = tbl.elements(a + "tr")
+        var grid = tbl.element(a + "tblGrid")?.elements(a + "gridCol").map {
+            max(1, HwpxUnits.fromEmu(Double(Self.emu($0, "w")) * t.scaleX))
+        } ?? []
+        if grid.isEmpty, let columns = rows.map({ $0.elements(a + "tc").count }).max(), columns > 0 {
+            let width = b.flatMap { $0.w > 0 ? $0.w : nil } ?? c.frame.w
+            grid = Array(repeating: max(1, Self.hwp(width) / columns), count: columns)
+        }
         if grid.isEmpty { return nil }
         let props = tbl.element(a + "tblPr")
         let styled = props?.element(a + "tableStyleId") != nil
@@ -240,18 +246,17 @@ extension PptxReader {
         table.columnWidths = grid
         table.cellMargin = HInsets(720, 720, 360, 360)
         table.borders = HBorders(line, line, line, line)
-        for (r, tr) in tbl.elements(a + "tr").enumerated() {
+        for (r, tr) in rows.enumerated() {
             let header = first && r == 0
             let row = HRow()
             row.header = header
-            row.height = max(1, Self.hwp(Self.emu(tr, "h")))
-            var column = 0
-            for tc in tr.elements(a + "tc") {
+            row.height = max(1, HwpxUnits.fromEmu(Double(Self.emu(tr, "h")) * t.scaleY))
+            // DrawingML keeps a cell at every grid position, including merged continuations.
+            for (column, tc) in tr.elements(a + "tc").enumerated() {
                 let span = max(1, DocumentXML.int(tc.attributeValue("gridSpan")) ?? 1)
                 if ["1", "true"].contains(tc.attributeValue("hMerge") ?? "")
                     || ["1", "true"].contains(tc.attributeValue("vMerge") ?? "")
                 {
-                    column += span
                     continue
                 }
                 let cp = tc.element(a + "tcPr")
@@ -291,14 +296,16 @@ extension PptxReader {
                 if text.isEmpty { text = [HParagraph()] }
                 cell.blocks = text
                 row.cells.append(cell)
-                column += span
             }
             table.rows.append(row)
         }
         let box = HTextBox()
-        box.width = max(1, Self.hwp(b.w))
+        box.width = grid.reduce(0, +)
         box.height = max(1, table.rows.reduce(0) { $0 + ($1.height ?? 0) })
-        box.anchor = Self.anchor(Self.hwp(b.x), Self.hwp(b.y))
+        if let b, b.w > 0 {
+            box.width = max(1, Self.hwp(b.w))
+            box.anchor = Self.anchor(Self.hwp(b.x), Self.hwp(b.y))
+        }
         box.line = .none
         box.padding = HInsets(0, 0, 0, 0)
         box.blocks.append(table)

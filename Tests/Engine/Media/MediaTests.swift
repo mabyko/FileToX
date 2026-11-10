@@ -29,7 +29,7 @@ final class MediaTests: XCTestCase {
     }
 
     private func skipUnlessInstalled() throws {
-        try XCTSkipUnless(Self.tools != nil, "FFmpeg is not installed (brew install ffmpeg)")
+        try XCTSkipUnless(Self.tools != nil, "FFmpeg is not installed (select a full FFmpeg build in the engine settings)")
     }
 
     // ───────────────────────── Routes (no FFmpeg needed) ─────────────────────────
@@ -77,6 +77,102 @@ final class MediaTests: XCTestCase {
     }
 
     // ───────────────────────── Command lines (no FFmpeg needed) ─────────────────────────
+
+    func testCapabilitiesParseListingsAndRequireOnlyPlannedStreams() throws {
+        let capabilities = FfmpegCapabilities.parse(encoders: """
+         V..... = Video
+         A..... = Audio
+         V....D libtheora Theora
+         A....D aac AAC
+        """, muxers: """
+         D.. = Demuxing supported
+         .E. = Muxing supported
+          E  ogg Ogg
+         DE  mov,mp4 QuickTime / MOV
+          D  matroska Matroska input only
+        """)
+        XCTAssertEqual(capabilities.encoders, ["libtheora", "aac"])
+        XCTAssertEqual(capabilities.muxers, ["ogg", "mov", "mp4"])
+        let info = MediaInfo(1, Self.hd, AudioStreamInfo(2, 44100), nil)
+        func plan(_ target: String, _ options: MediaOptions = MediaOptions()) throws -> [FfmpegPass] {
+            try MediaEncoding.plan("/in.mkv", "/out." + target, target, options, info, root)
+        }
+        XCTAssertThrowsError(try capabilities.validate(plan("ogv"), target: "ogv")) {
+            XCTAssertTrue($0.localizedDescription.contains("libvorbis"))
+            XCTAssertFalse($0.localizedDescription.contains("libtheora"))
+        }
+        try capabilities.validate(plan("ogv", options { $0.removeAudio = true }), target: "ogv")
+        let noAudio = try MediaEncoding.plan("/in.mkv", "/out.ogv", "ogv", MediaOptions(), MediaInfo(1, Self.hd, nil, nil), root)
+        try capabilities.validate(noAudio, target: "ogv")
+        XCTAssertThrowsError(try capabilities.validate(plan("amr"), target: "amr")) {
+            XCTAssertTrue($0.localizedDescription.contains("libopencore_amrnb"))
+            XCTAssertTrue($0.localizedDescription.contains("output formats: amr"))
+        }
+        let gif = try plan("gif")
+        try FfmpegCapabilities(encoders: ["png", "gif", "wrapped_avframe"], muxers: ["image2", "null", "gif"]).validate(gif, target: "gif")
+        XCTAssertThrowsError(try FfmpegCapabilities(encoders: ["png", "gif"], muxers: ["image2", "null", "gif"]).validate(gif, target: "gif")) {
+            XCTAssertTrue($0.localizedDescription.contains("wrapped_avframe"))
+        }
+        try FfmpegCapabilities(encoders: [], muxers: ["image2"]).validate(
+            [FfmpegPass(arguments: ["-c:v", "copy", "-f", "image2", "/cover.png"], weight: 1)], target: "png")
+    }
+
+    func testMissingCapabilitiesPreserveOutputAndRefreshWhenExecutableChanges() async throws {
+        let savedCopies = EngineEnvironment.ownCopies
+        defer { EngineEnvironment.ownCopies = savedCopies }
+        let folder = try newFolder(), input = FilePath.combine(folder, "tone.wav")
+        let executable = FilePath.combine(folder, "ffmpeg"), output = FilePath.combine(folder, "result.amr")
+        let script = #"""
+        #!/bin/sh
+        bin=$(dirname "$0")
+        echo query >> "$bin/queries"
+        case "$2" in
+          -encoders) echo ' A..... aac AAC'; exit 0;;
+          -muxers) echo ' E amr AMR'; exit 0;;
+        esac
+        echo converted > "$bin/converted"
+        exit 8
+        """#
+        func writeExecutable(_ path: String, _ text: String) throws {
+            try Data(text.utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        }
+        try writeExecutable(executable, script)
+        try writeExecutable(FilePath.combine(folder, "ffprobe"), "#!/bin/sh\necho '{\"streams\":[{\"codec_type\":\"audio\",\"channels\":1,\"sample_rate\":\"8000\"}],\"format\":{\"duration\":\"1\"}}'\n")
+        try Data("input".utf8).write(to: URL(fileURLWithPath: input))
+        let original = Data("keep the existing file".utf8)
+        try original.write(to: URL(fileURLWithPath: output))
+        EngineEnvironment.ownCopies = ["ffmpeg": folder]
+        let step = ConversionStep(inputPath: input, from: "wav", to: "amr", preset: Preset(),
+                                  output: EbookTestOutput(FilePath.combine(folder, "result")), workDirectory: folder)
+        for _ in 0..<2 {
+            do { _ = try await FfmpegConverter().convert(step, progress: nil); XCTFail("Missing AMR encoder must fail") }
+            catch { XCTAssertTrue(error.localizedDescription.contains("libopencore_amrnb"), error.localizedDescription) }
+            XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: output)), original)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: FilePath.combine(folder, "converted")))
+        func queries() throws -> Int { try String(contentsOfFile: FilePath.combine(folder, "queries"), encoding: .utf8).split(separator: "\n").count }
+        XCTAssertEqual(try queries(), 2)
+
+        try writeExecutable(executable, script.replacingOccurrences(of: "A..... aac AAC", with: "A..... libopencore_amrnb AMR"))
+        let updated = try await FfmpegCapabilities.read(executable)
+        XCTAssertTrue(updated.encoders.contains("libopencore_amrnb"))
+        XCTAssertEqual(try queries(), 4)
+
+        try writeExecutable(executable, "#!/bin/sh\necho query >> '" + FilePath.combine(folder, "queries") + "'\nexit 9\n")
+        for _ in 0..<2 {
+            do { _ = try await FfmpegCapabilities.read(executable); XCTFail("A failed capability query must fail") }
+            catch { XCTAssertTrue(error.localizedDescription.contains("exit code 9")) }
+        }
+        XCTAssertEqual(try queries(), 6, "Failed queries must not be cached")
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await FfmpegCapabilities.read(executable)
+        }
+        do { _ = try await cancelled.value; XCTFail("Cancellation must propagate") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertEqual(try queries(), 6)
+    }
 
     private func args(_ target: String, _ options: MediaOptions = MediaOptions(), info: MediaInfo? = nil) throws -> [String] {
         let passes = try MediaEncoding.plan("in.mkv", "out." + target, target, options,
@@ -161,7 +257,7 @@ final class MediaTests: XCTestCase {
 
     func testFrameRatesAreMadeEncodable() {
         let cases: [(Double, String?, String)] = [
-            (29.97003, "30000/1001", "30000/1001"), (25, "25", "25"), (29.87, "30", "30000/1001"), (15, "15", "24000/1001"), (0, nil, "25"),
+            (29.97003, "30000/1001", "30000/1001"), (25, "25", "25"), (29.87, "30", "30000/1001"), (15, "15", "30"), (0, nil, "25"),
         ]
         for (fps, nearest, broadcast) in cases {
             XCTAssertEqual(MediaEncoding.nearestRate(fps), nearest, "\(fps)")
@@ -209,7 +305,7 @@ final class MediaTests: XCTestCase {
             """
         let info = try MediaInfo.parse(json)
         XCTAssertEqual(try XCTUnwrap(info.duration), 12.48, accuracy: 0.001)
-        XCTAssertEqual(info.video, VideoStreamInfo(1920, 1080, 1, -90, 30000 / 1001.0))
+        XCTAssertEqual(info.video, VideoStreamInfo(1920, 1080, 1, -90, 30000 / 1001.0, nominalFrameRate: 30))
         XCTAssertEqual(try XCTUnwrap(info.video).displayAspect, 9 / 16.0, accuracy: 0.001)
         XCTAssertEqual(info.audio, AudioStreamInfo(2, 48000))
         XCTAssertEqual(info.coverStreamIndex, 2)
@@ -217,6 +313,25 @@ final class MediaTests: XCTestCase {
         let raw = try MediaInfo.parse(#"{ "streams": [ { "index": 0, "codec_type": "audio", "channels": 1, "sample_rate": "8000" } ], "format": {} }"#)
         XCTAssertNil(raw.duration)
         XCTAssertNil(raw.video)
+    }
+
+    func testStaticGifWebmUsesItsFrameDelayWithoutChangingAnimatedGifs() throws {
+        let cases: [(String, String, String?)] = [
+            ("1", "100/10", "10.0"), ("1", "100/40", "2.5"),
+            ("3", "5/1", nil), ("N/A", "10/1", nil), ("1", "0/0", nil),
+        ]
+        for (frames, rate, expected) in cases {
+            let info = try MediaInfo.parse("""
+                {"streams":[{"codec_type":"video","width":96,"height":64,
+                "avg_frame_rate":"\(rate)","r_frame_rate":"0/0","nb_frames":"\(frames)"}]}
+                """)
+            XCTAssertEqual(info.video?.frameCount, Int(frames) ?? 0)
+            for (input, target) in [("input.GIF", "webm"), ("input.mp4", "webm"), ("input.gif", "mp4")] {
+                let args = try MediaEncoding.plan(input, "out." + target, target, MediaOptions(), info, root)[0].arguments
+                let actual = args.firstIndex(of: "-r").map { args[$0 + 1] }
+                XCTAssertEqual(actual, input == "input.GIF" ? expected : nil)
+            }
+        }
     }
 
     func testFfmpegProgressAndErrorsAreRead() {
@@ -363,6 +478,127 @@ final class MediaTests: XCTestCase {
         }
     }
 
+    func testSubBroadcastVideoKeepsItsLastFrameDuration() async throws {
+        try skipUnlessInstalled()
+        try XCTSkipUnless(Self.encoders.contains("libvpx-vp9") && Self.encoders.contains("libx264")
+                          && Self.encoders.contains("mpeg2video"), "Requires VP9, H.264 and MPEG-2 encoders")
+        let tools = try XCTUnwrap(Self.tools)
+        // A still GIF's WebM intermediate has one frame, including its display time. WebM does not report nb_frames.
+        // Exact multiples preserve the first three lengths; the last needs one whole output frame past 0.13 seconds.
+        let cases: [(rate: String, seconds: Double, frames: Int, outputSeconds: Double)] = [
+            ("10", 0.1, 3, 0.1), ("4", 0.25, 6, 0.25), ("5/2", 0.4, 10, 0.4),
+            ("100/13", 0.13, 4, 4 * 1001 / 24000.0),
+        ]
+        for item in cases {
+            let source = FilePath.combine(try newFolder(), "still.webm")
+            try await run(tools.ffmpeg, ["-hide_banner", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i",
+                                        "color=c=red:s=64x48:r=\(item.rate)", "-frames:v", "1", "-c:v", "libvpx-vp9",
+                                        "-pix_fmt", "yuv420p", source])
+            let original = try Data(contentsOf: URL(fileURLWithPath: source))
+            let input = try await probe(source)
+            XCTAssertEqual(input.video?.frames, 1)
+            XCTAssertEqual(input.duration, item.seconds, accuracy: 0.001)
+            for target in ["ts", "m2ts", "mpg", "mxf"] {
+                let output = try await convert(source, target)
+                let result = try await probe(output)
+                let context = "\(item.seconds)s → \(target)"
+                XCTAssertEqual(result.video?.frames, item.frames, context)
+                // Tiny MPEG program streams can put every frame in one PES packet. Their probed format duration
+                // then describes only its first timestamp. Decode the complete presentation timeline as well;
+                // genpts reconstructs missing PTS from the stream's DTS without changing the file.
+                if target != "mpg" { XCTAssertEqual(result.duration, item.outputSeconds, accuracy: 0.002, context) }
+                let timing = try await ProcessRunner.run(tools.ffprobe,
+                    ["-v", "error", "-fflags", "+genpts", "-select_streams", "v:0", "-show_frames", "-of", "json", output], timeout: 60)
+                XCTAssertEqual(timing.exitCode, 0, timing.standardError)
+                let timingRoot = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(timing.standardOutput.utf8)) as? [String: Any])
+                let decoded = try XCTUnwrap(timingRoot["frames"] as? [[String: Any]])
+                let intervals = try decoded.map { frame -> (start: Double, end: Double) in
+                    let start = try XCTUnwrap(Double(frame["best_effort_timestamp_time"] as? String ?? ""))
+                    let duration = try XCTUnwrap(Double(frame["duration_time"] as? String ?? ""))
+                    XCTAssertGreaterThan(duration, 0, context)
+                    return (start, start + duration)
+                }
+                XCTAssertEqual(intervals.count, item.frames, context)
+                XCTAssertEqual(try XCTUnwrap(intervals.map(\.end).max()) - XCTUnwrap(intervals.map(\.start).min()),
+                               item.outputSeconds, accuracy: 0.002, context)
+                let pixels = FilePath.combine(try newFolder(), "frames.rgb")
+                try await run(tools.ffmpeg, ["-v", "error", "-nostdin", "-y", "-i", output, "-map", "0:v:0",
+                                            "-vf", "scale=1:1", "-fps_mode", "passthrough", "-pix_fmt", "rgb24", "-f", "rawvideo", pixels])
+                let rgb = [UInt8](try Data(contentsOf: URL(fileURLWithPath: pixels)))
+                XCTAssertEqual(rgb.count, item.frames * 3, context)
+                for offset in stride(from: 0, to: rgb.count - rgb.count % 3, by: 3) {
+                    XCTAssertTrue(rgb[offset] > 180 && rgb[offset + 1] < 70 && rgb[offset + 2] < 70, context)
+                }
+            }
+            XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: source)), original)
+        }
+    }
+
+    func testLowRateVideoKeepsItsAudioAndDuration() async throws {
+        try skipUnlessInstalled()
+        let source = try await makeClip(try newFolder(), "low-rate.mkv", seconds: 1, size: "64x48", fps: 10)
+        for target in ["ts", "m2ts", "mpg", "mxf"] {
+            let result = try await probe(try await convert(source, target))
+            XCTAssertEqual(result.video?.frames, 30, target)
+            XCTAssertEqual(result.video?.width, 64, target)
+            XCTAssertEqual(result.video?.height, 48, target)
+            XCTAssertNotNil(result.audio, target)
+            XCTAssertEqual(result.duration, 1, accuracy: 0.05, target)
+        }
+    }
+
+    func testLowAverageRateKeepsBriefVariableFrameChanges() async throws {
+        try skipUnlessInstalled()
+        let tools = try XCTUnwrap(Self.tools), folder = try newFolder()
+        let gif = FilePath.combine(folder, "burst.gif"), source = FilePath.combine(folder, "burst.mp4")
+        // A 2×2 GIF: red for 20 ms, blue for 20 ms, then red for 960 ms. Its mean is only 3 fps.
+        let data = try XCTUnwrap(Data(base64Encoded: "R0lGODlhAgACAIAAAP8AAAAA/yH5BAQCAAAALAAAAAACAAIAAAIEBEEQBQAh+QQEAgAAACwAAAAAAgACAAACBAzDMAUAIfkEBGAAAAAsAAAAAAIAAgAAAgQEQRAFADs="))
+        try data.write(to: URL(fileURLWithPath: gif))
+        try await run(tools.ffmpeg, MediaEncoding.common + ["-i", gif, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-fps_mode", "vfr", source])
+        let original = try Data(contentsOf: URL(fileURLWithPath: source))
+        let info = try await MediaInfo.probe(tools.ffprobe, source)
+        XCTAssertEqual(info.video?.frameRate, 3)
+        XCTAssertEqual(info.video?.nominalFrameRate, 50)
+        XCTAssertEqual(info.duration, 1)
+        for target in ["ts", "m2ts", "mpg", "mxf"] {
+            let output = try await convert(source, target)
+            let result = try await probe(output)
+            XCTAssertEqual(result.video?.frames, 50, target)
+            if target != "mpg" { XCTAssertEqual(result.duration, 1, accuracy: 0.002, target) }
+            let pixels = FilePath.combine(try newFolder(), "burst.rgb")
+            try await run(tools.ffmpeg, ["-v", "error", "-nostdin", "-y", "-fflags", "+genpts", "-i", output,
+                                        "-map", "0:v:0", "-vf", "fps=50", "-pix_fmt", "rgb24", "-f", "rawvideo", pixels])
+            let rgb = [UInt8](try Data(contentsOf: URL(fileURLWithPath: pixels)))
+            XCTAssertEqual(rgb.count, 50 * 2 * 2 * 3, target)
+            // All 50 time samples must keep the short blue interval in its original position.
+            for offset in stride(from: 0, to: rgb.count - rgb.count % 12, by: 12) {
+                XCTAssertEqual(rgb[offset + 2] > rgb[offset], offset == 12, target)
+            }
+        }
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: source)), original)
+    }
+
+    func testTransportRateFilterDoesNotPadALateVideoStart() async throws {
+        try skipUnlessInstalled()
+        let tools = try XCTUnwrap(Self.tools), source = FilePath.combine(try newFolder(), "late-video.mkv")
+        try await run(tools.ffmpeg, MediaEncoding.common + [
+            "-f", "lavfi", "-i", "testsrc2=size=64x48:rate=10:duration=1",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+            "-vf", "setpts=PTS+0.2/TB", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-fps_mode", "vfr",
+            "-c:a", "pcm_s16le", source,
+        ])
+        let input = try await probe(source)
+        XCTAssertEqual(input.video?.frames, 10)
+        XCTAssertEqual(input.duration, 1.2, accuracy: 0.002)
+        for target in ["ts", "m2ts"] {
+            let result = try await probe(try await convert(source, target))
+            // Upsample the one-second video itself. Its 0.2-second lead-in must not become six extra frames.
+            XCTAssertEqual(result.video?.frames, 30, target)
+            XCTAssertNotNil(result.audio, target)
+            XCTAssertEqual(result.duration, 1.2, accuracy: 0.05, target)
+        }
+    }
+
     func testEveryTargetFormatIsWrittenWithThePlannedCodecs() async throws {
         try skipUnlessInstalled()
         let folder = try newFolder()
@@ -434,6 +670,73 @@ final class MediaTests: XCTestCase {
         XCTAssertEqual(png.video?.codec, "png")
         XCTAssertEqual(png.video?.width, 640) // square pixels
         XCTAssertEqual(png.video?.height, 480)
+    }
+
+    func testShortTransportStreamsKeepThePosterTimestampWhenSeekingFindsNoFrame() async throws {
+        try skipUnlessInstalled()
+        let ffmpeg = try XCTUnwrap(Self.tools).ffmpeg
+        for ext in ["ts", "m2ts"] {
+            let folder = try newFolder()
+            let source = try await makeClip(folder, "short." + ext, seconds: 1, fps: 12, audio: false,
+                extra: ["-c:v", "libx264", "-g", "240", "-sc_threshold", "0", "-pix_fmt", "yuv420p", "-f", "mpegts"])
+            let output = try await convert(source, "png")
+            // At 12 fps, the first frame at or after 10% of this one-second clip is frame 2 (zero based).
+            let expected = FilePath.combine(folder, "frame-two.png"), first = FilePath.combine(folder, "frame-zero.png")
+            for (number, path) in [(2, expected), (0, first)] {
+                try await run(ffmpeg, MediaEncoding.common + ["-i", source, "-map", "0:V:0", "-vf", "select=eq(n\\,\(number))",
+                    "-frames:v", "1", "-update", "1", "-c:v", "png", "-f", "image2", path])
+            }
+            let bytes = try Data(contentsOf: URL(fileURLWithPath: output))
+            XCTAssertEqual(bytes, try Data(contentsOf: URL(fileURLWithPath: expected)), ext)
+            XCTAssertNotEqual(bytes, try Data(contentsOf: URL(fileURLWithPath: first)), "Must retain the poster timestamp")
+        }
+    }
+
+    func testPosterRetryRunsOnlyAfterSuccessfulEmptyOutput() async throws {
+        let savedCopies = EngineEnvironment.ownCopies
+        defer { EngineEnvironment.ownCopies = savedCopies }
+        for mode in ["success", "retry", "failure", "empty"] {
+            let folder = try newFolder(), input = FilePath.combine(folder, "clip.ts")
+            try Data("test input".utf8).write(to: URL(fileURLWithPath: input))
+            let probe = #"#!/bin/sh"# + "\n" + #"echo '{"streams":[{"codec_type":"video","width":32,"height":24}],"format":{"duration":"1"}}'"# + "\n"
+            let encoder = "#!/bin/sh\nmode=" + mode + "\n" + #"""
+            bin=$(dirname "$0")
+            case "$2" in
+              -encoders) echo ' V..... png PNG'; exit 0;;
+              -muxers) echo ' E image2 image sequence'; exit 0;;
+            esac
+            echo attempt >> "$bin/attempts"
+            test "$mode" != failure || exit 7
+            test "$mode" != empty || exit 0
+            input_seen=no
+            seek_after_input=no
+            for arg in "$@"; do
+              test "$arg" != -ss || test "$input_seen" != yes || seek_after_input=yes
+              test "$arg" != -i || input_seen=yes
+              output=$arg
+            done
+            if test "$mode" = success || test "$seek_after_input" = yes; then printf frame > "$output"; fi
+            exit 0
+            """#
+            for (name, script) in [("ffprobe", probe), ("ffmpeg", encoder)] {
+                let path = FilePath.combine(folder, name)
+                try Data(script.utf8).write(to: URL(fileURLWithPath: path))
+                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+            }
+            EngineEnvironment.ownCopies = ["ffmpeg": folder]
+            let stem = FilePath.combine(folder, "result")
+            let step = ConversionStep(inputPath: input, from: "ts", to: "png", preset: Preset(), output: EbookTestOutput(stem), workDirectory: folder)
+            do {
+                let files = try await FfmpegConverter().convert(step, progress: nil)
+                XCTAssertTrue(["success", "retry"].contains(mode))
+                XCTAssertEqual(files, [stem + ".png"])
+            } catch {
+                XCTAssertTrue(["failure", "empty"].contains(mode), error.localizedDescription)
+                XCTAssertFalse(FileManager.default.fileExists(atPath: stem + ".png"))
+            }
+            let attempts = try String(contentsOfFile: FilePath.combine(folder, "attempts"), encoding: .utf8).split(separator: "\n")
+            XCTAssertEqual(attempts.count, ["retry", "empty"].contains(mode) ? 2 : 1, mode)
+        }
     }
 
     func testOddSizedSurroundVideoIsEncodedEverywhere() async throws {

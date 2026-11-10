@@ -8,9 +8,10 @@ public final class RoutePlanner {
     private let penalty: (Converter) -> Int
     public init(_ converters: [Converter], priorityPenalty: @escaping (Converter) -> Int = { _ in 0 }) { self.converters = converters; penalty = priorityPenalty }
     public func canConvert(_ from: String, _ to: String) -> Bool { plan(from, to) != nil }
-    public func plan(_ from: String, _ to: String) -> Route? {
+    public func plan(_ from: String, _ to: String, textExtraction: Bool = true) -> Route? {
         let from = from.lowercased(), to = to.lowercased()
-        let all = converters.flatMap { c in c.edges.map { (c, ConversionEdge($0.from.lowercased(), $0.to.lowercased(), $0.cost + penalty(c))) } }
+        if Self.sourceLacksContent(from, to) { return nil }
+        let all = converters.flatMap { c in c.edges.map { (c, ConversionEdge($0.from.lowercased(), $0.to.lowercased(), $0.cost + penalty(c), isTextExtraction: $0.isTextExtraction)) } }
         if from == to {
             guard let best = all.filter({ $0.1.from == from && $0.1.to == to }).min(by: { $0.1.cost < $1.1.cost }) else { return nil }
             return Route(steps: [RouteStep(converter: best.0, from: from, to: to)], cost: best.1.cost)
@@ -23,6 +24,9 @@ public final class RoutePlanner {
             if node == to { break }
             if hops[node]! >= Self.maxSteps { continue }
             for (converter, edge) in edges where edge.from == node {
+                // Do not discard a rendered page just to bridge between formats. Reading an original PDF's text
+                // or explicitly requesting TXT keeps the existing extraction route, unless a re-plan turns it off.
+                if edge.isTextExtraction, !textExtraction || (node != from && edge.to != to) { continue }
                 let next = cost + edge.cost
                 if let known = dist[edge.to], known <= next { continue }
                 dist[edge.to] = next; hops[edge.to] = hops[node]! + 1
@@ -33,6 +37,14 @@ public final class RoutePlanner {
         var steps: [RouteStep] = [], node = to
         while node != from { let p = prev[node]!; steps.append(p.1); node = p.0 }
         return Route(steps: steps.reversed(), cost: dist[to]!)
+    }
+
+    /// Routes that cannot give the target's content are never offered: only video and audio files carry sound, and a
+    /// video's text would be what OCR reads in one still frame (pictures and scans reach TXT through PDF and OCR).
+    static func sourceLacksContent(_ from: String, _ to: String) -> Bool {
+        guard let source = FormatRegistry.find(id: from)?.category, let target = FormatRegistry.find(id: to) else { return false }
+        if target.category == .audio { return source != .video && source != .audio }
+        return target.id == "txt" && source == .video
     }
 }
 

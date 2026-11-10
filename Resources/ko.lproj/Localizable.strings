@@ -385,7 +385,7 @@
 "engines.error.detach" = "디스크 이미지를 추출하지 못했습니다. Finder에서 추출한 뒤 다시 시도하세요.";
 "engines.error.install" = "설치에 실패했습니다. 기존 엔진은 유지됩니다.";
 "engines.guidance.macos" = "이 Mac에 맞는 검증된 다운로드가 없습니다. 엔진을 직접 설치하고 아래에서 프로그램이나 앱을 선택하세요.";
-"engines.guidance.macos.ffmpeg" = "Homebrew로 FFmpeg를 설치한 뒤(brew install ffmpeg) 상태를 새로 고치거나 아래에서 bin 폴더를 선택하세요.";
+"engines.guidance.macos.ffmpeg" = "Homebrew로 FFmpeg를 설치한 뒤(brew install ffmpeg-full), brew --prefix ffmpeg-full로 확인한 경로 아래의 bin 폴더를 선택하세요.";
 "engines.guidance.macos.ghostscript" = "Homebrew로 Ghostscript를 설치한 뒤(brew install ghostscript) 상태를 새로 고치거나 아래에서 bin 폴더를 선택하세요.";
 "engines.package.pandoc.name" = "Pandoc";
 "engines.package.calibre.name" = "Calibre";

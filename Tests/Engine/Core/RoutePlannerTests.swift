@@ -21,6 +21,51 @@ final class RoutePlannerTests: XCTestCase {
         XCTAssertNotNil(RoutePlanner([c]).plan("a", "d")); XCTAssertNil(RoutePlanner([c]).plan("a", "e"))
         XCTAssertNotNil(RoutePlanner([CoreFakeConverter("self", ConversionEdge("jpg", "jpg"))]).plan("jpg", "jpg"))
     }
+    func testGeneratedPdfDoesNotUseTextExtractionToReachRichDocuments() {
+        let engines = [
+            CoreFakeConverter("vector", ConversionEdge("svg", "pdf")),
+            CoreFakeConverter("pdf-text", ConversionEdge("pdf", "txt", 10, isTextExtraction: true)),
+            CoreFakeConverter("documents", ConversionEdge("pdf", "docx", 14), ConversionEdge("docx", "odt"),
+                ConversionEdge("txt", "odt"), ConversionEdge("txt", "txtz"), ConversionEdge("docx", "txtz")),
+        ]
+        // Include a penalty so rebuilding edges cannot accidentally lose the extraction flag.
+        let planner = RoutePlanner(engines, priorityPenalty: { _ in 3 })
+        XCTAssertEqual(planner.plan("svg", "odt")?.steps.map(\.to), ["pdf", "docx", "odt"])
+        XCTAssertEqual(planner.plan("svg", "txt")?.steps.map(\.to), ["pdf", "txt"])
+        XCTAssertEqual(planner.plan("svg", "txtz")?.steps.map(\.to), ["pdf", "docx", "txtz"])
+    }
+    func testRealImageDocumentRoutesPreservePagesAndTextRequestsStayExplicit() {
+        let engines = EngineRegistry.createAll(EngineEnvironment(dataDirectory: FileManager.default.temporaryDirectory.path))
+        let priority = AppSettings().enginePriority
+        // Test default costs assuming all engines are available, without probing external programs.
+        let planner = RoutePlanner(engines, priorityPenalty: { min(priority.firstIndex(of: $0.id) ?? priority.count, 9) })
+        XCTAssertEqual(planner.plan("svg", "odt")?.steps.map { $0.converter.id }, ["vector", "docx-writer", "libreoffice"])
+        XCTAssertEqual(planner.plan("webp", "epub")?.steps.map { $0.converter.id }, ["pdfsharp", "docx-writer", "ebook"])
+        XCTAssertEqual(planner.plan("png", "txtz")?.steps.map { $0.converter.id }, ["pdfsharp", "docx-writer", "ebook"])
+        XCTAssertEqual(planner.plan("png", "txt")?.steps.map { $0.converter.id }, ["pdfsharp", "pdf-text"])
+        XCTAssertEqual(planner.plan("pdf", "txt")?.steps.map { $0.converter.id }, ["pdf-text"])
+        // An original PDF keeps its text route; the queue's no-text re-plan reaches the target through the page pictures.
+        XCTAssertEqual(planner.plan("pdf", "epub")?.steps.map { $0.converter.id }, ["pdf-text", "ebook"])
+        XCTAssertEqual(planner.plan("pdf", "epub", textExtraction: false)?.steps.map { $0.converter.id }, ["docx-writer", "ebook"])
+    }
+    func testRoutesNeverPromiseSoundOrTextTheSourceCannotHave() {
+        let engines = EngineRegistry.createAll(EngineEnvironment(dataDirectory: FileManager.default.temporaryDirectory.path))
+        let planner = RoutePlanner(engines)
+        // Pictures, PDFs and drawings reached audio through a still video, which has no sound to extract.
+        for (from, to) in [("png", "mp3"), ("gif", "m4a"), ("heic", "wav"), ("pdf", "opus"), ("svg", "ogg"), ("dxf", "flac")] {
+            XCTAssertNil(planner.plan(from, to), "\(from) → \(to)")
+        }
+        // A video's TXT would be OCR of one still frame; pictures and comics reach TXT through PDF pages and OCR.
+        for from in ["mp4", "MXF", "webm"] { XCTAssertNil(planner.plan(from, "txt"), from) }
+        for from in ["png", "JPG", "psd", "jxl", "cbz", "cbr"] { XCTAssertEqual(planner.plan(from, "txt")?.steps.last?.converter.id, "pdf-text", from) }
+        for (from, to) in [("mp4", "mp3"), ("mkv", "wav"), ("wav", "mp3"), ("flac", "flac"), ("svg", "txt"), ("dxf", "txt"),
+                           ("pdf", "txt"), ("docx", "txt"), ("epub", "txt"), ("png", "md"), ("png", "epub"), ("cbz", "epub"),
+                           ("mp4", "pdf"), ("png", "mp4")] {
+            XCTAssertNotNil(planner.plan(from, to), "\(from) → \(to)")
+        }
+        // Formats the registry does not know keep the plain graph search.
+        XCTAssertFalse(RoutePlanner.sourceLacksContent("a", "txt"))
+    }
     func testCatalogAvailabilityPriorityCacheAndAssumptions() {
         let c = CoreFakeConverter("office", ConversionEdge("xlsx", "pdf")); c.available = false
         let catalog = ConverterCatalog([c, CoreFakeConverter("image", ConversionEdge("pdf", "png"))])

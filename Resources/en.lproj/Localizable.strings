@@ -385,7 +385,7 @@
 "engines.error.detach" = "The disk image could not be ejected. Eject it in Finder before retrying.";
 "engines.error.install" = "Installation failed. Existing engines were preserved.";
 "engines.guidance.macos" = "No pinned download is available for this Mac. Install the engine manually and select its program or app below.";
-"engines.guidance.macos.ffmpeg" = "Install FFmpeg with Homebrew (brew install ffmpeg), then refresh or select its bin folder below.";
+"engines.guidance.macos.ffmpeg" = "Install FFmpeg with Homebrew (brew install ffmpeg-full), then select its bin folder below. Find the installation path with brew --prefix ffmpeg-full.";
 "engines.guidance.macos.ghostscript" = "Install Ghostscript with Homebrew (brew install ghostscript), then refresh or select its bin folder below.";
 "engines.package.pandoc.name" = "Pandoc";
 "engines.package.calibre.name" = "Calibre";

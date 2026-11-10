@@ -63,6 +63,22 @@ final class AvifEncoderTests: XCTestCase {
         XCTAssertEqual(try AvifBoxes(folder + "/colour.avif").colour.map(\.chroma), [[0, 0]])
     }
 
+    func testExactImageIOPixelsSkipTheSecondEncode() throws {
+        let folder = GraphicsTestKit.folder(), path = folder + "/exact.avif", helper = folder + "/unexpected.sh"
+        let bytes = try Self.imageIO(Self.prepared(Self.colour(64, 48), quality: 60))
+        try bytes.write(to: URL(fileURLWithPath: path))
+        let frame = try Self.prepared(GraphicsTestKit.decode(path).frames[0], quality: 60)
+        let (samples, channels) = CodecPixels.straight(frame.image)
+        XCTAssertFalse(AvifEncoder.isGray(samples, channels))
+        let errors = try XCTUnwrap(AvifEncoder.errors(bytes, ImagePixels.bitmap(frame.image)))
+        XCTAssertEqual(errors.colour, 0); XCTAssertEqual(errors.alpha, 0)
+        try "#!/bin/sh\ntouch '\(folder)/called'\nexit 42\n".write(toFile: helper, atomically: true, encoding: .utf8)
+        chmod(helper, 0o755)
+        XCTAssertFalse(try AvifEncoder.improve([frame], at: path, helper: helper))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder + "/called"))
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: path)), bytes)
+    }
+
     func testANativeFileThatKeepsLessThanImageIOsIsNotUsed() throws {
         let folder = GraphicsTestKit.folder()
         let frame = try Self.prepared(Self.colour(64, 48), quality: 60), path = folder + "/kept.avif"
@@ -487,11 +503,18 @@ final class AvifEncoderTests: XCTestCase {
         }
         let garbage = try helper("garbage", "printf 'not an AVIF file' > \"$2\"\nexit 0\n")
         XCTAssertThrowsError(try AvifEncoder.improve([frame], at: folder + "/garbage.avif", helper: garbage))
-        let late = try helper("late", "printf 'partial' > \"$2\"\nexec /bin/sleep 30\n")
+        let ready = folder + "/late-ready"
+        let late = try helper("late", "printf 'partial' > \"$2\"\ntouch '\(ready)'\nexec /bin/sleep 30\n")
         let task = Task { try AvifEncoder.improve([frame], at: folder + "/late.avif", helper: late) }
-        try await Task.sleep(nanoseconds: 500_000_000)
+        defer { task.cancel() }
+        for _ in 0..<500 {
+            if FileManager.default.fileExists(atPath: ready) { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let wrotePartialOutput = FileManager.default.fileExists(atPath: ready)
         task.cancel()
         do { _ = try await task.value; XCTFail("expected cancellation") } catch is CancellationError {}
+        XCTAssertTrue(wrotePartialOutput, "The helper must write partial output before cancellation.")
 
         for name in ["failing", "garbage", "late"] { XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: folder + "/\(name).avif")), imageIO, name) }
         let inputs = try String(contentsOfFile: folder + "/inputs", encoding: .utf8).split(separator: "\n").map(String.init)

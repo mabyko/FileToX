@@ -4,6 +4,7 @@
 
 import AppKit
 import CoreGraphics
+import CoreText
 import Foundation
 
 /// SVG → PDF and SVG → bitmap.
@@ -24,12 +25,14 @@ enum SvgRenderer {
         let nativeData: Data?
         /// The SVG viewport (width/height or viewBox) in CSS pixels.
         let bounds: CGRect
+        /// The glyphs of plainly visible text in viewport pixels, drawn invisibly over their outlines in PDF output.
+        var text: [SvgNormalizer.GlyphRun] = []
     }
 
     /// Loads an SVG or SVGZ (gzip) file.
     static func load(_ path: String) throws -> Drawing {
         let bytes = try readSvgBytes(path)
-        let prepared = SvgNormalizer.normalize(bytes, baseDirectory: FilePath.directoryName(FilePath.fullPath(path)))
+        let (prepared, text) = SvgNormalizer.prepare(bytes, baseDirectory: FilePath.directoryName(FilePath.fullPath(path)))
         guard let image = NSImage(data: prepared), image.representations.first != nil else {
             throw ConversionError("The SVG file could not be read: it is not a drawing AppKit can parse.")
         }
@@ -37,7 +40,9 @@ enum SvgRenderer {
         guard size.width > 0, size.height > 0, size.width.isFinite, size.height.isFinite else {
             throw ConversionError("The SVG file has no drawable content or no size.")
         }
-        return Drawing(image: image, nativeData: NativeSvgRasterizer.supports(bytes) ? prepared : nil, bounds: CGRect(origin: .zero, size: size))
+        // The glyphs lie on the outlines only in the viewport they were placed in; CoreSVG sizing it otherwise drops them.
+        let glyphs = text.flatMap { abs($0.viewport.width - size.width) < 0.01 && abs($0.viewport.height - size.height) < 0.01 ? $0.runs : nil }
+        return Drawing(image: image, nativeData: NativeSvgRasterizer.supports(bytes) ? prepared : nil, bounds: CGRect(origin: .zero, size: size), text: glyphs ?? [])
     }
 
     /// The file's SVG text as bytes: SVGZ (or a gzipped .svg) is decompressed.
@@ -54,8 +59,9 @@ enum SvgRenderer {
     /// True when the data starts with the gzip magic number.
     static func isGzip(_ data: Data) -> Bool { data.count >= 2 && data[data.startIndex] == 0x1F && data[data.startIndex + 1] == 0x8B }
 
-    /// Writes a one-page PDF the size of the drawing. Paths, gradients and text stay vector (text as glyph outlines);
-    /// effects PDF can't express (filters such as blur, masks) are rasterized by CoreSVG.
+    /// Writes a one-page PDF the size of the drawing. Paths, gradients and text stay vector (text as glyph outlines, the
+    /// plainly visible text also as invisible glyphs over them, so the PDF can be searched); effects PDF can't express
+    /// (filters such as blur, masks) are rasterized by CoreSVG.
     static func writePdf(_ drawing: Drawing, _ output: String, title: String, pdfA: Bool) throws {
         _ = pdfA // shortcut: no PDF/A (Core Graphics can't write it, Filee's Skia could), upgrade if PDF/A drawings are needed
         let pointsPerPixel: CGFloat = 72 / CGFloat(cssDpi)
@@ -67,6 +73,7 @@ enum SvgRenderer {
             throw ConversionError("Could not create the PDF.")
         }
         context.beginPDFPage(nil)
+        drawText(drawing.text, into: context, page: CGAffineTransform(a: pointsPerPixel, b: 0, c: 0, d: -pointsPerPixel, tx: 0, ty: mediaBox.height))
         draw(drawing, into: context, size: mediaBox.size)
         context.endPDFPage()
         context.closePDF()
@@ -114,6 +121,25 @@ enum SvgRenderer {
         guard let image = context.makeImage() else { throw ConversionError("Could not read the rendered SVG.") }
         let dpi = Double(cssDpi * scale)
         return ImageFrame(image: image, dpi: (dpi, dpi))
+    }
+
+    /// Text a PDF reader can search and select without changing the look: the glyphs in PDF's invisible text rendering
+    /// mode (as a scan's OCR layer), `page` mapping viewport pixels to the page.
+    private static func drawText(_ runs: [SvgNormalizer.GlyphRun], into context: CGContext, page: CGAffineTransform) {
+        guard !runs.isEmpty else { return }
+        context.saveGState()
+        defer {
+            context.restoreGState()
+            context.textMatrix = .identity // not part of the graphics state
+        }
+        context.setTextDrawingMode(.invisible)
+        for run in runs {
+            context.saveGState()
+            context.concatenate(run.transform.concatenating(page))
+            context.textMatrix = .identity
+            CTFontDrawGlyphs(run.font, run.glyphs, run.positions, run.glyphs.count, context)
+            context.restoreGState()
+        }
     }
 
     private static func draw(_ drawing: Drawing, into context: CGContext, size: CGSize) {

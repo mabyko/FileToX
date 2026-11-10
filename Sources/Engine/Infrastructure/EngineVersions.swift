@@ -63,15 +63,6 @@ public enum EngineDownloads {
         !package.components.isEmpty && package.components.allSatisfy { components[$0] != nil }
     }
 
-    public static func unavailableReason(_ package: EnginePackage) -> String? {
-        if canDownload(package) { return nil }
-        switch package.id {
-        case "ffmpeg": return "Install FFmpeg with Homebrew (brew install ffmpeg), then check again or select its bin folder."
-        case "ghostscript": return "Install Ghostscript with Homebrew (brew install ghostscript), then check again or select its bin folder."
-        default: return "No Filee download is available for \(runtimeIdentifier). Install \(package.id) for this Mac and select its program or .app folder."
-        }
-    }
-
     /// Packages whose download is smaller than this (bytes) are suggested.
     public static let suggestLimit: Int64 = 60_000_000
 

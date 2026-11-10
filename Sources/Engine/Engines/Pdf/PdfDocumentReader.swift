@@ -6,14 +6,21 @@
 // paragraphs and pictures are put in reading order, also on two-column pages (PdfDocumentReader+Layout.swift). Headings
 // come from font sizes, bold / italic from the fonts, page size and margins from the page. Headers and footers that
 // repeat on the pages (and bare page numbers) are left out. A page without text (a scan) becomes the rendered page as
-// a picture, so the result is complete; there is no OCR.
+// a picture, so the result is complete; only plain text (`readText` with `recognize`) reads such pages with Vision OCR.
 //
 // Rows laid out with tab stops (a number, a label and a date far to the right) stay one line with tabs at the PDF's
 // positions, and a line that ends early although the next line's first word would have fitted (an address) keeps its
 // line break.
 //
-// Not converted: tables (their cells come out as paragraphs in reading order), vector drawings on text pages,
-// annotations other than links, form fields.
+// A text page's vector drawings, shadings, inline images and stencil masks can't be taken out like image XObjects: the
+// page rendered without its text keeps them, with the page's other pictures in their place, as one picture behind the
+// text at its place on the paper. The text stays text and is not shown twice. Visible text the extraction can't keep
+// (glyphs without Unicode, also in forms) is drawn there as well, also on pages without other drawings: PDFium leaves
+// out only the glyphs that are letters of the kept words (PdfiumDocument.textLeftOut); the rest stays a picture, not
+// text. There, the page's image XObjects stay pictures as they are unless that ink is on them.
+//
+// Not converted: tables (their cells come out as paragraphs in reading order), annotations other than links (a drawing
+// layer shows their appearance), form fields.
 
 import CoreGraphics
 import Foundation
@@ -43,29 +50,40 @@ final class PdfDocumentReader {
     private let path: String
     private let mediaFolder: String
     private let textOnly: Bool
+    /// Also the text that is not part of the look: invisible text (a scan's OCR layer), and turned pages read as text.
+    private let allText: Bool
     private var pictures = 0
     private var raster: PdfiumDocument?
 
-    private init(_ path: String, _ mediaFolder: String, textOnly: Bool) {
+    private init(_ path: String, _ mediaFolder: String, textOnly: Bool, allText: Bool = false) {
         self.path = path
         self.mediaFolder = mediaFolder
         self.textOnly = textOnly
+        self.allText = textOnly || allText
     }
 
-    /// Reads `path` with pictures (extracted into `mediaFolder`) and scans.
-    static func read(_ path: String, _ mediaFolder: String) throws -> HDocument {
-        try PdfDocumentReader(path, mediaFolder, textOnly: false).readDocument()
+    /// Reads `path` with pictures (extracted into `mediaFolder`) and scans. `allText` keeps the text that is not part of
+    /// the look as well, for outputs that keep every page with its text (`ConversionStep.keepsPages`).
+    static func read(_ path: String, _ mediaFolder: String, allText: Bool = false) throws -> HDocument {
+        try PdfDocumentReader(path, mediaFolder, textOnly: false, allText: allText).readDocument()
     }
+
+    /// A page with visible text, not turned: the words its text keeps (where they are shown, in page space, and their
+    /// text), and whether it paints drawings (`ContentScan.drawings`).
+    typealias TextPage = (index: Int, words: [PdfiumDocument.Word], drawn: Bool)
 
     /// Reads only the text, including invisible text (the OCR layer of scanned PDFs); pictures and scans are left out.
-    static func readText(_ path: String) async throws -> HDocument {
+    /// With `recognize`, Vision reads the pages without text (`TextRecognition`), and their text joins in reading order.
+    /// `pagesWithoutText` are the indexes of the pages that had no text to read (scans, drawings, blank pages);
+    /// `textPages` the pages with visible text, to look at without it (see `showsAnything(_:textPages:)`).
+    static func readText(_ path: String, recognize: Bool = false, progress: ProgressHandler? = nil) async throws
+        -> (document: HDocument, pagesWithoutText: [Int], needsPictures: Bool, textPages: [TextPage]) {
         try Task.checkCancellation()
         let reader = PdfDocumentReader(path, "", textOnly: true)
         let pdf = try reader.openDocument()
         let title = nullIfBlank(pdf.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String)
-        let workers = min(8, ProcessInfo.processInfo.activeProcessorCount, pdf.pageCount)
-        if workers <= 1 { return try reader.readDocument() }
         let pageCount = pdf.pageCount
+        let workers = min(8, ProcessInfo.processInfo.activeProcessorCount, pageCount)
         let pages = try await withThrowingTaskGroup(of: [PageContent].self) { group in
             for worker in 0..<workers {
                 group.addTask {
@@ -87,7 +105,92 @@ final class PdfDocumentReader {
             return pages.sorted { $0.index < $1.index }
         }
         try Task.checkCancellation()
-        return reader.buildDocument(pages, title)
+        // No page could be read: unlike a scan without text, there is nothing page pictures could keep.
+        guard !pages.isEmpty else { throw ConversionError("\(FilePath.fileName(path)) is not a PDF file that can be read.") }
+        if recognize { try await recognizeScans(path, pages.filter(\.scanned), progress) }
+        return (reader.buildDocument(pages, title), pages.filter(\.scanned).map(\.index), pages.contains { $0.needsPictures },
+                pages.compactMap { page in page.keptWords.map { (page.index, $0, page.drawn) } })
+    }
+
+    /// Reads the scans' text with Vision, four pages at a time, rendered at 300 dpi and at most 4,000 pixels high or wide.
+    /// A page with recognized text becomes a text page.
+    private static func recognizeScans(_ path: String, _ scans: [PageContent], _ progress: ProgressHandler?) async throws {
+        guard !scans.isEmpty else { return }
+        let raster = try PdfiumDocument(path)
+        var found = [(lines: [TextRecognition.Line], sideways: Bool)](repeating: ([], false), count: scans.count)
+        try await withThrowingTaskGroup(of: (Int, (lines: [TextRecognition.Line], sideways: Bool)).self) { group in
+            var next = 0, done = 0
+            while done < scans.count {
+                while next < scans.count && next - done < 4 {
+                    let (s, index) = (next, scans[next].index)
+                    let dpi = max(1, min(300, Int(4000 * 72 / max(1, max(scans[next].width, scans[next].height)))))
+                    group.addTask { (s, try await TextRecognition.lines(in: try raster.render(index, dpi: dpi))) }
+                    next += 1
+                }
+                guard let (s, read) = try await group.next() else { break }
+                found[s] = read
+                done += 1
+                progress?(Double(done) / Double(scans.count))
+            }
+        }
+        for (page, read) in zip(scans, found) where !read.lines.isEmpty {
+            // A page on its side is read as turned upright: its lines run across the paper's height.
+            page.items = paragraphs(recognizedLines(read.lines, read.sideways ? page.height : page.width, read.sideways ? page.width : page.height))
+            page.scanned = false
+        }
+    }
+
+    /// Recognized lines as the lines of a page `width` × `height` points large, top to bottom like `lines(_:)` gives them.
+    /// Vision's boxes of one paragraph's lines differ by a few points, so a height near the page's usual one counts as it.
+    private static func recognizedLines(_ lines: [TextRecognition.Line], _ width: Double, _ height: Double) -> [TextLine] {
+        let boxes = lines.map { line in line.dropFirst().reduce(line[0].box) { $0.union($1.box) } }
+        let usual = median(boxes.map { Double($0.height) * height })
+        return zip(lines, boxes).map { line, box -> TextLine in
+            let (top, bottom) = (Double(box.maxY) * height, Double(box.minY) * height)
+            let size = max(1, 0.8 * (abs(top - bottom - usual) <= 0.25 * usual ? usual : top - bottom)) // a line box is ~1.25 em
+            let baseline = (top + bottom) / 2 - 0.3 * size
+            let format = HCharFormat(size: Int((size * 2).rounded(.toNearestOrEven) * 50))
+            return TextLine(line.map {
+                TextWord(text: $0.text, left: Double($0.box.minX) * width, right: Double($0.box.maxX) * width, top: top, bottom: bottom,
+                         baseline: baseline, size: size, format: format, link: nil)
+            })
+        }.sorted { $0.baseline != $1.baseline ? $0.baseline > $1.baseline : $0.left < $1.left }
+    }
+
+    /// Use the output's resolution so a smaller preview cannot classify visible content as blank.
+    static func showsAnything(_ path: String, _ pages: [Int]) throws -> Bool {
+        try Task.checkCancellation()
+        guard !pages.isEmpty else { return false }
+        let raster = try PdfiumDocument(path)
+        for index in pages {
+            try Task.checkCancellation()
+            if try shows(raster.render(index, dpi: renderDpi)) { return true }
+        }
+        return false
+    }
+
+    /// The text pages without the text they keep: whether one shows anything, drawings or visible text the extraction
+    /// leaves out.
+    static func showsAnything(_ path: String, textPages: [TextPage]) throws -> Bool {
+        try Task.checkCancellation()
+        guard !textPages.isEmpty else { return false }
+        let raster = try PdfiumDocument(path)
+        for page in textPages {
+            if try page.drawn || raster.textLeftOut(page.index, keeping: page.words),
+               try shows(raster.render(page.index, dpi: renderDpi, withoutTextAt: page.words)) { return true }
+        }
+        return false
+    }
+
+    /// Whether a rendering shows anything but white paper (in `area`: pixels, y down; all of it when nil).
+    private static func shows(_ image: CGImage, in area: CGRect? = nil) throws -> Bool {
+        guard let pixels = image.dataProvider?.data as Data? else { throw ConversionError("The page could not be rendered.") }
+        guard let area = area?.integral.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height)) else { return pixels.contains { $0 != 0xFF } }
+        return !area.isNull && pixels.withUnsafeBytes { bytes in
+            (Int(area.minY)..<Int(area.maxY)).contains { y in
+                bytes[(y * image.bytesPerRow + 4 * Int(area.minX))..<(y * image.bytesPerRow + 4 * Int(area.maxX))].contains { $0 != 0xFF }
+            }
+        }
     }
 
     // ───────────────────────── Model of a page ─────────────────────────
@@ -152,6 +255,13 @@ final class PdfDocumentReader {
         var items: [Item] = []
         var scanned = false
         var scanPath: String?
+        var needsPictures = false
+        /// Visible text with drawings (`ContentScan.drawings`); `drawing` is the page without the text it keeps, if that
+        /// shows anything (drawings, visible text the extraction leaves out).
+        var drawn = false
+        var drawing: (path: String, bounds: CGRect)?
+        /// Visible text, not turned: the words its text keeps (where they are shown, in page space, and their text).
+        var keptWords: [PdfiumDocument.Word]?
 
         init(_ index: Int, _ width: Double, _ height: Double) {
             self.index = index
@@ -207,7 +317,10 @@ final class PdfDocumentReader {
         }
 
         let scan = page.pageRef.map(Self.scanContent) ?? ContentScan()
+        content.needsPictures = !scan.images.isEmpty || rotated
         var words: [TextWord] = []
+        var kept: [PdfiumDocument.Word] = [] // where the words are shown, in page space, and their text
+        var hasVisibleText = false
         var previousFormat: (letter: PageLetter, size: Double, format: HCharFormat)?
         for word in Self.pageWords(page, scan: scan) {
             let letters = word.letters
@@ -215,7 +328,10 @@ final class PdfDocumentReader {
             let text = letters.map(\.text).joined()
             guard !text.allSatisfy(\.isWhitespace) else { continue }
             // Invisible text is the OCR layer of a scan: part of the text, not of the page's look.
-            if !textOnly && letters.allSatisfy({ $0.mode == 3 }) { continue }
+            let invisible = letters.allSatisfy { $0.mode == 3 }
+            if !allText && invisible { continue }
+            hasVisibleText = hasVisibleText || !invisible
+            kept.append((word.bounds, text))
             let glyphs = letters.dropFirst().reduce(letters[0].box) { $0.union($1.box) }
             let box = Self.shift(CGRect(x: word.left, y: glyphs.minY, width: word.right - word.left, height: glyphs.height), crop)
             let size = Self.median(letters.map { Double($0.size) })
@@ -236,18 +352,38 @@ final class PdfDocumentReader {
                                   format: format, link: link))
         }
 
-        if words.isEmpty || (rotated && !textOnly) {
-            // A scan, a page of drawings, or a turned page: the rendered page keeps everything.
+        if words.isEmpty || (rotated && !allText) {
+            // A scan, a page of drawings, or a turned page (unless all text is read): the rendered page keeps everything.
             content.scanned = true
             if !textOnly { content.scanPath = try renderScan(index) }
             return content
         }
 
+        content.needsPictures = content.needsPictures || !hasVisibleText
+        content.drawn = scan.drawings && hasVisibleText && !rotated
+        if hasVisibleText && !rotated { content.keptWords = kept }
         let lines = Self.lines(words)
         var items = Self.paragraphs(lines)
         if let joined = Self.joinTabbedRows(lines, items) { items = Self.paragraphs(joined) }
         content.items = items
-        if !textOnly { content.items += try pictures(scan, content, crop) }
+        if !textOnly {
+            if rotated || !hasVisibleText {
+                // Render OCR-only pages whole: image extraction alone loses masks and vector outlines.
+                let picture = Item()
+                picture.picturePath = try renderScan(index)
+                picture.pictureBounds = CGRect(x: 0, y: 0, width: content.width, height: content.height)
+                content.items.append(picture)
+            } else if content.drawn {
+                content.drawing = try drawing(content, kept).drawing
+            } else if try pdfium().textLeftOut(index, keeping: kept) {
+                // Visible text the extraction leaves out, drawn where it is; the pictures it isn't on stay as they are.
+                let drawn = try drawing(content, kept, apart: page.rotation % 360 == 0 ? images(scan, content, crop, separating: true) : [])
+                content.drawing = drawn.drawing
+                content.items += try pictures(drawn.apart, content)
+            } else {
+                content.items += try pictures(images(scan, content, crop), content)
+            }
+        }
         return content
     }
 
@@ -307,21 +443,42 @@ final class PdfDocumentReader {
 
     // ───────────────────────── Pictures ─────────────────────────
 
-    /// Pictures of a text page. A picture covering the page behind text is the scan under an OCR layer: skipped.
-    private func pictures(_ scan: ContentScan, _ content: PageContent, _ crop: CGRect) throws -> [Item] {
-        var result: [Item] = []
-        var rendered: CGImage?
-        for image in scan.images.prefix(200) {
-            try Task.checkCancellation()
+    /// An image XObject to take out as a picture, and its place on the paper.
+    private typealias Picture = (image: ContentScan.PlacedImage, bounds: CGRect)
+
+    /// The page's image XObjects to take out as pictures. Full-page scans remain alongside their extracted text when the
+    /// output must keep page content.
+    private func images(_ scan: ContentScan, _ content: PageContent, _ crop: CGRect, separating: Bool = false) -> [Picture] {
+        guard !separating || !scan.imagesNeedComposition else { return [] }
+        return scan.images.prefix(200).enumerated().compactMap { index, image in
             var bounds = Self.shift(image.box, crop)
+            if separating {
+                let page = CGRect(x: 0, y: 0, width: content.width, height: content.height)
+                guard page.insetBy(dx: -0.5, dy: -0.5).contains(bounds),
+                      !scan.images.enumerated().contains(where: { $0.offset != index && $0.element.box.intersects(image.box) }) else { return nil }
+            }
             bounds = CGRect(x: max(0, bounds.minX), y: max(0, bounds.minY), width: 0, height: 0)
                 .union(CGRect(x: min(CGFloat(content.width), bounds.maxX), y: min(CGFloat(content.height), bounds.maxY), width: 0, height: 0))
-            guard let dictionary = CGPDFStreamGetDictionary(image.stream) else { continue }
+            guard let dictionary = CGPDFStreamGetDictionary(image.stream) else { return nil }
+            if separating {
+                var mask: CGPDFObjectRef?
+                var inData: CGPDFInteger = 0
+                guard !CGPDFDictionaryGetObject(dictionary, "SMask", &mask), !CGPDFDictionaryGetObject(dictionary, "Mask", &mask),
+                      !CGPDFDictionaryGetInteger(dictionary, "SMaskInData", &inData) || inData == 0 else { return nil }
+            }
             var mask: CGPDFBoolean = 0
             CGPDFDictionaryGetBoolean(dictionary, "ImageMask", &mask)
-            if bounds.width < 6 || bounds.height < 6 || mask != 0 { continue }
-            if Double(bounds.width * bounds.height) > 0.85 * content.width * content.height { continue }
+            if bounds.width < 6 || bounds.height < 6 || mask != 0 { return nil }
+            if !allText && Double(bounds.width * bounds.height) > 0.85 * content.width * content.height { return nil }
+            return (image, bounds)
+        }
+    }
 
+    private func pictures(_ images: [Picture], _ content: PageContent) throws -> [Item] {
+        var result: [Item] = []
+        var rendered: CGImage?
+        for (image, bounds) in images {
+            try Task.checkCancellation()
             var path: String?
             if let jpeg = Self.plainJpeg(image.stream) {
                 path = try newMediaPath("jpg")
@@ -342,6 +499,43 @@ final class PdfDocumentReader {
             }
         }
         return result
+    }
+
+    /// The page rendered without the text it keeps (the `words`), cut to what isn't white paper: its drawings, pictures and
+    /// the text left out, each in its place; nil when nothing is left. Also without the pictures `apart` (taken out as they
+    /// are instead), except those something it shows is on; it returns the ones it leaves out.
+    private func drawing(_ content: PageContent, _ words: [PdfiumDocument.Word], apart pictures: [Picture] = []) throws
+        -> (drawing: (path: String, bounds: CGRect)?, apart: [Picture]) {
+        var apart = pictures
+        var page = try pdfium().render(content.index, dpi: Self.renderDpi, withoutTextAt: words, withoutImagesAt: apart.map(\.image.box))
+        let alone = try apart.map { picture in
+            let (scaleX, scaleY) = (Double(page.width) / content.width, Double(page.height) / content.height)
+            return try !Self.shows(page, in: CGRect(x: Double(picture.bounds.minX) * scaleX, y: (content.height - Double(picture.bounds.maxY)) * scaleY,
+                                                    width: Double(picture.bounds.width) * scaleX, height: Double(picture.bounds.height) * scaleY))
+        }
+        if alone.contains(false) {
+            // Ink on a picture (a glyph over it, a picture not taken out under it) can't be put apart: such a picture stays
+            // in the drawing, in its place (one more rendering).
+            apart = zip(apart, alone).filter(\.1).map(\.0)
+            page = try pdfium().render(content.index, dpi: Self.renderDpi, withoutTextAt: words, withoutImagesAt: apart.map(\.image.box))
+        }
+        guard let pixels = page.dataProvider?.data as Data? else { throw ConversionError("The page could not be rendered.") }
+        var (left, top, right, bottom) = (page.width, page.height, -1, -1)
+        pixels.withUnsafeBytes { bytes in
+            for y in 0..<page.height {
+                let row = y * page.bytesPerRow
+                for x in 0..<page.width where bytes[row + 4 * x] != 0xFF || bytes[row + 4 * x + 1] != 0xFF || bytes[row + 4 * x + 2] != 0xFF {
+                    (left, top, right, bottom) = (min(left, x), min(top, y), max(right, x), max(bottom, y))
+                }
+            }
+        }
+        guard right >= 0 else { return (nil, apart) }
+        // A pixel of white around it, so a hairline rule is still wide enough to cut out.
+        (left, top, right, bottom) = (max(0, left - 1), max(0, top - 1), min(page.width, right + 2), min(page.height, bottom + 2))
+        let (scaleX, scaleY) = (content.width / Double(page.width), content.height / Double(page.height))
+        let bounds = CGRect(x: Double(left) * scaleX, y: content.height - Double(bottom) * scaleY,
+                            width: Double(right - left) * scaleX, height: Double(bottom - top) * scaleY)
+        return (try crop(page, bounds, content).map { ($0, bounds) }, apart)
     }
 
     /// A DCT (JPEG) stream in gray or RGB without a decode array: the bytes are a JPEG file as they are.
@@ -371,9 +565,13 @@ final class PdfDocumentReader {
         return FilePath.combine(mediaFolder, "pdf-\(pictures).\(ext)")
     }
 
-    private func renderPage(_ index: Int) throws -> CGImage {
+    private func pdfium() throws -> PdfiumDocument {
         if raster == nil { raster = try PdfiumDocument(path) }
-        return try raster!.render(index, dpi: Self.renderDpi)
+        return raster!
+    }
+
+    private func renderPage(_ index: Int) throws -> CGImage {
+        try pdfium().render(index, dpi: Self.renderDpi)
     }
 
     /// The whole page as a JPEG, the format of scans.
@@ -483,6 +681,15 @@ final class PdfDocumentReader {
                     previous = item
                 }
                 if current.blocks.count == first { current.blocks.append(HParagraph()) }
+                if let drawing = page.drawing, let paragraph = current.blocks[first] as? HParagraph {
+                    // Behind the text at its place on the paper: the drawings never push the text or change its order.
+                    let picture = HImage(drawing.path)
+                    picture.width = Self.hwp(Double(drawing.bounds.width))
+                    picture.height = Self.hwp(Double(drawing.bounds.height))
+                    picture.anchor = HAnchor("PAPER", "LEFT", Self.hwp(Double(drawing.bounds.minX)), "PAPER", "TOP",
+                                             Self.hwp(page.height - Double(drawing.bounds.maxY)), "BEHIND_TEXT", true)
+                    paragraph.inlines.insert(picture, at: 0)
+                }
             }
 
             if !newSection, let startOfPage = current.blocks[first] as? HParagraph { startOfPage.pageBreakBefore = true }

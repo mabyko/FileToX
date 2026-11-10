@@ -24,8 +24,10 @@ final class PptxReader {
         let sz = root.element(Self.p + "sldSz")
         let cx = Self.emu(sz, "cx")
         let cy = Self.emu(sz, "cy")
-        let w = Self.hwp(cx > 0 ? cx : 12_192_000)
-        let h = Self.hwp(cy > 0 ? cy : 6_858_000)
+        let width = cx > 0 ? cx : 12_192_000
+        let height = cy > 0 ? cy : 6_858_000
+        let w = Self.hwp(width)
+        let h = Self.hwp(height)
         let section = HSection()
         section.page = HPage(width: w, height: h, left: 0, right: 0, top: 0, bottom: 0, header: 0, footer: 0, gutter: 0)
         for id in root.element(Self.p + "sldIdLst")?.elements(Self.p + "sldId") ?? [] {
@@ -36,7 +38,7 @@ final class PptxReader {
             else { continue }
             let p = HParagraph()
             p.pageBreakBefore = !section.blocks.isEmpty
-            p.inlines = try readSlide(slidePath, slide, w, h)
+            p.inlines = try readSlide(slidePath, slide, width, height)
             section.blocks.append(p)
         }
         if section.blocks.isEmpty { section.blocks.append(HParagraph()) }
@@ -73,6 +75,8 @@ final class PptxReader {
         let masterPath: String?
         let colors: OoxmlColors
         let fonts: ThemeFonts
+        /// Slide frame in EMUs, for content with no usable local or inherited transform.
+        let frame: Bounds
     }
     func readSlide(_ path: String, _ slide: XElement, _ w: Int, _ h: Int) throws -> [HInline] {
         let lp = package.targetOfType(path, "/slideLayout")
@@ -87,11 +91,11 @@ final class PptxReader {
         let colors = OoxmlColors.fromTheme(theme).withMap(map)
         let c = SlideContext(
             slidePath: path, slide: slide, layout: layout, layoutPath: lp, master: master, masterPath: mp,
-            colors: colors, fonts: ThemeFonts.from(theme))
+            colors: colors, fonts: ThemeFonts.from(theme), frame: Bounds(x: 0, y: 0, w: w, h: h))
         var output: [HInline] = []
         if let bg = Self.background(c) {
-            bg.width = w
-            bg.height = h
+            bg.width = Self.hwp(w)
+            bg.height = Self.hwp(h)
             bg.anchor = Self.anchor(0, 0)
             output.append(bg)
         }
@@ -222,17 +226,27 @@ final class PptxReader {
     func shape(_ c: SlideContext, _ path: String, _ e: XElement, _ t: Transform) throws -> HInline? {
         let ph = Self.placeholder(e)
         let (lp, mp) = path == c.slidePath ? Self.inherited(c, ph) : (nil, nil)
-        guard let b = Self.bounds(Self.geometry(e, lp, mp), t), b.w > 0 || b.h > 0 else { return nil }
         let props = e.element(Self.p + "spPr")
         let style = e.element(Self.p + "style")
         let (fill, gradient) = Self.fill(props, c.colors, style?.element(Self.a + "fillRef"))
         let line = Self.line(props, c.colors, style?.element(Self.a + "lnRef"))
         let geom = props?.element(Self.a + "prstGeom")?.attributeValue("prst") ?? "rect"
-        let w = max(1, Self.hwp(b.w))
-        let h = max(1, Self.hwp(b.h))
         let blocks = textBody(
             c, path, e.element(Self.p + "txBody"), ph, lp, mp, c.colors.drawing(style?.element(Self.a + "fontRef")))
-        if geom == "line" || geom == "straightConnector1" { return Self.addLine(e, b, line) }
+        let b: Bounds
+        let usesSlideFrame: Bool
+        if let positioned = Self.bounds(Self.geometry(e, lp, mp), t), positioned.w > 0 || positioned.h > 0 {
+            b = positioned
+            usesSlideFrame = false
+        } else {
+            // Missing geometry must not discard the text. Empty decorations still have nothing to place.
+            guard !DocumentXML.trim(HDocumentWalker.text(HDocumentWalker.inlines(blocks))).isEmpty else { return nil }
+            b = c.frame
+            usesSlideFrame = true
+        }
+        let w = max(1, Self.hwp(b.w))
+        let h = max(1, Self.hwp(b.h))
+        if !usesSlideFrame, geom == "line" || geom == "straightConnector1" { return Self.addLine(e, b, line) }
         let kind: HShapeKind = geom == "ellipse" ? .ellipse : .rectangle
         let corners = geom == "roundRect" ? Self.cornerRatio(props) : 0
         if !blocks.isEmpty {
@@ -246,9 +260,9 @@ final class PptxReader {
             box.width = w
             box.height = h
             box.anchor = Self.anchor(Self.hwp(b.x), Self.hwp(b.y))
-            box.fill = fill
-            box.gradient = gradient
-            box.line = line
+            box.fill = usesSlideFrame ? nil : fill
+            box.gradient = usesSlideFrame ? nil : gradient
+            box.line = usesSlideFrame ? .none : line
             box.shape = kind
             box.cornerRatio = corners
             box.padding = padding
@@ -289,12 +303,22 @@ final class PptxReader {
     }
     func picture(_ c: SlideContext, _ path: String, _ e: XElement, _ t: Transform) throws -> HImage? {
         let (lp, mp) = path == c.slidePath ? Self.inherited(c, Self.placeholder(e)) : (nil, nil)
-        guard let b = Self.bounds(Self.geometry(e, lp, mp), t),
-            let target = package.target(
+        guard let target = package.target(
                 path, e.element(Self.p + "blipFill")?.element(Self.a + "blip")?.attributeValue(Self.r + "embed")),
             [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"].contains(
                 FilePath.extension(target).lowercased()), let file = try package.extract(target, mediaFolder)
         else { return nil }
+        let b: Bounds
+        if let geometry = Self.geometry(e, lp, mp) {
+            guard let positioned = Self.bounds(geometry, t) else { return nil }
+            b = positioned
+        } else if let size = ImageSupport.info(file), size.width > 0 && size.height > 0 {
+            // Fit an unpositioned picture to the slide without stretching it.
+            let scale = min(Double(c.frame.w) / Double(size.width), Double(c.frame.h) / Double(size.height))
+            b = Bounds(x: 0, y: 0, w: Int(Double(size.width) * scale), h: Int(Double(size.height) * scale))
+        } else {
+            b = c.frame
+        }
         let image = HImage(file)
         image.width = max(1, Self.hwp(b.w))
         image.height = max(1, Self.hwp(b.h))

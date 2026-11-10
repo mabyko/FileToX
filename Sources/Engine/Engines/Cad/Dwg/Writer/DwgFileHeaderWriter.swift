@@ -316,7 +316,7 @@ extension ACad {
             gapAmount = 0
             lastPageId = last.pageNumber
             lastSectionAddr = UInt64(bitPattern: last.seeker + Int64(size) - 256)
-            sectionAmount = UInt32(localSectionsMaps.count - 1)
+            sectionAmount = UInt32(localSectionsMaps.count)
             pageMapAddress = UInt64(bitPattern: section.seeker)
         }
 

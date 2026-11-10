@@ -65,14 +65,24 @@ final class FfmpegConverter: Converter {
 
         // Throws for a missing stream before anything is written (an existing file of that name stays untouched).
         let passes = try MediaEncoding.plan(input, output, step.to, step.preset.media, info, step.workDirectory, cover)
+        try await FfmpegCapabilities.read(ffmpeg).validate(passes, target: step.to)
+        func hasOutput() -> Bool {
+            ((try? FileManager.default.attributesOfItem(atPath: output)[.size] as? NSNumber)?.int64Value ?? 0) > 0
+        }
         do {
             var done = 0.0
             for pass in passes {
                 try await Self.runPass(ffmpeg, pass, info.duration, progress, done)
                 done += pass.weight
             }
-            let length = (try? FileManager.default.attributesOfItem(atPath: output)[.size] as? NSNumber)?.int64Value ?? 0
-            if !FileManager.default.fileExists(output) || length == 0 { throw ConversionError("FFmpeg did not write any output.") }
+            if step.to == "png", !hasOutput() {
+                // Short transport streams can seek past their only keyframe and exit successfully without a frame.
+                // Decode from the start to the same 10% timestamp; do not silently substitute the first frame.
+                try Task.checkCancellation()
+                let arguments = try MediaEncoding.posterFrame(input, output, info, decodeFromStart: true)
+                try await Self.runPass(ffmpeg, FfmpegPass(arguments: arguments, weight: 1), info.duration, progress, 0)
+            }
+            if !hasOutput() { throw ConversionError("FFmpeg did not write any output.") }
         } catch {
             // Never leave a half-written file where the user expects a finished one.
             if FileManager.default.fileExists(output) { try? FileManager.default.removeItem(atPath: output) }

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Xcode build phase of the FileToXEngine helper: puts the pinned rhwp and 7-Zip (Tools/fetch-bundled-engines.py,
-# downloaded once into build/) into FileToXEngine.app/Contents/MacOS/engines and signs them before Xcode signs the
+# Xcode build phase of the FileToXEngine helper: puts pinned rhwp, 7-Zip and locally built FFmpeg
+# into FileToXEngine.app/Contents/MacOS/engines and signs them before Xcode signs the
 # helper. EngineEnvironment.findBundled looks for them next to the executable. The AVIF encoder process, built by the
 # FileToXAvifEncoder target, goes next to the helper executable (AvifEncoder.helper).
 set -euo pipefail
@@ -11,6 +11,14 @@ case "${ARCHS:-arm64}" in
     *) echo "FileToX supports Apple Silicon M1 and newer only (ARCHS=arm64)." >&2; exit 1 ;;
 esac
 : "${TARGET_BUILD_DIR:?run from Xcode}" "${EXECUTABLE_FOLDER_PATH:?run from Xcode}"
+ffmpeg_bundle=${FILETOX_FFMPEG_BUNDLE:-$root/build/ffmpeg/ffmpeg}
+if [[ ! -d "$ffmpeg_bundle" ]]; then
+    echo 'Build FFmpeg first: python3 Tools/build-ffmpeg.py --work build/ffmpeg --jobs 6' >&2
+    echo 'For an existing verified bundle, set FILETOX_FFMPEG_BUNDLE to its ffmpeg folder.' >&2
+    exit 1
+fi
+ffmpeg_bundle=$(cd "$ffmpeg_bundle" && pwd -P)
+python3 -I "$root/Tools/build-ffmpeg.py" --verify-bundle "$ffmpeg_bundle"
 
 stage_code() {
     local code_source=$1 code_destination=$2
@@ -28,16 +36,28 @@ notices="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Notices"
 rm -rf "$destination" "$notices"
 mkdir -p "$destination" "$notices"
 # Only executables go next to the helper (code); licences and manuals are resources.
-while IFS= read -r -d '' file; do
-    relative=${file#"$source/"}
-    if file -b "$file" | grep -q 'Mach-O'; then
-        mkdir -p "$destination/$(dirname "$relative")"
-        stage_code "$file" "$destination/$relative"
-    elif [[ "$(basename "$file")" != .filee-component ]]; then
-        mkdir -p "$notices/$(dirname "$relative")"
-        cp -p "$file" "$notices/$relative"
-    fi
-done < <(find "$source" -type f -print0)
+stage_tree() {
+    local tree=$1 prefix=$2 file relative
+    while IFS= read -r -d '' file; do
+        relative=$prefix${file#"$tree/"}
+        if [[ -z "$prefix" && "$relative" == ffmpeg/* ]]; then continue; fi
+        if file -b "$file" | grep -q 'Mach-O'; then
+            mkdir -p "$destination/$(dirname "$relative")"
+            stage_code "$file" "$destination/$relative"
+        elif [[ "$(basename "$file")" != .filee-component ]]; then
+            mkdir -p "$notices/$(dirname "$relative")"
+            cp -p "$file" "$notices/$relative"
+        fi
+    done < <(find "$tree" -type f -print0)
+}
+stage_tree "$source" ""
+mkdir -p "$destination/ffmpeg/bin" "$notices/ffmpeg"
+for program in ffmpeg ffprobe; do
+    stage_code "$ffmpeg_bundle/bin/$program" "$destination/ffmpeg/bin/$program"
+done
+# Build provenance contains local paths; keep it with the build artifacts, not in the app.
+cp -R "$ffmpeg_bundle/LICENSES" "$notices/ffmpeg/"
+if [[ -f "$ffmpeg_bundle/BUILDING.txt" ]]; then cp -p "$ffmpeg_bundle/BUILDING.txt" "$notices/ffmpeg/"; fi
 # Replace the embed phase's universal copy and sign the selected slice before the helper is signed.
 : "${FRAMEWORKS_FOLDER_PATH:?run from Xcode}" "${BUILT_PRODUCTS_DIR:?run from Xcode}"
 stage_code "$root/Vendor/PDFium/lib/libpdfium.dylib" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/libpdfium.dylib"

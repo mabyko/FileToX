@@ -7,7 +7,7 @@ import Foundation
 extension ACad {
     final class DwgReader {
         private let file: DwgStream
-        private var fileHeader: DwgFileHeader!
+        private(set) var fileHeader: DwgFileHeader!
         private var builder: DwgDocumentBuilder!
         private let document = Document(createDefaults: false)
         /// `CadReaderBase._encoding`: .NET's `Encoding.Default` until the file header names the code page.
@@ -412,7 +412,7 @@ extension ACad {
         }
 
         /// `getSectionBuffer18`: the pages decompressed into one fixed-size stream.
-        private func sectionBuffer18(_ name: String) throws -> DwgStream? {
+        func sectionBuffer18(_ name: String) throws -> DwgStream? {
             guard let descriptor = fileHeader.descriptors[name] else { return nil }
             let capacity = Int64(bitPattern: descriptor.decompressedSize) &* Int64(descriptor.localSections.count)
             let stream = try DwgStream.create(capacity)

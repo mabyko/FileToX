@@ -10,6 +10,8 @@
 //   used where the family has them (CoreSVG ignores font-style), synthesized (stroke, slant) where it has not, and
 //   missing characters fall back to other fonts like Skia's font manager. Vertical text uses mixed upright/sideways glyphs.
 //   Horizontal text on a path follows the path (SvgTextPath.swift); vertical or rotated text on a path stays text.
+//   The glyphs of plainly visible horizontal text are also kept (TextLayer) for PDF output to draw invisibly over the
+//   outlines, so the PDF can be searched and its text selected.
 // • Files: images next to the drawing are embedded; network references are dropped (converting must not fetch anything).
 //
 // Anything that can't be parsed leaves the file as it was.
@@ -23,14 +25,264 @@ enum SvgNormalizer {
     private static let xlink = XNamespace("http://www.w3.org/1999/xlink")
 
     /// The SVG ready for CoreSVG; `data` unchanged when it can't be parsed.
-    static func normalize(_ data: Data, baseDirectory: String?) -> Data {
-        guard let document = try? XDocument.load(data: data, preserveWhitespace: true), document.root.name.localName == "svg" else { return data }
+    static func normalize(_ data: Data, baseDirectory: String?) -> Data { prepare(data, baseDirectory: baseDirectory).data }
+
+    /// The SVG ready for CoreSVG (`data` unchanged when it can't be parsed) and the glyphs of its plainly visible text,
+    /// nil when the viewport isn't plain enough to place them.
+    static func prepare(_ data: Data, baseDirectory: String?) -> (data: Data, text: TextLayer?) {
+        guard let document = try? XDocument.load(data: data, preserveWhitespace: true), document.root.name.localName == "svg" else { return (data, nil) }
         let root = document.root
         applyStyles(root)
         canonicalizeReferences(root)
         resolveReferences(root, baseDirectory: baseDirectory)
-        outlineText(root, inherited: TextStyle(), targets: textPathTargets(root))
-        return (try? document.data(indent: false)) ?? data
+        var text = TextLayer(root)
+        outlineText(root, inherited: TextStyle(), targets: textPathTargets(root), layer: &text)
+        text?.removeCovered(root)
+        guard let normalized = try? document.data(indent: false) else { return (data, nil) }
+        return (normalized, text)
+    }
+
+    // ───────────────────────── Searchable text ─────────────────────────
+
+    /// Glyphs drawn at `positions` (glyph-run space, y up) through `transform`.
+    struct GlyphRun {
+        let font: CTFont
+        let glyphs: [CGGlyph]
+        let positions: [CGPoint]
+        let transform: CGAffineTransform
+    }
+
+    /// The glyphs of plainly visible text in viewport pixels (y down): each character as the font's own glyph for it,
+    /// which is what PDF text extraction maps back to the character.
+    struct TextLayer {
+        /// The viewport the glyphs assume: the drawing has to be this size for them to lie on the outlines.
+        let viewport: CGSize
+        /// Root user space to viewport pixels.
+        let viewBox: CGAffineTransform
+        var runs: [GlyphRun] = []
+        /// Each text's outlines in the tree, its runs and the area its glyphs cover in viewport pixels.
+        private var texts: [(outlines: XElement, runs: Range<Int>, area: CGRect)] = []
+
+        /// Nil unless the viewport is plain: an absolute width and height (or a viewBox's), and a viewBox, if any, of the
+        /// same aspect ratio, which every preserveAspectRatio maps alike.
+        init?(_ root: XElement) {
+            let tokens = (root.attributeValue("viewBox") ?? "").split(whereSeparator: { $0 == "," || $0.isWhitespace })
+            let box = tokens.compactMap { Double($0) }
+            guard box.count == tokens.count, box.allSatisfy(\.isFinite), box.isEmpty || (box.count == 4 && box[2] > 0 && box[3] > 0) else { return nil }
+            func size(_ name: String, _ index: Int) -> Double? {
+                guard let text = root.attributeValue(XName(name)) else { return box.isEmpty ? nil : box[index] }
+                return SvgNormalizer.length(text, fontSize: 16, percentOf: 0)
+            }
+            guard let width = size("width", 2), let height = size("height", 3), width > 0, height > 0, width.isFinite, height.isFinite else { return nil }
+            viewport = CGSize(width: width, height: height)
+            guard !box.isEmpty else { viewBox = .identity; return }
+            guard abs(width * box[3] - height * box[2]) <= 1e-6 * width * box[3] else { return nil }
+            viewBox = CGAffineTransform(translationX: -box[0], y: -box[1]).concatenating(CGAffineTransform(scaleX: width / box[2], y: height / box[3]))
+        }
+
+        /// Adds a text's glyphs, given its user space in the root's and the outlines that draw it. Clipped glyphs and text
+        /// under a pixel tall keep their outlines alone; an invisible glyph must not reveal the part the page cuts away.
+        mutating func add(_ glyphs: [GlyphRun], _ toRoot: CGAffineTransform, outlines: XElement) {
+            let canvas = CGRect(origin: .zero, size: viewport)
+            let first = runs.count
+            var area = CGRect.null
+            for run in glyphs {
+                let transform = run.transform.concatenating(toRoot).concatenating(viewBox)
+                guard [transform.a, transform.b, transform.c, transform.d, transform.tx, transform.ty].allSatisfy(\.isFinite),
+                      transform.a * transform.d - transform.b * transform.c != 0,
+                      CTFontGetSize(run.font) * min(hypot(transform.a, transform.b), hypot(transform.c, transform.d)) >= 1 else { continue }
+                var advances = [CGSize](repeating: .zero, count: run.glyphs.count)
+                CTFontGetAdvancesForGlyphs(run.font, .horizontal, run.glyphs, &advances, run.glyphs.count)
+                var bounds = [CGRect](repeating: .zero, count: run.glyphs.count)
+                CTFontGetBoundingRectsForGlyphs(run.font, .horizontal, run.glyphs, &bounds, run.glyphs.count)
+                let boxes = run.glyphs.indices.map { i -> CGRect in
+                    let box = bounds[i].isEmpty
+                        ? CGRect(x: 0, y: -CTFontGetDescent(run.font), width: advances[i].width, height: CTFontGetAscent(run.font) + CTFontGetDescent(run.font))
+                        : bounds[i]
+                    return box.isEmpty ? .null : box.offsetBy(dx: run.positions[i].x, dy: run.positions[i].y).applying(transform)
+                }
+                let kept = run.glyphs.indices.filter { !boxes[$0].isNull && canvas.contains(boxes[$0]) }
+                for i in kept { area = area.union(boxes[i]) }
+                if !kept.isEmpty { runs.append(GlyphRun(font: run.font, glyphs: kept.map { run.glyphs[$0] }, positions: kept.map { run.positions[$0] }, transform: transform)) }
+            }
+            if runs.count > first { texts.append((outlines, first..<runs.count, area)) }
+        }
+
+        /// Leaves out each text that anything drawn after it may cover, wholly or in part, even see-through: an invisible
+        /// glyph must not reveal what the page may hide. Paint whose area isn't measured covers everything.
+        mutating func removeCovered(_ root: XElement) {
+            guard !texts.isEmpty else { return }
+            var areas: [CGRect?] = [], ends: [ObjectIdentifier: Int] = [:], work = 1_000_000
+            SvgNormalizer.paintedAreas(root, viewBox, Stroke(root), Set(texts.map { ObjectIdentifier($0.outlines) }), &areas, &ends, &work)
+            var covered = IndexSet()
+            for text in texts {
+                let area = text.area.insetBy(dx: -1, dy: -1)
+                let end = ends[ObjectIdentifier(text.outlines)]
+                if end.map({ areas[$0...].contains { $0?.intersects(area) ?? true } }) ?? true { covered.insert(integersIn: text.runs) }
+            }
+            runs = runs.indices.filter { !covered.contains($0) }.map { runs[$0] }
+        }
+    }
+
+    /// A shape's inherited stroke: whether it is painted, its width in user units (nil when not measured here), and
+    /// whether markers, a miter limit or a vector effect may take it further than twice its width from the geometry.
+    private struct Stroke {
+        var painted = false
+        var width: Double? = 1
+        var unmeasured = false
+
+        init(_ element: XElement, inheriting inherited: Stroke? = nil) {
+            if let inherited { self = inherited }
+            if let paint = keyword(element.attributeValue("stroke")) { painted = paint != "none" }
+            if let value = keyword(element.attributeValue("stroke-width")) {
+                width = ["em", "ex", "%"].contains(where: value.hasSuffix) ? nil : length(value, fontSize: 0, percentOf: 0).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+            }
+            if ["marker-start", "marker-mid", "marker-end", "stroke-miterlimit", "vector-effect"].contains(where: { ![nil, "none"].contains(keyword(element.attributeValue(XName($0)))) }) {
+                unmeasured = true
+            }
+        }
+    }
+
+    /// Elements that draw nothing where they are (definitions, resources, metadata, animation).
+    private static let undrawn: Set<String> = [
+        "defs", "clipPath", "mask", "pattern", "marker", "symbol", "linearGradient", "radialGradient", "filter", "style", "title",
+        "desc", "metadata", "script", "font", "font-face", "color-profile", "cursor", "view", "animate", "animateMotion",
+        "animateTransform", "animateColor", "set",
+    ]
+
+    /// The area (viewport pixels) each element drawn inside `parent` covers, in painting order; nil for paint whose area
+    /// isn't measured here (references, text CoreSVG lays out, nested viewports, filters, markers, ...). `ends` gets, for
+    /// each of `marked`, how many areas were painted when it was done.
+    private static func paintedAreas(_ parent: XElement, _ transform: CGAffineTransform?, _ inherited: Stroke, _ marked: Set<ObjectIdentifier>,
+                                     _ areas: inout [CGRect?], _ ends: inout [ObjectIdentifier: Int], _ work: inout Int) {
+        for element in parent.elements() where element.name.namespaceName == svg.namespaceName && !undrawn.contains(element.name.localName)
+            && keyword(element.attributeValue("display")) != "none" {
+            let stroke = Stroke(element, inheriting: inherited)
+            var placed = transform
+            if let value = element.attributeValue("transform") { placed = parsedTransform(value).flatMap { matrix in transform.map(matrix.concatenating) } }
+            if (element.attributeValue("style") ?? "").lowercased().contains("transform") || ![nil, "none"].contains(keyword(element.attributeValue("filter"))) {
+                placed = nil
+            }
+            func number(_ name: String) -> Double? {
+                guard let value = keyword(element.attributeValue(XName(name))), !["em", "ex", "%"].contains(where: value.hasSuffix) else { return nil }
+                return length(value, fontSize: 0, percentOf: 0).flatMap { $0.isFinite ? $0 : nil }
+            }
+            switch element.name.localName {
+            case "g", "a":
+                if placed == nil { areas.append(nil) } else { paintedAreas(element, placed, stroke, marked, &areas, &ends, &work) }
+            case "path", "rect", "circle", "ellipse", "line", "polyline", "polygon":
+                guard let placed, !stroke.unmeasured, let width = stroke.width else { areas.append(nil); break }
+                let path = equivalentPath(element, work: &work)
+                if case .invalid = path { break } // draws nothing
+                guard case .segments(let segments) = path else { areas.append(nil); break }
+                var box = CGRect.null
+                for segment in segments {
+                    switch segment {
+                    case .move(let p), .line(let p): box = box.union(CGRect(origin: p, size: .zero))
+                    case .quad(let c, let p): box = box.union(CGRect(origin: c, size: .zero)).union(CGRect(origin: p, size: .zero))
+                    case .cubic(let c1, let c2, let p):
+                        box = box.union(CGRect(origin: c1, size: .zero)).union(CGRect(origin: c2, size: .zero)).union(CGRect(origin: p, size: .zero))
+                    case .close: break
+                    }
+                }
+                // A stroke reaches half its width out, a miter join (limit 4) twice its width; a pixel for antialiasing.
+                let outset = stroke.painted ? 2 * width : 0
+                areas.append(box.insetBy(dx: -outset, dy: -outset).applying(placed).insetBy(dx: -1, dy: -1))
+            case "image":
+                let styledGeometry = (element.attributeValue("style") ?? "").split(separator: ";").contains {
+                    ["x", "y", "width", "height"].contains(keyword($0.split(separator: ":", maxSplits: 1).first.map(String.init)) ?? "")
+                }
+                guard let placed, let width = number("width"), let height = number("height"),
+                      let x = element.attributeValue("x") == nil ? 0 : number("x"),
+                      let y = element.attributeValue("y") == nil ? 0 : number("y"), !styledGeometry,
+                      [nil, "hidden", "scroll"].contains(keyword(element.attributeValue("overflow"))) else { areas.append(nil); break }
+                areas.append(CGRect(x: x, y: y, width: width, height: height).standardized.applying(placed).insetBy(dx: -1, dy: -1))
+            default:
+                areas.append(nil)
+            }
+            if marked.contains(ObjectIdentifier(element)) { ends[ObjectIdentifier(element)] = areas.count }
+        }
+    }
+
+    /// An attribute keyword as compared: trimmed, lowercase.
+    private static func keyword(_ value: String?) -> String? { value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+
+    /// A text's user space in the root's (its own and its groups' transforms), or nil unless CoreSVG draws its outlines
+    /// where they were laid out: only plain groups up to the root, nothing hiding (display, visibility, opacity),
+    /// clipping, masking or filtering them, no conditional processing, no CSS the outlines don't follow, no `initial`
+    /// (CoreSVG may not read it as the layout did), and transforms that parse.
+    private static func layerTransform(_ text: XElement) -> CGAffineTransform? {
+        func plain(_ element: XElement) -> Bool {
+            !element.attributes.contains { TextStyle.inherited.contains($0.name.localName) && keyword($0.value) == "initial" }
+                && keyword(element.attributeValue("display")) != "none" && [nil, "visible"].contains(keyword(element.attributeValue("visibility")))
+                && (keyword(element.attributeValue("opacity")).map { Double($0) == 1 } ?? true)
+                && ["clip-path", "mask", "filter"].allSatisfy { [nil, "none"].contains(keyword(element.attributeValue(XName($0)))) }
+                && ["systemLanguage", "requiredFeatures", "requiredExtensions"].allSatisfy { element.attributeValue(XName($0)) == nil }
+                && (element.attributeValue("style") ?? "").split(separator: ";").allSatisfy(typographic)
+        }
+        guard text.descendants().allSatisfy({ $0.name == svg + "tspan" && $0.attributeValue("transform") == nil && plain($0) }) else { return nil }
+        var transform = CGAffineTransform.identity
+        for element in [text] + text.ancestors() {
+            let root = element.parent == nil
+            guard element.name.namespaceName == svg.namespaceName, element === text || element.name.localName == (root ? "svg" : "g"), plain(element) else { return nil }
+            if let value = element.attributeValue("transform") {
+                guard !root, let matrix = parsedTransform(value) else { return nil }
+                transform = transform.concatenating(matrix)
+            }
+        }
+        return transform
+    }
+
+    /// Leftover CSS (no presentation attribute) that neither moves nor hides text: fonts, line height, white space,
+    /// alignment and wrapping (the tspans' own positions place the text), sizes (the viewport must match CoreSVG's),
+    /// Inkscape's properties and the background.
+    private static func typographic(_ declaration: Substring) -> Bool {
+        let name = keyword(declaration.split(separator: ":", maxSplits: 1).first.map(String.init)) ?? ""
+        return name.isEmpty || ["font-", "-inkscape-", "background", "max-", "min-"].contains(where: name.hasPrefix)
+            || ["line-height", "white-space", "text-align", "shape-inside", "shape-padding", "inline-size", "width", "height"].contains(name)
+    }
+
+    /// Filled with an opaque colour: none given (black), a 3- or 6-digit hex colour or a colour keyword; `currentColor`
+    /// is the nearest `color` of the text or its ancestors, as CoreSVG reads it for the outlines.
+    private static func opaqueFill(_ style: TextStyle, _ text: XElement) -> Bool {
+        var fill = keyword(style.values["fill"])
+        if fill == "currentcolor" {
+            fill = ([text] + text.ancestors()).compactMap { keyword($0.attributeValue("color")) }.first { !["inherit", "currentcolor"].contains($0) }
+        }
+        guard keyword(style.values["fill-opacity"]).map({ Double($0) == 1 }) ?? true else { return false }
+        guard let fill else { return true }
+        if fill.hasPrefix("#") { return [4, 7].contains(fill.count) && fill.dropFirst().allSatisfy { $0.isASCII && $0.isHexDigit } }
+        return fill.allSatisfy { $0.isASCII && $0.isLetter } && CssValues.color(fill) != nil
+    }
+
+    /// A glyph run's characters as the font's own glyph for each, spread over the advance of the glyph that shows them
+    /// (a ligature shows several; its deleted 0xFFFF glyphs show none); nil when they can't stand for the run exactly:
+    /// right-to-left or reordered, a character shown by several glyphs or with no glyph of its own in the font, colour
+    /// glyphs, or the placeholder glyphs of the LastResort font (one glyph for many characters).
+    private static func characterGlyphs(_ glyphRun: CTRun, _ font: CTFont, _ glyphs: [CGGlyph], _ positions: [CGPoint], _ run: TextLayout.Run) -> GlyphRun? {
+        let count = glyphs.count, range = CTRunGetStringRange(glyphRun), text = Array(run.text.utf16)
+        guard !CTRunGetStatus(glyphRun).contains(.rightToLeft), !CTFontGetSymbolicTraits(font).contains(.traitColorGlyphs),
+              CTFontCopyPostScriptName(font) as String != "LastResort" else { return nil }
+        var indices = [CFIndex](repeating: 0, count: count), advances = [CGSize](repeating: .zero, count: count)
+        CTRunGetStringIndices(glyphRun, CFRange(location: 0, length: count), &indices)
+        CTRunGetAdvances(glyphRun, CFRange(location: 0, length: count), &advances)
+        let shown = (0..<count).filter { glyphs[$0] != 0xFFFF }
+        guard shown.first == 0, indices.first == range.location, zip(indices, indices.dropFirst()).allSatisfy({ $0 < $1 }),
+              range.location + range.length <= text.count else { return nil }
+        var ids: [CGGlyph] = [], points: [CGPoint] = []
+        for (n, i) in shown.enumerated() {
+            let end = n + 1 < shown.count ? indices[shown[n + 1]] : range.location + range.length
+            guard indices[i] < end else { return nil }
+            let characters = Array(text[indices[i]..<end])
+            var mapped = [CGGlyph](repeating: 0, count: characters.count)
+            guard CTFontGetGlyphsForCharacters(font, characters, &mapped, characters.count), !mapped.contains(0) else { return nil }
+            for (k, glyph) in mapped.enumerated() {
+                ids.append(glyph)
+                points.append(CGPoint(x: positions[i].x + advances[i].width * CGFloat(k) / CGFloat(mapped.count), y: positions[i].y))
+            }
+        }
+        let slant: CGFloat = run.style.italic && !CTFontGetSymbolicTraits(font).contains(.traitItalic) ? 0.21 : 0
+        return GlyphRun(font: font, glyphs: ids, positions: points, transform: CGAffineTransform(a: 1, b: 0, c: slant, d: -1, tx: CGFloat(run.x), ty: CGFloat(run.y)))
     }
 
     // ───────────────────────── CSS ─────────────────────────
@@ -396,11 +648,13 @@ enum SvgNormalizer {
         return TextPathTargets(ids)
     }
 
-    /// Walks the tree and replaces every <text> by its outlines.
-    private static func outlineText(_ element: XElement, inherited: TextStyle, targets: TextPathTargets) {
+    /// Walks the tree and replaces every <text> by its outlines, adding the glyphs of plainly visible text to `layer`.
+    private static func outlineText(_ element: XElement, inherited: TextStyle, targets: TextPathTargets, layer: inout TextLayer?) {
         let style = inherited.adding(element)
         if element.name.localName == "text" {
-            guard let outlined = TextLayout(element, style, targets).outlined() else { return }
+            let layout = TextLayout(element, style, targets)
+            guard let outlined = layout.outlined() else { return }
+            if let glyphs = layout.searchable, let transform = layerTransform(element) { layer?.add(glyphs, transform, outlines: outlined) }
             if element.parent?.name.localName == "clipPath" {
                 // Clip paths take shapes, not groups: the outlines with the text's transform and clip.
                 let paths = outlined.elements()
@@ -416,7 +670,7 @@ enum SvgNormalizer {
             }
             return
         }
-        for child in element.elements() { outlineText(child, inherited: style, targets: targets) }
+        for child in element.elements() { outlineText(child, inherited: style, targets: targets, layer: &layer) }
     }
 
     /// A length in user units: px, pt, pc, mm, cm, in, em, ex, %.
@@ -475,6 +729,8 @@ enum SvgNormalizer {
         /// hidden since, counted in Unicode scalars as SVG addresses characters.
         var hiddenPositions: (x: [Double], y: [Double], dx: [Double], dy: [Double])?
         var hiddenScalars = 0
+        /// The glyphs of the drawn runs for a searchable PDF (text-element space); nil when one of them can't be placed.
+        var searchable: [GlyphRun]? = []
 
         init(_ element: XElement, _ style: TextStyle, _ targets: TextPathTargets) {
             self.element = element
@@ -711,7 +967,13 @@ enum SvgNormalizer {
                 group.setAttributeValue(attribute.name, attribute.value)
             }
             for run in runs where !run.text.isEmpty && run.style.values["visibility"] != "hidden" {
-                guard let nodes = SvgNormalizer.outline(run) else { return nil }
+                // shortcut: the searchable layer takes plainly visible, opaquely filled horizontal text only; vertical text
+                // and text on a path stay outlines alone until their glyph orientation is placed in it.
+                if run.vertical || run.path != nil || ![nil, "visible"].contains(SvgNormalizer.keyword(run.style.values["visibility"]))
+                    || !(SvgNormalizer.keyword(run.opacity).map { Double($0) == 1 } ?? true) || !SvgNormalizer.opaqueFill(run.style, element) {
+                    searchable = nil
+                }
+                guard let nodes = SvgNormalizer.outline(run, &searchable) else { return nil }
                 for node in nodes { group.add(node) }
             }
             return group
@@ -785,8 +1047,9 @@ enum SvgNormalizer {
     }
 
     /// The run as paths (glyph outlines and decoration lines) with its paint; glyphs without outlines (colour emoji)
-    /// stay text. Nil when text on a path can't be placed, which keeps the whole text with CoreSVG.
-    private static func outline(_ run: TextLayout.Run) -> [XElement]? {
+    /// stay text. Nil when text on a path can't be placed, which keeps the whole text with CoreSVG. Unless `searchable`
+    /// is nil, the run's characters are added to it as glyphs, or it becomes nil when they can't be.
+    private static func outline(_ run: TextLayout.Run, _ searchable: inout [GlyphRun]?) -> [XElement]? {
         let ctLine = line(run.text, run.font, run.style, vertical: run.vertical)
         let path = CGMutablePath()
         var leftovers: [XElement] = []
@@ -807,6 +1070,9 @@ enum SvgNormalizer {
             }
             CTRunGetGlyphs(glyphRun, CFRange(location: 0, length: count), &glyphs)
             CTRunGetPositions(glyphRun, CFRange(location: 0, length: count), &positions)
+            if searchable != nil {
+                if let characters = characterGlyphs(glyphRun, font, glyphs, positions, run) { searchable!.append(characters) } else { searchable = nil }
+            }
             // A family without an italic face gets the slant Skia gives it.
             let slant: CGFloat = wantsItalic && !CTFontGetSymbolicTraits(font).contains(.traitItalic) ? 0.21 : 0
             for i in 0..<count {

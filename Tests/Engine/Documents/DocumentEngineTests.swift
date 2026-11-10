@@ -5,6 +5,174 @@ import XCTest
 @testable import FileToXEngineKit
 
 final class DocumentEngineTests: DocumentTestCase {
+    func testSlideTablesKeepContentWithoutGeometryOrGrid() async throws {
+        let rows = "<a:tr h=\"254000\">" + slideCell("왼쪽") + slideCell("가운데") + slideCell("오른쪽") + "</a:tr>"
+        for (name, geometry, grid) in [("missing", "", true), ("zero", #"<p:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></p:xfrm>"#, true), ("no-grid", "", false)] {
+            let input = try minimalSlide("table-" + name, slideTable(geometry, rows, grid: grid))
+            let doc = try PptxReader.read(input, path("table-media-" + name))
+            let box = try XCTUnwrap(HDocumentWalker.inlines(doc.sections[0].blocks).compactMap { $0 as? HTextBox }.first)
+            XCTAssertNil(box.anchor)
+            XCTAssertEqual(box.width, grid ? 30000 : 96000)
+            XCTAssertEqual(box.height, 2000)
+            let table = try XCTUnwrap(box.blocks.first as? HTable)
+            XCTAssertEqual(table.columnCount, 3)
+            let docx = path("table-" + name + ".docx"); try DocxWriter.write(doc, docx)
+            let epub = try await convert(EbookConverter(), docx, "docx", "epub", "table-" + name + ".epub")
+            for read in [doc, try DocxAssert.readBack(docx), try EpubReader.readBook(epub, folder).document] {
+                let text = PlainTextWriter.write(read)
+                for expected in ["왼쪽", "가운데", "오른쪽"] { XCTAssertTrue(text.contains(expected), name + ": " + text) }
+            }
+        }
+    }
+
+    func testSlideTableGroupScaleAndMergedGridPositionsSurviveDocx() throws {
+        let geometry = #"<p:xfrm><a:off x="127000" y="254000"/><a:ext cx="3810000" cy="635000"/></p:xfrm>"#
+        let rows = "<a:tr h=\"254000\">" + slideCell("Merged", "gridSpan=\"2\" rowSpan=\"2\"") + slideCell("", "hMerge=\"1\" rowSpan=\"2\"") + slideCell("Top right") + "</a:tr>"
+            + "<a:tr h=\"381000\">" + slideCell("", "vMerge=\"1\" gridSpan=\"2\"") + slideCell("", "hMerge=\"1\" vMerge=\"1\"") + slideCell("Bottom right") + "</a:tr>"
+        let group = #"<p:grpSp><p:grpSpPr><a:xfrm><a:off x="381000" y="508000"/><a:ext cx="7620000" cy="1905000"/><a:chOff x="0" y="0"/><a:chExt cx="3810000" cy="635000"/></a:xfrm></p:grpSpPr>"#
+            + slideTable(geometry, rows) + "</p:grpSp>"
+        let input = try minimalSlide("merged-table", group)
+        let doc = try PptxReader.read(input, path("merged-table-media"))
+        let docx = path("merged-table.docx"); try DocxWriter.write(doc, docx)
+        for read in [doc, try DocxAssert.readBack(docx)] {
+            let box = try XCTUnwrap(HDocumentWalker.inlines(read.sections[0].blocks).compactMap { $0 as? HTextBox }.first)
+            XCTAssertEqual(box.width, 60000); XCTAssertEqual(box.height, 15000)
+            let table = try XCTUnwrap(box.blocks.first as? HTable)
+            XCTAssertEqual(table.columnWidths, [20000, 20000, 20000])
+            XCTAssertEqual(table.rows.map(\.height), [6000, 9000])
+            XCTAssertEqual(table.rows.map { $0.cells.map(\.column) }, [[0, 2], [2]])
+            let merged = try XCTUnwrap(table.rows.first?.cells.first)
+            XCTAssertEqual(merged.colSpan, 2); XCTAssertEqual(merged.rowSpan, 2)
+            for expected in ["Merged", "Top right", "Bottom right"] { XCTAssertTrue(PlainTextWriter.write(read).contains(expected)) }
+        }
+    }
+
+    private func slideCell(_ text: String, _ attributes: String = "") -> String {
+        "<a:tc \(attributes)><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>\(text)</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>"
+    }
+
+    private func slideTable(_ geometry: String, _ rows: String, grid: Bool = true) -> String {
+        let columns = grid ? "<a:tblGrid>" + String(repeating: "<a:gridCol w=\"1270000\"/>", count: 3) + "</a:tblGrid>" : ""
+        return "<p:graphicFrame>\(geometry)<a:graphic><a:graphicData><a:tbl>\(columns)\(rows)</a:tbl></a:graphicData></a:graphic></p:graphicFrame>"
+    }
+
+    func testSlidesWithoutGeometryKeepTheirTextThroughDocxAndEbooks() async throws {
+        let expected = "FileToX sample 안녕하세요"
+        for (name, geometry) in [("missing", ""), ("zero", #"<a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>"#)] {
+            let shape = "<p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"Title\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>\(geometry)</p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>\(expected)</a:t></a:r></a:p></p:txBody></p:sp>"
+            let input = try minimalSlide(name, shape)
+            let doc = try PptxReader.read(input, path(name + "-media"))
+            let boxes = HDocumentWalker.inlines(doc.sections[0].blocks).compactMap { $0 as? HTextBox }
+            guard boxes.count == 1, let box = boxes.first else { XCTFail("\(name): text shape was discarded"); continue }
+            XCTAssertEqual(box.width, 96000); XCTAssertEqual(box.height, 54000)
+            XCTAssertTrue(PlainTextWriter.write(doc).contains(expected))
+            let docx = path(name + ".docx")
+            try DocxWriter.write(doc, docx)
+            XCTAssertTrue(PlainTextWriter.write(try DocxAssert.readBack(docx)).contains(expected))
+            for format in ["epub", "fb2", "htmlz", "txtz"] {
+                let output = try await convert(EbookConverter(), docx, "docx", format, name + "." + format)
+                let book = try await DocumentReaders.readAsync(output, format, folder)
+                XCTAssertTrue(PlainTextWriter.write(book).contains(expected), format)
+            }
+        }
+    }
+    func testSlidePicturesUseAspectFitOnlyWhenGeometryIsMissing() throws {
+        let picture = try DocumentFixtures.png(path("picture.png"), 120, 60)
+        for (name, geometry) in [("missing", ""), ("zero", #"<a:xfrm><a:ext cx="0" cy="0"/></a:xfrm>"#)] {
+            let input = try minimalSlide("picture-" + name, "<p:pic><p:nvPicPr><p:cNvPr id=\"2\" name=\"Picture\"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed=\"pic\"/></p:blipFill><p:spPr>\(geometry)</p:spPr></p:pic>", picture)
+            let doc = try PptxReader.read(input, path("picture-media-" + name))
+            let images = HDocumentWalker.images(doc)
+            guard images.count == 1, let image = images.first else { XCTFail("\(name): picture was discarded"); continue }
+            XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: image.path)), picture)
+            let width = try XCTUnwrap(image.width), height = try XCTUnwrap(image.height)
+            if name == "zero" {
+                XCTAssertEqual(width, 1); XCTAssertEqual(height, 1, "An explicitly invisible picture must not cover other content")
+            } else {
+                XCTAssertLessThanOrEqual(width, 96000); XCTAssertLessThanOrEqual(height, 54000)
+                XCTAssertEqual(Double(width) / Double(height), 2, accuracy: 0.001)
+            }
+        }
+    }
+    func testUnpositionedTextBoxesDoNotCoverEarlierPictures() throws {
+        let picture = try DocumentFixtures.png(path("background.png"), 120, 60)
+        let geometry = #"<a:xfrm><a:off x="1000" y="2000"/><a:ext cx="1000000" cy="500000"/></a:xfrm>"#
+        let image = #"<p:pic><p:nvPicPr><p:cNvPr id="2" name="Picture"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="pic"/></p:blipFill><p:spPr>"# + geometry + "</p:spPr></p:pic>"
+        let fills = [
+            #"<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>"#,
+            #"<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill>"#,
+        ]
+        for (index, fill) in fills.enumerated() {
+            for positioned in [false, true] {
+                let name = "box-\(index)-\(positioned)"
+                let shape = "<p:sp><p:nvSpPr><p:cNvPr id=\"3\" name=\"Text\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>\(positioned ? geometry : "")\(fill)<a:ln w=\"12700\"><a:solidFill><a:srgbClr val=\"000000\"/></a:solidFill></a:ln></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Visible text</a:t></a:r></a:p></p:txBody></p:sp>"
+                let input = try minimalSlide(name, image + shape, picture)
+                let doc = try PptxReader.read(input, path(name + "-media"))
+                let docx = path(name + ".docx"); try DocxWriter.write(doc, docx)
+                for read in [doc, try DocxAssert.readBack(docx)] {
+                    let box = try XCTUnwrap(HDocumentWalker.inlines(read.sections[0].blocks).compactMap { $0 as? HTextBox }.first)
+                    XCTAssertEqual(HDocumentWalker.images(read).count, 1)
+                    if positioned {
+                        XCTAssertTrue(box.fill != nil || box.gradient != nil)
+                        XCTAssertEqual(box.line.style, .solid)
+                    } else {
+                        XCTAssertNil(box.fill); XCTAssertNil(box.gradient); XCTAssertEqual(box.line.style, .none)
+                    }
+                    XCTAssertTrue(PlainTextWriter.write(read).contains("Visible text"))
+                }
+            }
+        }
+    }
+    func testImageOnlyDocumentsKeepLinkedPicturesInEbookOutputsIncludingTxtz() async throws {
+        let picture = path("page.png"), bytes = try DocumentFixtures.png(picture, 120, 60)
+        let doc = HDocument(), section = HSection(), paragraph = HParagraph()
+        paragraph.inlines = [HImage(picture)]; section.blocks = [paragraph]; doc.sections = [section]
+        let docx = path("page.docx"); try DocxWriter.write(doc, docx)
+        for format in ["epub", "fb2", "htmlz", "txtz"] {
+            let output = try await convert(EbookConverter(), docx, "docx", format, "page." + format)
+            let read = try await DocumentReaders.readAsync(output, format, folder)
+            let image = try XCTUnwrap(HDocumentWalker.images(read).first, format)
+            XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: image.path)), bytes, format)
+        }
+    }
+    func testEmptyShapesWithoutGeometryRemainEmpty() throws {
+        let input = try minimalSlide("empty", #"<p:sp><p:nvSpPr><p:cNvPr id="2" name="Empty"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>"#)
+        let doc = try PptxReader.read(input, path("empty-media"))
+        XCTAssertTrue(HDocumentWalker.inlines(doc.sections[0].blocks).isEmpty)
+        let positioned = try PptxReader.read(DocumentFixtures.slides(path("positioned.pptx")), path("positioned-media"))
+        let box = try XCTUnwrap(HDocumentWalker.inlines(positioned.sections[0].blocks).compactMap { $0 as? HTextBox }.first)
+        XCTAssertEqual(box.width, 62992); XCTAssertEqual(box.height, 11811)
+    }
+    func testRasterPageRoutesEmbedRenderedImagesThroughDocx() async throws {
+        let source = path("page-source.png")
+        _ = try DocumentFixtures.png(source, 120, 60)
+        let pdf = try await convert(PdfSharpConverter(), source, "png", "pdf", "page-source.pdf")
+        let docx = try await convert(DocxWriterConverter(), pdf, "pdf", "docx", "page-rendered.docx")
+        for format in ["epub", "fb2", "htmlz", "txtz"] {
+            let output = try await convert(EbookConverter(), docx, "docx", format, "page-rendered." + format)
+            let doc = try await DocumentReaders.readAsync(output, format, folder)
+            let images = HDocumentWalker.images(doc)
+            XCTAssertEqual(images.count, 1, format)
+            for image in images {
+                let size = try XCTUnwrap(ImageSupport.info(image.path), format)
+                XCTAssertGreaterThan(size.width, 0)
+                XCTAssertEqual(Double(size.width) / Double(size.height), 2, accuracy: 0.02, format)
+            }
+        }
+    }
+    private func minimalSlide(_ name: String, _ objects: String, _ picture: Data? = nil) throws -> String {
+        let input = path(name + ".pptx"), zip = try ZipWriter(path: input)
+        let relationship = "http://schemas.openxmlformats.org/package/2006/relationships"
+        let r = PptxReader.r.namespaceName
+        try zip.add("_rels/.rels", text: "<Relationships xmlns=\"\(relationship)\"><Relationship Id=\"r1\" Type=\"\(r)/officeDocument\" Target=\"ppt/presentation.xml\"/></Relationships>")
+        try zip.add("ppt/presentation.xml", text: "<p:presentation xmlns:p=\"\(PptxReader.p.namespaceName)\" xmlns:r=\"\(r)\"><p:sldIdLst><p:sldId id=\"256\" r:id=\"s1\"/></p:sldIdLst><p:sldSz cx=\"12192000\" cy=\"6858000\"/></p:presentation>")
+        try zip.add("ppt/_rels/presentation.xml.rels", text: "<Relationships xmlns=\"\(relationship)\"><Relationship Id=\"s1\" Type=\"\(r)/slide\" Target=\"slides/slide1.xml\"/></Relationships>")
+        try zip.add("ppt/slides/slide1.xml", text: "<p:sld xmlns:p=\"\(PptxReader.p.namespaceName)\" xmlns:a=\"\(PptxReader.a.namespaceName)\" xmlns:r=\"\(r)\"><p:cSld><p:spTree>\(objects)</p:spTree></p:cSld></p:sld>")
+        if let picture {
+            try zip.add("ppt/media/picture.png", data: picture)
+            try zip.add("ppt/slides/_rels/slide1.xml.rels", text: "<Relationships xmlns=\"\(relationship)\"><Relationship Id=\"pic\" Type=\"\(r)/image\" Target=\"../media/picture.png\"/></Relationships>")
+        }
+        try zip.close(); return input
+    }
     func testRhwpEdgesAndUnhwpEdges() {
         XCTAssertEqual(
             RhwpConverter().edges.map { $0.from + ">" + $0.to }, ["hwp>pdf", "hwpx>pdf", "hwp>hwpx", "hwpx>hwp"])
@@ -56,7 +224,8 @@ final class DocumentEngineTests: DocumentTestCase {
     func testCancellationBeforeReading() async throws {
         let input = try write("본문", "input.txt")
         let task = Task {
-            try Task.checkCancellation()
+            // The small text read can finish before the caller cancels; enter the reader already cancelled.
+            while !Task.isCancelled { await Task.yield() }
             return try await DocumentReaders.readAsync(input, "txt", folder)
         }
         task.cancel()

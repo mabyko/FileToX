@@ -13,7 +13,8 @@ enum DocumentReaders {
     static func needsPandoc(_ format: String) -> Bool {
         !builtInFormats.contains(format.lowercased()) && throughPandoc.contains { $0.0 == format.lowercased() }
     }
-    static func readAsync(_ path: String, _ format: String, _ workDirectory: String) async throws -> HDocument {
+    /// `keepsPages`: see `ConversionStep.keepsPages` (PDF only).
+    static func readAsync(_ path: String, _ format: String, _ workDirectory: String, keepsPages: Bool = false) async throws -> HDocument {
         try Task.checkCancellation()
         let media = FilePath.combine(workDirectory, "media-" + DocumentXML.guid())
         let f = format.lowercased()
@@ -28,7 +29,7 @@ enum DocumentReaders {
         case "csv": return try SheetDocument.build(CsvFormat.read(path))
         case "tsv", "xls", "ods": return try SheetDocument.build(SpreadsheetConverter.read(path, f))
         case "pptx", "pptm", "potx", "ppsx": return try PptxReader.read(path, media)
-        case "pdf": return try PdfDocumentReader.read(path, media)
+        case "pdf": return try PdfDocumentReader.read(path, media, allText: keepsPages)
         case "hwpx": return try HwpxReader.read(path, media)
         case "html": return try HtmlReader.read(path, media)
         case "epub": return try EpubReader.read(path, media)

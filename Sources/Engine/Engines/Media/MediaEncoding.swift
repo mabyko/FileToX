@@ -93,8 +93,7 @@ enum MediaEncoding {
     /// Audio targets that can carry a cover picture (album art) copied from the source.
     private static let coverTargets: Set<String> = ["mp3", "m4a", "m4b", "flac"]
 
-    /// Frame rates MPEG-2 (and MXF, which only knows broadcast rates) can signal exactly. Other rates are converted to
-    /// the nearest one by dropping or repeating frames.
+    /// Frame rates MPEG-2 (and MXF, which only knows broadcast rates) can signal exactly.
     private static let broadcastRates: [(num: Int, den: Int)] =
         [(24000, 1001), (24, 1), (25, 1), (30000, 1001), (30, 1), (50, 1), (60000, 1001), (60, 1)]
 
@@ -132,8 +131,31 @@ enum MediaEncoding {
         if audio != nil { args += ["-map", "0:a:0"] }
 
         let pal = isPal(video.frameRate)
-        args += ["-vf", target == "vob" || target == "dv" ? dvdOrDvFilter(video, pal: pal) : scaleFilter(options.maxHeight)]
-        args += try videoCodecArguments(target, spec.videoCodec ?? "", options.quality, video, pal)
+        // A low average can hide a short burst (e.g. three frames in one second, with a 20 ms interval).
+        // Respect its nominal timing grid instead of rounding those changes to the average's broadcast multiple.
+        let sourceRate = max(video.frameRate, video.nominalFrameRate)
+        let timingRate = ["ts", "m2ts"].contains(target) && sourceRate > 60 ? String(sourceRate) : broadcastRate(sourceRate)
+        let slowRate = video.frameRate > 0 && video.frameRate < 24000 / 1001.0 && ["ts", "m2ts", "mpg", "mxf"].contains(target)
+            ? timingRate : nil
+        var filter = target == "vob" || target == "dv" ? dvdOrDvFilter(video, pal: pal) : scaleFilter(options.maxHeight)
+        if let slowRate {
+            // Preserve a slow frame's full display time, including the last one. `-r` alone can round that end down;
+            // one-frame transport streams also have ambiguous duration estimates. Fill a broadcast-rate timeline.
+            filter += ",fps=\(slowRate):eof_action=pass"
+        }
+        args += ["-vf", filter]
+        args += try videoCodecArguments(target, spec.videoCodec ?? "", options.quality, video, pal, timingRate: slowRate)
+        if slowRate != nil, spec.videoCodec == "libx264" {
+            // The fps filter already supplies the encoder's rate. A second CFR pass would pad a late-starting
+            // video back to zero, changing its display span and its timing relative to audio.
+            args += ["-fps_mode", "passthrough"]
+            // A few tiny frames can otherwise be mistaken for an MPEG program stream during format probing.
+            if target == "ts" { args += ["-mpegts_flags", "+pat_pmt_at_frames"] }
+        }
+        if target == "webm", FilePath.extension(input).lowercased() == ".gif", video.frameCount == 1, video.frameRate > 0 {
+            // VP9 otherwise signals the GIF's 100 Hz time base instead of its single frame's delay.
+            args += ["-r", String(video.frameRate)]
+        }
 
         if let audio {
             args += audioCodecArguments(target, spec.audioCodec, options, audio, inVideo: true)
@@ -173,7 +195,7 @@ enum MediaEncoding {
     static func isPal(_ fps: Double) -> Bool { abs(fps - 25) < 0.5 || abs(fps - 50) < 1 || abs(fps - 12.5) < 0.3 }
 
     private static func videoCodecArguments(_ target: String, _ codec: String, _ quality: MediaQuality, _ video: VideoStreamInfo,
-                                            _ pal: Bool) throws -> [String] {
+                                            _ pal: Bool, timingRate: String?) throws -> [String] {
         // Constant quantizer for the MPEG-style codecs: 2 is the best useful value, 4 good, 7 visibly compressed.
         let quantizer = String(choose(quality, 2, 4, 7))
         switch codec {
@@ -205,7 +227,7 @@ enum MediaEncoding {
         case "mpeg2video":
             // mpg and mxf: constant quantizer, broadcast GOP of 15 and a frame rate MPEG-2 can signal.
             return ["-c:v", "mpeg2video", "-q:v", quantizer, "-g", "15", "-bf", "2", "-pix_fmt", "yuv420p",
-                    "-r", broadcastRate(video.frameRate)]
+                    "-r", timingRate ?? broadcastRate(video.frameRate)]
         case "dvvideo":
             // DV is fixed at 25 Mbit/s: NTSC samples colour 4:1:1, PAL 4:2:0.
             return ["-c:v", "dvvideo", "-pix_fmt", pal ? "yuv420p" : "yuv411p", "-r", pal ? "25" : "30000/1001"]
@@ -227,10 +249,15 @@ enum MediaEncoding {
         return String(min(max(Int(fps.rounded(.toNearestOrEven)), 1), 120))
     }
 
-    /// The broadcast rate closest to `fps` (PAL's 25 when unknown).
+    /// Prefer an exact multiple of a sub-broadcast rate (10 → 30, 12.5 → 25) so repeating frames preserves their
+    /// display times. Otherwise choose the nearest broadcast rate; use PAL's 25 when the source rate is unknown.
     static func broadcastRate(_ fps: Double) -> String {
         if fps <= 0 { return "25" }
-        let rate = broadcastRates.min { abs(fps - Double($0.num) / Double($0.den)) < abs(fps - Double($1.num) / Double($1.den)) }!
+        let multiple = fps < 24000 / 1001.0 ? broadcastRates.first {
+            let factor = Double($0.num) / Double($0.den) / fps
+            return abs(factor - factor.rounded()) < 1e-6
+        } : nil
+        let rate = multiple ?? broadcastRates.min { abs(fps - Double($0.num) / Double($0.den)) < abs(fps - Double($1.num) / Double($1.den)) }!
         return rate.den == 1 ? String(rate.num) : "\(rate.num)/\(rate.den)"
     }
 
@@ -397,13 +424,13 @@ enum MediaEncoding {
         let first = common + [
             "-i", input,
             "-filter_complex", "[0:V:0]\(chain),split[a][b];[a]palettegen=max_colors=\(colors)[palette]",
-            "-map", "[palette]", "-frames:v", "1", "-update", "1", "-f", "image2", palette,
-            "-map", "[b]", "-stats_enc_pre", "pipe:1", "-stats_enc_pre_fmt", FfmpegRunner.frameTimeKey + "={t}", "-f", "null", "-",
+            "-map", "[palette]", "-frames:v", "1", "-update", "1", "-c:v", "png", "-f", "image2", palette,
+            "-map", "[b]", "-c:v", "wrapped_avframe", "-stats_enc_pre", "pipe:1", "-stats_enc_pre_fmt", FfmpegRunner.frameTimeKey + "={t}", "-f", "null", "-",
         ]
         let second = common + [
             "-i", input, "-i", palette,
             "-filter_complex", "[0:V:0]\(chain)[frames];[frames][1:v]paletteuse=dither=\(dither):diff_mode=rectangle[gif]",
-            "-map", "[gif]", "-loop", "0", "-f", "gif", "-progress", "pipe:1", output,
+            "-map", "[gif]", "-loop", "0", "-c:v", "gif", "-f", "gif", "-progress", "pipe:1", output,
         ]
         return [FfmpegPass(arguments: first, weight: 0.4), FfmpegPass(arguments: second, weight: 0.6)]
     }
@@ -424,11 +451,13 @@ enum MediaEncoding {
     /// One full-size PNG frame from a tenth into the video (the first frames are often black), the start for video →
     /// image conversions (the image engines take it from there). Without this edge the route planner would reach images
     /// through an animated GIF of the whole video.
-    private static func posterFrame(_ input: String, _ output: String, _ info: MediaInfo) throws -> [String] {
+    static func posterFrame(_ input: String, _ output: String, _ info: MediaInfo, decodeFromStart: Bool = false) throws -> [String] {
         guard let video = info.video else { throw ConversionError("The file has no video stream.") }
         let seconds = (info.duration ?? 0) / 10
-        return common + [
-            "-ss", formatSeconds(seconds), "-i", input, "-map", "0:V:0",
+        let seek = ["-ss", formatSeconds(seconds)]
+        let source = decodeFromStart ? ["-i", input] + seek : seek + ["-i", input]
+        return common + source + [
+            "-map", "0:V:0",
             "-vf", squarePixels(video) + "null", "-frames:v", "1", "-update", "1", "-c:v", "png", "-f", "image2",
             "-progress", "pipe:1", output,
         ]
