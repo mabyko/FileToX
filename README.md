@@ -107,10 +107,11 @@ These targets are not offered, or end with an error because of what the file con
 | Writing PDB (PalmDoc) | Not offered | It holds Windows-1252 text only, so Korean, Japanese and emoji break. Reading PDB works. |
 | Video or audio → a transcript in DOCX, MD or other documents | Not supported | Transcripts are written as TXT only. Video → documents and pictures is a still frame. |
 | Video or audio → TXT on macOS 15 | Not offered | Transcription uses the on-device speech recognition of macOS 26 or later. |
+| Video or audio → TXT on a Mac without any speech recognition language installed | "No speech recognition language is installed" error | Download the languages you need in the settings. |
 | Video or audio without speech → TXT | "No speech was recognised" error | Music, effects and silence give no text. Subtitle tracks are not read. |
 | Pictures or scanned PDFs without text → TXT | "The PDF contains no text" error | There is no text layer and nothing to recognise. Pictures and scans with text are read with OCR. |
 
-Limits of transcription and OCR: transcription listens in one language, the Mac's first language (an English recording on a Korean Mac comes out wrong), without speakers or timestamps. OCR does not promise vertical writing, skewed pages, handwriting or Chinese, Japanese and Korean scripts other than the first language's, and does not rebuild tables.
+Limits of transcription and OCR: the transcription language is chosen among the macOS models downloaded in **Settings → Conversion engines → Speech recognition languages**. With several installed, the one that understands the first 45 seconds of the file best transcribes all of it. A language that is not installed cannot be chosen, a file that changes language is heard in one, and nothing is downloaded during a conversion. There are no speakers or timestamps. OCR does not promise vertical writing, skewed pages, handwriting or Chinese, Japanese and Korean scripts other than the first language's, and does not rebuild tables.
 
 ## Verification
 

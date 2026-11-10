@@ -165,6 +165,7 @@ struct SettingsJSONEditor: View {
             } footer: {
                 Text(L("engines.managed.help")).font(.callout).foregroundStyle(.secondary)
             }
+            if #available(macOS 26.0, *) { SpeechLanguagesSection() }
             Section {
                 ForEach(model.catalog?.engines ?? [], id: \.id) { engine in
                     LabeledContent {

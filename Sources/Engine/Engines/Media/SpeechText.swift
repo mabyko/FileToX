@@ -1,38 +1,87 @@
 // On-device speech transcription with Apple's Speech framework (SpeechAnalyzer, macOS 26 or later), for video and
-// audio → TXT. FfmpegConverter extracts the sound as a WAV file first.
+// audio → TXT. FfmpegConverter extracts the sound as a WAV file first. The language models are the system's: the user
+// downloads the ones they need in the app's settings, and nothing is downloaded during a conversion.
 
 import AVFoundation
 import Foundation
 import Speech
 
 enum SpeechText {
-    /// Speech reads one language per file: the first of the user's languages it supports, else American English.
-    @available(macOS 26.0, *)
-    static func locale(_ preferred: [String] = Locale.preferredLanguages) async -> Locale {
-        let supported = await SpeechTranscriber.supportedLocales
-        for identifier in preferred + ["en-US"] {
-            if let match = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: identifier)), supported.contains(match) { return match }
+    /// The languages to try, of the installed models: one per language (the user's region of it when installed), the
+    /// user's languages first in their order.
+    static func candidates(_ installed: [Locale], preferred: [String] = Locale.preferredLanguages) -> [Locale] {
+        func language(_ locale: Locale) -> String { locale.language.languageCode?.identifier ?? locale.identifier }
+        let wanted = preferred.map { Locale(identifier: $0) }
+        let sorted = installed.sorted { $0.identifier < $1.identifier }
+        var chosen: [Locale] = []
+        for code in wanted.map(language) + sorted.map(language) where !chosen.contains(where: { language($0) == code }) {
+            let group = sorted.filter { language($0) == code }
+            let regions = wanted.filter { language($0) == code }.compactMap { $0.region?.identifier }
+            if let best = group.first(where: { locale in regions.contains { $0 == locale.region?.identifier } }) ?? group.first { chosen.append(best) }
         }
-        return Locale(identifier: "en-US")
+        return chosen
     }
 
-    /// The speech of the audio file at `path`: one line for each stretch of speech between pauses. The system downloads
-    /// the language's model on first use. `progress` gets the share of `duration` (seconds) read so far.
+    /// The language that understood a sample best, by each one's amount of text and confidence in it. A language that
+    /// hears a few characters where another hears sentences is sure of very little: those are left out first.
+    static func choose(_ heard: [(characters: Int, confidence: Double)]) -> Int? {
+        guard let longest = heard.map(\.characters).max(), longest > 0 else { return nil }
+        return heard.indices.filter { heard[$0].characters * 3 >= longest }.max { heard[$0].confidence < heard[$1].confidence }
+    }
+
+    /// The speech of the audio file at `path`: one line for each stretch of speech between pauses. With several language
+    /// models installed, the one that understands the first 45 seconds best reads the file (the user's first language
+    /// when no speech is in them). `progress` gets the share of `duration` (seconds) read so far.
     @available(macOS 26.0, *)
-    static func transcribe(_ path: String, duration: Double?, progress: ProgressHandler?) async throws -> String {
-        let locale = await locale()
-        let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
-        do {
-            if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) { try await request.downloadAndInstall() }
-        } catch {
-            throw ConversionError("The speech model for \(locale.identifier) could not be installed: \(error.localizedDescription)")
+    static func transcribe(_ path: String, duration: Double?, workDirectory: String, progress: ProgressHandler?) async throws -> String {
+        let languages = Array(candidates(await SpeechTranscriber.installedLocales).prefix(5))
+        guard var locale = languages.first else {
+            throw ConversionError("No speech recognition language is installed. Download one in Settings → Conversion engines → Speech recognition languages.")
+        }
+        if languages.count > 1 {
+            let sample = try sample(path, seconds: 45, in: workDirectory)
+            defer { if sample != path { try? FileManager.default.removeItem(atPath: sample) } }
+            var heard: [(characters: Int, confidence: Double)] = []
+            for language in languages {
+                let result = try await recognize(sample, language, duration: nil, progress: nil)
+                heard.append((result.lines.reduce(0) { $0 + $1.count }, result.confidence))
+            }
+            if let best = choose(heard) { locale = languages[best] }
+        }
+        return try await recognize(path, locale, duration: duration, progress: progress).lines.joined(separator: "\r\n")
+    }
+
+    /// The first `seconds` of the audio file as a file of its own (`path` itself when it is no longer than that).
+    private static func sample(_ path: String, seconds: Double, in folder: String) throws -> String {
+        let file = try AVAudioFile(forReading: URL(fileURLWithPath: path))
+        let frames = AVAudioFrameCount(seconds * file.processingFormat.sampleRate)
+        guard file.length > AVAudioFramePosition(frames), let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames) else { return path }
+        try file.read(into: buffer, frameCount: frames)
+        let output = FilePath.combine(folder, "speech-sample-\(UUID().uuidString).wav")
+        try AVAudioFile(forWriting: URL(fileURLWithPath: output), settings: file.fileFormat.settings).write(from: buffer)
+        return output
+    }
+
+    @available(macOS 26.0, *)
+    private static func recognize(_ path: String, _ locale: Locale, duration: Double?, progress: ProgressHandler?) async throws
+        -> (lines: [String], confidence: Double) {
+        let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [], attributeOptions: [.transcriptionConfidence])
+        // Also readies an installed model; a request means it is not installed (any more).
+        if try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) != nil {
+            throw ConversionError("The speech recognition language \(locale.identifier) is not installed. Download it in Settings → Conversion engines.")
         }
         let analyzer = SpeechAnalyzer(modules: [transcriber])
         let file = try AVAudioFile(forReading: URL(fileURLWithPath: path))
         return try await withTaskCancellationHandler {
-            async let lines = transcriber.results.reduce(into: [String]()) { lines, result in
+            async let heard = transcriber.results.reduce(into: (lines: [String](), sum: 0.0, count: 0)) { heard, result in
                 let line = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !line.isEmpty { lines.append(line) }
+                if !line.isEmpty { heard.lines.append(line) }
+                for run in result.text.runs {
+                    guard let confidence = run.transcriptionConfidence else { continue }
+                    let characters = result.text[run.range].characters.count
+                    heard.sum += confidence * Double(characters)
+                    heard.count += characters
+                }
                 if let duration, duration > 0 { progress?(min(1, result.range.end.seconds / duration)) }
             }
             if let last = try await analyzer.analyzeSequence(from: file) {
@@ -40,9 +89,9 @@ enum SpeechText {
             } else {
                 await analyzer.cancelAndFinishNow()
             }
-            let text = try await lines.joined(separator: "\r\n")
+            let result = try await heard
             try Task.checkCancellation()
-            return text
+            return (result.lines, result.sum / Double(max(1, result.count)))
         } onCancel: {
             Task { await analyzer.cancelAndFinishNow() }
         }

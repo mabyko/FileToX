@@ -395,3 +395,10 @@
 "engines.guidance.macos.pandoc" = "No pinned download is available for this Mac. Install the engine manually and select its program or app below.";
 "engines.guidance.macos.calibre" = "No pinned download is available for this Mac. Install the engine manually and select its program or app below.";
 "engines.guidance.macos.libreoffice" = "No pinned download is available for this Mac. Install the engine manually and select its program or app below.";
+"speech.languages.title" = "Speech recognition languages";
+"speech.languages.help" = "The macOS speech recognition models that transcribe speech when a video or audio file is converted to TXT. With several languages installed, the one that understands the start of the file best is used. macOS manages the models; nothing is downloaded during a conversion.";
+"speech.languages.none" = "No speech recognition language is installed, so video and audio cannot be converted to TXT. Download the languages you need below.";
+"speech.languages.installed" = "Installed";
+"speech.languages.add" = "Download a language…";
+"speech.languages.downloading" = "Downloading %@…";
+"speech.languages.failed" = "The %@ model could not be downloaded: %@";

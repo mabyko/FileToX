@@ -4,6 +4,7 @@
 // the installed FFmpeg lacks (Homebrew's: libvorbis, libtheora, libopencore_amrnb) are skipped and listed.
 
 import Foundation
+import Speech
 import XCTest
 @testable import FileToXEngineKit
 
@@ -792,12 +793,12 @@ final class MediaTests: XCTestCase {
         try XCTSkipUnless(say.exitCode == 0 && FileManager.default.fileExists(spoken), "no system voice to speak the sample")
         let made = try ProcessRunner.runBlocking(Self.tools!.ffmpeg, MediaEncoding.common + ["-f", "lavfi", "-i", "color=c=blue:s=64x64:d=4", "-i", spoken, "-shortest", video], timeout: 60)
         XCTAssertEqual(made.exitCode, 0, made.standardError)
-        // The transcript follows the user's first language; an English Mac reads the sentence.
-        let english = await SpeechText.locale().identifier.hasPrefix("en")
+        // Whatever other models are installed, the English one understands the sentence best.
+        let installed = await SpeechTranscriber.installedLocales
+        try XCTSkipUnless(installed.contains { $0.language.languageCode == "en" }, "no English speech model is installed")
         for source in [video, spoken] {
             let text = String(decoding: try Data(contentsOf: URL(fileURLWithPath: try await convert(source, "txt"))).dropFirst(3), as: UTF8.self)
-            XCTAssertFalse(text.isEmpty)
-            if english { XCTAssertTrue(text.lowercased().contains("quick brown fox"), text) }
+            XCTAssertTrue(text.lowercased().contains("quick brown fox"), text)
         }
         do {
             _ = try await convert(try await makeClip(try newFolder(), "silent.mp4", audio: false), "txt")
@@ -805,6 +806,20 @@ final class MediaTests: XCTestCase {
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("no audio track"), error.localizedDescription)
         }
+    }
+
+    func testSpeechLanguageIsChosenAmongInstalledModels() {
+        let installed = ["en_GB", "en_US", "ko_KR", "ja_JP", "de_DE"].map { Locale(identifier: $0) }
+        func ids(_ preferred: [String]) -> [String] { SpeechText.candidates(installed, preferred: preferred).map(\.identifier) }
+        XCTAssertEqual(ids(["ko-KR", "en-US"]), ["ko_KR", "en_US", "de_DE", "ja_JP"])
+        XCTAssertEqual(ids(["en-GB"]), ["en_GB", "de_DE", "ja_JP", "ko_KR"])
+        XCTAssertEqual(ids(["fr-FR"]), ["de_DE", "en_GB", "ja_JP", "ko_KR"])
+        XCTAssertEqual(SpeechText.candidates([], preferred: ["ko-KR"]), [])
+        // Measured: Korean speech heard as Korean, English and Japanese; then English and Japanese speech.
+        XCTAssertEqual(SpeechText.choose([(48, 0.948), (30, 0.021), (1, 0.959)]), 0)
+        XCTAssertEqual(SpeechText.choose([(70, 0.828), (72, 0.906), (71, 0.747)]), 1)
+        XCTAssertEqual(SpeechText.choose([(1, 0.506), (60, 0.167), (35, 0.995)]), 2)
+        XCTAssertNil(SpeechText.choose([(0, 0), (0, 0)]))
     }
 
     func testMaxHeightScalesDownOnly() async throws {

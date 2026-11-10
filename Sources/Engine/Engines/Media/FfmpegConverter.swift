@@ -52,7 +52,7 @@ final class FfmpegConverter: Converter {
         defer { try? FileManager.default.removeItem(atPath: wav) }
         let arguments = MediaEncoding.common + ["-i", input, "-vn", "-map", "0:a:0", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", wav]
         try await Self.runPass(ffmpeg, FfmpegPass(arguments: arguments, weight: 0.2), info.duration, progress, 0)
-        let text = try await SpeechText.transcribe(wav, duration: info.duration, progress: progress.map { report in { report(0.2 + 0.78 * $0) } })
+        let text = try await SpeechText.transcribe(wav, duration: info.duration, workDirectory: step.workDirectory, progress: progress.map { report in { report(0.2 + 0.78 * $0) } })
         if text.isEmpty { throw ConversionError("No speech was recognised in the file.") }
         guard let output = try step.output.allocate("txt") else { return [] }
         // UTF-8 with BOM, like PDF → TXT.
