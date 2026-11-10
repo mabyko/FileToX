@@ -1,11 +1,11 @@
 import Foundation
 import Darwin
 
-struct HostLineBuffer {
-    static let maximumLength = 4 * 1024 * 1024
-    private(set) var remainder = Data()
+public struct HostLineBuffer {
+    public static let maximumLength = 4 * 1024 * 1024
+    public private(set) var remainder = Data()
 
-    mutating func append(_ data: Data) throws -> [Data] {
+    public mutating func append(_ data: Data) throws -> [Data] {
         remainder.append(data)
         var lines: [Data] = []
         while let newline = remainder.firstIndex(of: 10) {
@@ -24,7 +24,41 @@ struct HostLineBuffer {
     }
 }
 
-actor EngineHost {
+struct HostMessageChunk: Decodable {
+    let id: String
+    let offset: Int
+    let total: Int
+    let bytes: String
+}
+
+/// A transport frame never changes the JSON message or the 4 MiB line limit.
+struct HostMessageAssembler {
+    static let maximumLength = 64 * 1024 * 1024
+    private var id: String?
+    private var total = 0
+    private var buffer = Data()
+    var isReceiving: Bool { id != nil }
+
+    mutating func append(_ chunk: HostMessageChunk) throws -> Data? {
+        guard UUID(uuidString: chunk.id) != nil,
+              chunk.total > HostLineBuffer.maximumLength, chunk.total <= Self.maximumLength,
+              chunk.offset == buffer.count,
+              chunk.bytes.utf8.count <= ((2 * 1024 * 1024 + 2) / 3) * 4,
+              let bytes = Data(base64Encoded: chunk.bytes), !bytes.isEmpty, bytes.count <= 2 * 1024 * 1024,
+              bytes.count <= chunk.total - buffer.count,
+              id == nil || (id == chunk.id && total == chunk.total) else {
+            throw HostError(code: "protocol_error", message: "분할된 엔진 응답이 올바르지 않습니다.")
+        }
+        if id == nil { id = chunk.id; total = chunk.total }
+        buffer.append(bytes)
+        guard buffer.count == total else { return nil }
+        let result = buffer
+        self = Self()
+        return result
+    }
+}
+
+public actor EngineHost {
     private struct WireMessage: Decodable {
         let v: Int
         let id: String?
@@ -32,6 +66,7 @@ actor EngineHost {
         let result: JSONValue?
         let error: HostWireError?
         let data: JSONValue?
+        let chunk: HostMessageChunk?
     }
     private struct HostWireError: Decodable { let code: String; let message: String }
     private struct Pending {
@@ -53,6 +88,7 @@ actor EngineHost {
     private var handshakeTimeout: Task<Void, Never>?
     private var pending: [String: Pending] = [:]
     private var lineBuffer = HostLineBuffer()
+    private var messageAssembler = HostMessageAssembler()
     private var stderr = Data()
     private var shuttingDown = false
     private var restartTask: Task<Void, Never>?
@@ -60,7 +96,7 @@ actor EngineHost {
     private var cancelTimeouts: [String: Task<Void, Never>] = [:]
     private var finishedJobIDs: [String] = []
 
-    init(executableURL: URL? = nil, dataDirectory: URL? = nil) {
+    public init(executableURL: URL? = nil, dataDirectory: URL? = nil) {
         self.executableURL = executableURL ?? Bundle.main.bundleURL
             .appendingPathComponent("Contents/Helpers/FileToXEngine.app/Contents/MacOS/FileToXEngine")
         self.dataDirectory = dataDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -70,10 +106,10 @@ actor EngineHost {
         eventsContinuation = pair.continuation
     }
 
-    func events() -> AsyncStream<HostEvent> { stream }
-    func diagnostics() -> String { String(decoding: stderr, as: UTF8.self) }
+    public func events() -> AsyncStream<HostEvent> { stream }
+    public func diagnostics() -> String { String(decoding: stderr, as: UTF8.self) }
 
-    func start() async throws -> HostHello {
+    public func start() async throws -> HostHello {
         if let hello { return hello }
         guard !shuttingDown else { throw HostError(code: "shutdown", message: "변환 엔진이 종료 중입니다.") }
         if process == nil { try launch() }
@@ -92,7 +128,7 @@ actor EngineHost {
         let temporary = dataDirectory.appendingPathComponent("tmp").path
         let child = Process()
         child.executableURL = executableURL
-        child.arguments = ["--data", core, "--engines", engines]
+        child.arguments = ["--data", core, "--engines", engines, "--chunked-output"]
         var environment = ProcessInfo.processInfo.environment
         environment["TMPDIR"] = temporary + "/"
         child.environment = environment
@@ -103,6 +139,7 @@ actor EngineHost {
         runID = UUID()
         let generation = runID
         lineBuffer = HostLineBuffer()
+        messageAssembler = HostMessageAssembler()
         stderr = Data()
         input = stdin.fileHandleForWriting
         output = stdout.fileHandleForReading
@@ -171,7 +208,14 @@ actor EngineHost {
         }
         do {
             for line in try lineBuffer.append(data) {
-                let message = try JSONDecoder.hostDecoder().decode(WireMessage.self, from: line)
+                var message = try JSONDecoder.hostDecoder().decode(WireMessage.self, from: line)
+                if let chunk = message.chunk {
+                    guard hello != nil, message.v == 1, message.id == nil, message.event == nil,
+                          message.result == nil, message.error == nil, message.data == nil else { throw HostError.interrupted }
+                    guard let complete = try messageAssembler.append(chunk) else { continue }
+                    message = try JSONDecoder.hostDecoder().decode(WireMessage.self, from: complete)
+                    guard message.chunk == nil else { throw HostError.interrupted }
+                } else if messageAssembler.isReceiving { throw HostError.interrupted }
                 guard message.v == 1, (message.id != nil) != (message.event != nil) else { throw HostError.interrupted }
                 if let id = message.id {
                     guard hello != nil, (message.result != nil) != (message.error != nil),
@@ -243,6 +287,7 @@ actor EngineHost {
         }
         process = nil
         hello = nil
+        messageAssembler = HostMessageAssembler()
         handshakeTimeout?.cancel(); handshakeTimeout = nil
         try? input?.close(); try? output?.close(); try? errorOutput?.close()
         input = nil; output = nil; errorOutput = nil
@@ -298,11 +343,29 @@ actor EngineHost {
         }
     }
 
-    func catalog() async throws -> HostCatalog { try await request(HostCatalog.self, method: "catalog.get") }
-    func resolve(paths: [String]) async throws -> HostSelection {
+    public func catalog() async throws -> HostCatalog { try await request(HostCatalog.self, method: "catalog.get") }
+    public func enginePackages() async throws -> [HostEnginePackage] {
+        struct Packages: Decodable, Sendable { let packages: [HostEnginePackage] }
+        return try await request(Packages.self, method: "engine.packages").packages
+    }
+    public func installEngine(packageId: String) async throws -> HostEnginePackage {
+        try await request(HostEnginePackage.self, method: "engine.install", params: ["packageId": .string(packageId)])
+    }
+    public func cancelEngineInstall(packageId: String) async throws -> HostEnginePackage {
+        try await request(HostEnginePackage.self, method: "engine.install.cancel", params: ["packageId": .string(packageId)])
+    }
+    public func stopEngineInstalls() async throws {
+        guard process != nil else { return }
+        _ = try await request(JSONValue.self, method: "engine.install.stop")
+        // Each RPC is short; disk image cleanup can outlive the usual request/shutdown timeout.
+        while try await enginePackages().contains(where: \.isActive) {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+    }
+    public func resolve(paths: [String]) async throws -> HostSelection {
         try await request(HostSelection.self, method: "selection.resolve", params: ["paths": .array(paths.map(JSONValue.string))])
     }
-    func startJob(paths: [String], presetId: String? = nil, targetFormat: String? = nil, preset: JSONValue? = nil) async throws -> String {
+    public func startJob(paths: [String], presetId: String? = nil, targetFormat: String? = nil, preset: JSONValue? = nil) async throws -> String {
         struct Accepted: Decodable, Sendable { let jobId: String }
         var params: [String: JSONValue] = ["paths": .array(paths.map(JSONValue.string))]
         if let presetId { params["presetId"] = .string(presetId) }
@@ -310,7 +373,7 @@ actor EngineHost {
         if let preset { params["preset"] = preset }
         return try await request(Accepted.self, method: "job.start", params: params).jobId
     }
-    func cancel(jobId: String) async throws {
+    public func cancel(jobId: String) async throws {
         _ = try await request(JSONValue.self, method: "job.cancel", params: ["jobId": .string(jobId)])
         guard !finishedJobIDs.contains(jobId), cancelTimeouts[jobId] == nil else { return }
         let generation = runID
@@ -323,19 +386,31 @@ actor EngineHost {
         guard generation == runID, cancelTimeouts[jobId] != nil else { return }
         failHost(HostError(code: "cancel_timeout", message: "취소에 응답하지 않는 엔진을 종료했습니다. 다른 대기 작업도 중단됐습니다."), restart: !shuttingDown)
     }
-    func history() async throws -> [HostHistory] {
+    public func history() async throws -> [HostHistory] {
         struct History: Decodable, Sendable { let entries: [HostHistory] }
         return try await request(History.self, method: "history.get").entries
     }
-    func clearHistory() async throws { _ = try await request(JSONValue.self, method: "history.clear") }
-    func library() async throws -> HostLibrary { try await request(HostLibrary.self, method: "library.get") }
-    func saveLibrary(baseRevision: Int, presets: [JSONValue], profiles: [JSONValue]) async throws -> HostLibrary {
+    public func clearHistory() async throws { _ = try await request(JSONValue.self, method: "history.clear") }
+    public func library() async throws -> HostLibrary { try await request(HostLibrary.self, method: "library.get") }
+    public func watchStatus() async throws -> [JSONValue] {
+        struct Status: Decodable, Sendable { let rules: [JSONValue] }
+        return try await request(Status.self, method: "watch.status").rules
+    }
+    public func stopWatching() async throws {
+        guard process != nil else { return }
+        _ = try await request(JSONValue.self, method: "watch.stop")
+    }
+    public func saveLibrary(baseRevision: Int, presets: [JSONValue], profiles: [JSONValue]) async throws -> HostLibrary {
         try await request(HostLibrary.self, method: "library.save", params: ["baseRevision": .number(Double(baseRevision)), "presets": .array(presets), "profiles": .array(profiles)])
     }
-    func saveSettings(baseRevision: Int, settings: JSONValue) async throws -> HostLibrary {
+    public func saveSettings(baseRevision: Int, settings: JSONValue) async throws -> HostLibrary {
         try await request(HostLibrary.self, method: "settings.save", params: ["baseRevision": .number(Double(baseRevision)), "settings": settings])
     }
-    func shutdown() async {
+    public func shutdown() async {
+        if !shuttingDown {
+            try? await stopWatching()
+            try? await stopEngineInstalls()
+        }
         shuttingDown = true
         restartTask?.cancel(); restartTask = nil
         try? input?.close(); input = nil

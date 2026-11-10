@@ -6,14 +6,35 @@ import XCTest
 @testable import FileToXCore
 
 final class RealEngineHostTests: XCTestCase {
-    func testLanguageChangesReachHostWithoutRestartAndSettingsPersist() async throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        let executable = ProcessInfo.processInfo.environment["FILETOX_TEST_HOST"].map(URL.init(fileURLWithPath:))
-            ?? root.appendingPathComponent("build/engine-host/osx-arm64/Debug/FileToXEngine.app/Contents/MacOS/FileToXEngine")
-        guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-            throw XCTSkip("Build the engine host first with Tools/build-engine-host.sh.")
+    func testLargePersistedHistorySurvivesTheRealHostTransport() async throws {
+        let executable = try engineHelper()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let core = folder.appendingPathComponent("core")
+        try FileManager.default.createDirectory(at: core, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let outputs = (0..<6_000).map { "/tmp/" + String(repeating: "페이지/", count: 40) + "\($0).png" }
+        let entry: [String: Any] = ["jobId": "many-pages", "finishedAt": "2026-10-25T00:00:00Z",
+            "presetId": "to-png", "presetName": "PNG", "state": "completed", "sources": ["/tmp/source.pdf"],
+            "outputs": outputs, "failures": [], "errors": []]
+        let saved = try JSONSerialization.data(withJSONObject: [entry])
+        try saved.write(to: core.appendingPathComponent("history.json"))
+        let host = EngineHost(executableURL: executable, dataDirectory: folder)
+        do {
+            let history = try await host.history()
+            XCTAssertEqual(history.count, 1)
+            XCTAssertEqual(history.first?.outputs, outputs)
+            let catalog = try await host.catalog()
+            XCTAssertEqual(catalog.formats.count, 173)
+            await host.shutdown()
+            XCTAssertEqual(try Data(contentsOf: core.appendingPathComponent("history.json")), saved)
+        } catch {
+            await host.shutdown()
+            throw error
         }
+    }
+
+    func testLanguageChangesReachHostWithoutRestartAndSettingsPersist() async throws {
+        let executable = try engineHelper()
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -70,13 +91,7 @@ final class RealEngineHostTests: XCTestCase {
 
     @MainActor
     func testBundledHostConvertsImagesPDFAndArchivesThroughSwiftClient() async throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        let executable = ProcessInfo.processInfo.environment["FILETOX_TEST_HOST"].map(URL.init(fileURLWithPath:))
-            ?? root.appendingPathComponent("build/engine-host/osx-arm64/Debug/FileToXEngine.app/Contents/MacOS/FileToXEngine")
-        guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-            throw XCTSkip("Build the engine host first with Tools/build-engine-host.sh.")
-        }
+        let executable = try engineHelper()
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let host = EngineHost(executableURL: executable, dataDirectory: folder.appendingPathComponent("host"))
@@ -91,7 +106,7 @@ final class RealEngineHostTests: XCTestCase {
             let hello = try await host.start()
             XCTAssertEqual(hello.rid, "osx-arm64")
             let catalog = try await host.catalog()
-            XCTAssertEqual(catalog.formats.count, 172)
+            XCTAssertEqual(catalog.formats.count, 173)
             XCTAssertEqual(catalog.engines.count, 23)
             let library = try await host.library()
             let source = try imageFixture(folder.appendingPathComponent("한글 사진.png"))
@@ -162,4 +177,15 @@ final class RealEngineHostTests: XCTestCase {
         XCTAssertTrue(CGImageDestinationFinalize(destination))
         return url
     }
+}
+
+/// The Swift engine helper: `FILETOX_TEST_HOST`, else the one `swift build` put next to this test bundle.
+private func engineHelper() throws -> URL {
+    if let path = ProcessInfo.processInfo.environment["FILETOX_TEST_HOST"] { return URL(fileURLWithPath: path) }
+    let products = Bundle(for: RealEngineHostTests.self).bundleURL.deletingLastPathComponent()
+    let candidates = [products.appendingPathComponent("FileToXEngine"), products.appendingPathComponent("FileToXEngine.app/Contents/MacOS/FileToXEngine")]
+    guard let executable = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }) else {
+        throw XCTSkip("Build the engine helper first (swift build --product FileToXEngine).")
+    }
+    return executable
 }

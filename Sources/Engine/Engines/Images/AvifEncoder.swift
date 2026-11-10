@@ -1,0 +1,230 @@
+// AVIF writing with libavif 1.4.2 + libaom 3.14.1 (Vendor/LibAVIF) for 8-bit colour pictures. ImageIO still writes every
+// AVIF first. libavif's 4:4:4 encode at ImageIO's AV1 quantizers then replaces that file only when both hold:
+// - with both files decoded by ImageIO and compared with the encoder's input as premultiplied 8-bit samples in their own
+//   colour space, its summed squared error is no larger for colour and for alpha, and smaller for one of them;
+// - read back by ImageIO, it keeps every top-level tag of the frame's metadata that ImageIO's file kept, with all of its
+//   value: equal text, and every item, field and qualifier (such as a language) of arrays, alternatives and structures,
+//   except the pixel dimensions, which it records from the picture while ImageIO copies the source's.
+// Like ImageIO's own writer, the helper's file keeps the Exif auxiliary tags (lens, serial number), which Exif cannot
+// hold, as XMP. That bounds these measures, not visual, SSIM or full metadata equivalence. Colour pictures usually gain
+// (ImageIO's 4:2:0 drops chroma detail); ImageIO's file usually stays for gray-like ones. The helper does not run for gray
+// pictures, colour pictures whose samples are all gray, 16-bit and float pictures, several frames, frames not prepared
+// for an AVIF target, pictures beyond libavif's default decoder limits, or when ImageIO's file already has zero error.
+//
+// libaom's encode is one call that cannot be interrupted, so it runs in a helper process (FileToXAvifEncoder) that
+// cancellation kills through ProcessRunner. Samples and metadata reach the helper in a private hand-off file; its result
+// replaces the output only after it exited successfully and was checked.
+
+import CoreGraphics
+import Darwin
+import Foundation
+import ImageIO
+
+enum AvifEncoder {
+    /// libavif's default decoder limits (AVIF_DEFAULT_IMAGE_DIMENSION_LIMIT, AVIF_DEFAULT_IMAGE_SIZE_LIMIT): readers with
+    /// default settings refuse larger single pictures, which ImageIO writes as tiles.
+    static let maxDimension = 32768, maxPixels = 16384 * 16384
+    /// Largest ICC, Exif or XMP block the helper accepts.
+    static let maxMetadata = 64 << 20
+
+    /// The helper next to the running executable (the engine helper app, `swift build`'s products) or next to the bundle
+    /// with this code (test bundles in the build products); nil when this build has none, and ImageIO writes every AVIF.
+    static let helper: String? = [EngineEnvironment.baseDirectory, Bundle(for: Marker.self).bundleURL.deletingLastPathComponent().path]
+        .map { FilePath.combine($0, "FileToXAvifEncoder") }.first { FileManager.default.isExecutableFile(atPath: $0) }
+
+    private final class Marker {}
+
+    /// Replaces ImageIO's AVIF of the frames at `path` with the helper's when the helper's has no larger squared error for
+    /// colour and alpha and a smaller one for either, and keeps the metadata tags ImageIO's kept (see above); returns
+    /// whether it did.
+    @discardableResult
+    static func improve(_ frames: [ImageFrame], at path: String, helper: String? = helper) throws -> Bool {
+        guard let helper, frames.count == 1, let frame = frames.first, let quality = frame.properties[ImageFrame.qualityKey] as? Int,
+              (1...100).contains(quality) else { return false }
+        let image = frame.image
+        guard image.colorSpace?.model == .rgb, image.bitsPerComponent == 8,
+              image.width <= maxDimension, image.height <= maxDimension, image.width * image.height <= maxPixels else { return false }
+        let (samples, channels) = CodecPixels.straight(image)
+        guard !isGray(samples, channels) else { return false }
+        try Task.checkCancellation()
+        let imageIO = try Data(contentsOf: URL(fileURLWithPath: path))
+        let theirs = errors(imageIO, ImagePixels.bitmap(image))
+        // No candidate can strictly improve a file whose decoded samples already match.
+        if let theirs, theirs.colour == 0, theirs.alpha == 0 { return false }
+        // ImageIO keeps the resolution as Exif, even without other metadata; so does this writer.
+        var described = frame
+        if let dpi = frame.dpi, dpi.x > 0, dpi.y > 0 {
+            let metadata = frame.properties[ImageFrame.metadataKey].flatMap { CFGetTypeID($0 as CFTypeRef) == CGImageMetadataGetTypeID() ? ($0 as! CGImageMetadata) : nil }
+            described.properties[ImageFrame.metadataKey] = ImageEncoder.encoderMetadata(metadata ?? CGImageMetadataCreateMutable(), dpi)
+        }
+        let blobs = CodecPixels.metadataBlobs(described, colorModel: .rgb, auxInXmp: true)
+        let icc = blobs.icc ?? Data(), exif = blobs.exif ?? Data(), xmp = blobs.xmp ?? Data()
+        guard [icc, exif, xmp].allSatisfy({ $0.count <= maxMetadata }) else { return false }
+        try Task.checkCancellation()
+
+        let scratch = try privateFolder()
+        defer { FileManager.default.removeIfPresent(scratch) }
+        let input = FilePath.combine(scratch, "picture"), output = FilePath.combine(scratch, "picture.avif")
+        var header = Data("FTXAVIF\0".utf8)
+        for value in [1, image.width, image.height, channels, quality, 0] { withUnsafeBytes(of: UInt32(value).littleEndian) { header += $0 } }
+        for value in [icc.count, exif.count, xmp.count, 0] { withUnsafeBytes(of: UInt64(value).littleEndian) { header += $0 } }
+        try write([header, samples, icc, exif, xmp], to: input)
+
+        let result = try ProcessRunner.runBlocking(helper, [input, output], timeout: 600, isCancelled: { Task.isCancelled })
+        try Task.checkCancellation()
+        guard result.exitCode == 0 else {
+            throw ConversionError("The AVIF encoder failed (\(result.exitCode)): " + result.standardError.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        let encoded = try Data(contentsOf: URL(fileURLWithPath: output))
+        // An ISOBMFF file whose ftyp box names AVIF as its major brand.
+        guard encoded.count > 12, encoded[4..<12] == Data("ftypavif".utf8) else {
+            throw ConversionError("The AVIF encoder wrote no AVIF file.")
+        }
+        guard let mine = errors(encoded, ImagePixels.bitmap(image)) else { return false }
+        if let theirs,
+           !(mine.colour <= theirs.colour && mine.alpha <= theirs.alpha && (mine.colour < theirs.colour || mine.alpha < theirs.alpha)) {
+            return false
+        }
+        // The shared serializer drops tags ImageIO's own AVIF writer keeps (a JPEG APP1 segment holds at most 64 KB of Exif).
+        if let metadata = described.properties[ImageFrame.metadataKey], CFGetTypeID(metadata as CFTypeRef) == CGImageMetadataGetTypeID(),
+           !keepsTags(of: metadata as! CGImageMetadata, encoded, comparedTo: imageIO) {
+            return false
+        }
+        try Task.checkCancellation()
+        try FileManager.default.writeFile(path, encoded)
+        return true
+    }
+
+    /// True when every pixel is gray (R = G = B).
+    static func isGray(_ samples: [UInt8], _ channels: Int) -> Bool {
+        samples.withUnsafeBufferPointer { s in stride(from: 0, to: s.count, by: channels).allSatisfy { s[$0] == s[$0 + 1] && s[$0] == s[$0 + 2] } }
+    }
+
+    /// Summed squared errors of the file as ImageIO decodes it against the samples it was encoded from (premultiplied, in
+    /// their own colour space), for colour and for alpha; nil when it does not decode to that size.
+    static func errors(_ file: Data, _ source: ImagePixels.Bitmap) -> (colour: Int, alpha: Int)? {
+        guard let decoder = CGImageSourceCreateWithData(file as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(decoder, CGImageSourceGetPrimaryImageIndex(decoder), nil),
+              image.width == source.width, image.height == source.height else { return nil }
+        let decoded = ImagePixels.bitmap(image).pixels
+        var colour = 0, alpha = 0
+        decoded.withUnsafeBufferPointer { d in
+            source.pixels.withUnsafeBufferPointer { s in
+                for i in 0..<d.count {
+                    let e = Int(d[i]) - Int(s[i])
+                    if i & 3 == 3 { alpha += e * e } else { colour += e * e }
+                }
+            }
+        }
+        return (colour, alpha)
+    }
+
+    /// True when `file` holds every top-level tag of `metadata` that `reference` holds, both as ImageIO reads them (one view
+    /// of Exif and XMP together), with all of the reference's value (`TagValue.holds`). Neither writer gets the source's file
+    /// structure (`encoderMetadata`), and the pixel dimensions are left out: `CodecPixels` records the picture's own size,
+    /// while ImageIO's AVIF writer copies the source's.
+    static func keepsTags(of metadata: CGImageMetadata, _ file: Data, comparedTo reference: Data) -> Bool {
+        func read(_ data: Data) -> [String: CGImageMetadataTag] {
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let metadata = CGImageSourceCopyMetadataAtIndex(source, CGImageSourceGetPrimaryImageIndex(source), nil) else { return [:] }
+            return tags(metadata)
+        }
+        var wanted = Set(tags(ImageEncoder.encoderMetadata(metadata, nil)).keys)
+        for name in ["PixelXDimension", "PixelYDimension"] { wanted.remove((kCGImageMetadataNamespaceExif as String) + " " + name) }
+        let kept = read(file)
+        return read(reference).allSatisfy { key, tag in !wanted.contains(key) || kept[key].map { TagValue($0).holds(TagValue(tag)) } == true }
+    }
+
+    /// Each top-level tag by namespace and name.
+    private static func tags(_ metadata: CGImageMetadata) -> [String: CGImageMetadataTag] {
+        var result: [String: CGImageMetadataTag] = [:]
+        for tag in (CGImageMetadataCopyTags(metadata) as? [CGImageMetadataTag]) ?? [] { result[key(tag)] = tag }
+        return result
+    }
+
+    private static func key(_ tag: CGImageMetadataTag) -> String {
+        (CGImageMetadataTagCopyNamespace(tag) as String? ?? "") + " " + (CGImageMetadataTagCopyName(tag) as String? ?? "")
+    }
+
+    /// A metadata tag's whole value as a comparable tree: its type, its qualifiers (such as `xml:lang`) and its text, items
+    /// or fields. Qualifiers and fields are named by namespace and local name, never by prefix.
+    struct TagValue: Hashable {
+        enum Content: Hashable { case text(String), items([TagValue]), unordered([TagValue: Int]), fields([String: TagValue]) }
+        /// A qualifier's namespace and local name, with its value.
+        struct Qualifier: Hashable { let name: String; let value: TagValue }
+        let type: Int32
+        let qualifiers: [Qualifier: Int]
+        let content: Content
+
+        init(_ tag: CGImageMetadataTag) {
+            let type = CGImageMetadataTagGetType(tag)
+            self.type = type.rawValue
+            qualifiers = Self.counts(((CGImageMetadataTagCopyQualifiers(tag) as? [AnyObject]) ?? []).map { qualifier in
+                Qualifier(name: Self.isTag(qualifier) ? AvifEncoder.key(qualifier as! CGImageMetadataTag) : "", value: Self.value(qualifier))
+            })
+            let value = CGImageMetadataTagCopyValue(tag)
+            if let items = value as? [AnyObject] {
+                content = type == .arrayUnordered ? .unordered(Self.counts(items.map(Self.value))) : .items(items.map(Self.value))
+            } else if let fields = value as? [String: AnyObject] {
+                content = .fields(Dictionary(fields.map { name, field in (Self.isTag(field) ? AvifEncoder.key(field as! CGImageMetadataTag) : name, Self.value(field)) },
+                                             uniquingKeysWith: { first, _ in first }))
+            } else {
+                content = .text(value.map(Self.text) ?? "")
+            }
+        }
+
+        private init(text: String) { (type, qualifiers, content) = (-1, [:], .text(text)) }
+
+        /// An item, field or qualifier: a tag's value, or the text of anything else.
+        private static func value(_ object: AnyObject) -> TagValue {
+            isTag(object) ? TagValue(object as! CGImageMetadataTag) : TagValue(text: text(object))
+        }
+
+        private static func isTag(_ object: AnyObject) -> Bool { CFGetTypeID(object) == CGImageMetadataTagGetTypeID() }
+
+        private static func text(_ object: AnyObject) -> String { object as? String ?? "\(object)" }
+
+        /// True when this value has `reference`'s type and holds all of it: its qualifiers (same namespace, local name and
+        /// value), equal text, each of its fields, the items of an ordered array or alternative in the same order, and those
+        /// of an unordered array in any order. Qualifiers and unordered items must be equal whole.
+        func holds(_ reference: TagValue) -> Bool {
+            guard type == reference.type, reference.qualifiers.allSatisfy({ qualifiers[$0.key, default: 0] >= $0.value }) else { return false }
+            switch (content, reference.content) {
+            case let (.items(items), .items(expected)): return items.count == expected.count && zip(items, expected).allSatisfy { $0.holds($1) }
+            case let (.unordered(items), .unordered(expected)): return expected.allSatisfy { items[$0.key, default: 0] >= $0.value }
+            case let (.fields(fields), .fields(expected)): return expected.allSatisfy { name, field in fields[name]?.holds(field) == true }
+            default: return content == reference.content
+            }
+        }
+
+        private static func counts<Element: Hashable>(_ values: [Element]) -> [Element: Int] { values.reduce(into: [:]) { $0[$1, default: 0] += 1 } }
+    }
+
+    /// A new folder only this user can open, in the host's temporary folder.
+    private static func privateFolder() throws -> String {
+        let temp = ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
+        var template = Array(FilePath.combine(temp, "FileToX-avif-XXXXXX").utf8CString)
+        guard let created = mkdtemp(&template) else { throw FilePath.writeError(errno, temp) }
+        return String(cString: created)
+    }
+
+    /// Writes the parts one after another into a new file.
+    private static func write(_ parts: [any ContiguousBytes], to path: String) throws {
+        let descriptor = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else { throw FilePath.writeError(errno, path) }
+        defer { close(descriptor) }
+        for part in parts {
+            try part.withUnsafeBytes { raw in
+                var offset = 0
+                while offset < raw.count {
+                    let written = Darwin.write(descriptor, raw.baseAddress! + offset, raw.count - offset)
+                    if written < 0 {
+                        if errno == EINTR { continue }
+                        throw FilePath.writeError(errno, path)
+                    }
+                    offset += written
+                }
+            }
+        }
+    }
+}

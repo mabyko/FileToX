@@ -6,15 +6,25 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
+    ARCHS: arm64
     MARKETING_VERSION: 0.0.1
     CURRENT_PROJECT_VERSION: 2
     DEVELOPMENT_LANGUAGE: en
+packages:
+  # The engine, its helper executable, tests and every native library are defined once, in Package.swift. Xcode
+  # consumes that package; project.yml only adds what SwiftPM cannot build: the app bundles, signing and embedding.
+  Engine:
+    path: .
 targets:
   FileToX:
     type: application
     platform: macOS
     sources:
-      - Sources
+      - path: Sources
+        excludes:
+          - Core # the package's FileToXCore product below
+          - Engine
+          - EngineMain
       - path: Resources
         buildPhase: resources
     configFiles:
@@ -25,7 +35,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID)
         PRODUCT_NAME: $(APP_DISPLAY_NAME)
         PRODUCT_MODULE_NAME: FileToX
-        ARCHS: $(NATIVE_ARCH_ACTUAL)
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
         ENABLE_APP_SANDBOX: NO
@@ -48,16 +57,115 @@ targets:
         LSUIElement: true
         NSHighResolutionCapable: true
         NSHumanReadableCopyright: "FileToX · Inspired by Filee"
+    dependencies:
+      - package: Engine
+        product: FileToXCore
+      - target: FileToXEngine
+        embed: true
+        codeSign: false
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
+  # The helper app the main app starts, with bundled rhwp, 7-Zip and FFmpeg.
+  FileToXEngine:
+    type: application
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - Sources/EngineMain
+    dependencies:
+      - package: Engine
+        product: FileToXEngineKit
+      # PDFium is linked by the package (Vendor/PDFium); the helper embeds and signs the dylib.
+      - framework: Vendor/PDFium/lib/libpdfium.dylib
+        embed: true
+        codeSign: true
+      # Built first; the staging script copies and signs it into Contents/MacOS.
+      - target: FileToXAvifEncoder
+        embed: false
+        link: false
+    settings:
+      base:
+        LD_RUNPATH_SEARCH_PATHS: [$(inherited), "@executable_path/../Frameworks", "@loader_path/../Frameworks"]
+        PRODUCT_NAME: FileToXEngine
+        PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).enginehost
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Config/EngineHost.Info.plist
+        ENABLE_DEBUG_DYLIB: NO
+        SKIP_INSTALL: YES
+      configs:
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+          # A generated CODE_SIGN_ENTITLEMENTS input creates a build cycle; pass it to codesign after the script.
+          OTHER_CODE_SIGN_FLAGS: [$(inherited), --entitlements, $(DERIVED_FILE_DIR)/EngineHost.entitlements]
+    preBuildScripts:
+      - name: Prepare helper signing entitlements
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        inputFiles: [$(SRCROOT)/Tools/prepare-engine-entitlements.py]
+        outputFiles: [$(DERIVED_FILE_DIR)/EngineHost.entitlements]
+        script: |
+          python3 -I "$SRCROOT/Tools/prepare-engine-entitlements.py" "$SCRIPT_OUTPUT_FILE_0" "${EXPANDED_CODE_SIGN_IDENTITY:--}"
     postBuildScripts:
-      - name: Build and embed conversion engine host
+      - name: Stage bundled engines (rhwp, 7-Zip, FFmpeg, AVIF encoder)
         basedOnDependencyAnalysis: false
         script: |
-          case "$ARCHS" in
-            x86_64) engine_rid=osx-x64 ;;
-            arm64) engine_rid=osx-arm64 ;;
-            *) echo "Build one architecture at a time (ARCHS=arm64 or ARCHS=x86_64)." >&2; exit 1 ;;
-          esac
-          "$SRCROOT/Tools/build-engine-host.sh" --rid "$engine_rid" --configuration "$CONFIGURATION" --destination "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/FileToXEngine.app"
+          "$SRCROOT/Tools/stage-bundled-engines.sh"
+  # The AVIF encoder process the engine helper starts (libavif + libaom, Vendor/LibAVIF); SwiftPM builds the same target.
+  FileToXAvifEncoder:
+    type: tool
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - path: Vendor/LibAVIF/FileToX/avifenc.c
+    settings:
+      base:
+        PRODUCT_NAME: FileToXAvifEncoder
+        HEADER_SEARCH_PATHS: [$(SRCROOT)/Vendor/LibAVIF/headers]
+        OTHER_LDFLAGS: [$(SRCROOT)/Vendor/LibAVIF/lib/libavif.a]
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+  FileToXEngineTests:
+    type: bundle.unit-test
+    platform: macOS
+    configFiles:
+      Debug: Config/Base.xcconfig
+      Release: Config/Base.xcconfig
+    sources:
+      - path: Tests/Engine
+        excludes: [Pdf/Fixtures]
+    dependencies:
+      - package: Engine
+        product: FileToXEngineKit
+      - package: Engine
+        product: CLibRaw
+      - framework: Vendor/PDFium/lib/libpdfium.dylib
+        embed: true
+        codeSign: true
+      - target: FileToXEngine
+        embed: false
+        link: false
+    settings:
+      base:
+        LD_RUNPATH_SEARCH_PATHS: [$(inherited), "@loader_path/../Frameworks"]
+        PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).enginetests
+        # Logic tests: the helper is a dependency only so host tests can launch it, not their test host.
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "5.0"
   FileToXTests:
     type: bundle.unit-test
     platform: macOS
@@ -69,6 +177,8 @@ targets:
       - Tests/App
     dependencies:
       - target: FileToX
+      - package: Engine
+        product: FileToXCore
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(FILETOX_BUNDLE_ID).tests
@@ -80,10 +190,13 @@ schemes:
     build:
       targets:
         FileToX: all
+        FileToXEngine: all
         FileToXTests: [test]
+        FileToXEngineTests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - FileToXTests
+        - FileToXEngineTests

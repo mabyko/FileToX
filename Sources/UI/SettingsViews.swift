@@ -1,3 +1,4 @@
+import FileToXCore
 import AppKit
 import SwiftUI
 
@@ -63,6 +64,7 @@ struct SettingsJSONEditor: View {
 
     @ViewBuilder private var sections: some View {
         switch section {
+        case "watchFolders": WatchRulesEditor(model: model, settings: $draft)
         case "general":
             ApplicationSettingsSections(preferences: model.applicationPreferences)
             Section {
@@ -152,6 +154,19 @@ struct SettingsJSONEditor: View {
             }
         case "engineOwnCopies":
             Section {
+                ForEach(model.enginePackages.sorted { $0.id < $1.id }) { package in
+                    ManagedEngineRow(model: model, package: package)
+                }
+                if let error = model.engineInstallError {
+                    Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                }
+            } header: {
+                Text(L("engines.managed.title"))
+            } footer: {
+                Text(L("engines.managed.help")).font(.callout).foregroundStyle(.secondary)
+            }
+            if #available(macOS 26.0, *) { SpeechLanguagesSection() }
+            Section {
                 ForEach(model.catalog?.engines ?? [], id: \.id) { engine in
                     LabeledContent {
                         VStack(alignment: .trailing, spacing: 2) {
@@ -180,7 +195,7 @@ struct SettingsJSONEditor: View {
                         HStack {
                             TextField(L("실행 파일 경로"), text: text("engineOwnCopies", id), prompt: Text(L("실행 파일 경로"))).labelsHidden()
                             Button(L("찾기…")) {
-                                let panel = NSOpenPanel(); panel.canChooseDirectories = false
+                                let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = true
                                 if panel.runModal() == .OK, let url = panel.url { draft.set(.string(url.path), at: ["engineOwnCopies", id]) }
                             }
                         }
@@ -213,6 +228,55 @@ struct SettingsJSONEditor: View {
     private func text(_ keys: String...) -> Binding<String> { Binding(get: { value(keys).string ?? "" }, set: { draft.set(.string($0), at: keys) }) }
     private func bool(_ keys: String..., fallback: Bool = false) -> Binding<Bool> { Binding(get: { value(keys).bool ?? fallback }, set: { draft.set(.bool($0), at: keys) }) }
     private func number(_ keys: String..., fallback: Double) -> Binding<Double> { Binding(get: { value(keys).double ?? fallback }, set: { draft.set(.number($0), at: keys) }) }
+}
+
+private struct ManagedEngineRow: View {
+    let model: AppModel
+    let package: HostEnginePackage
+
+    private func size(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L("engines.package.\(package.id).name")).fontWeight(.medium)
+                    if let version = package.version {
+                        Text(L("engines.managed.size", version, size(package.downloadSize), size(package.installedSize)))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if package.isActive {
+                    Button(L("취소")) { Task { await model.cancelEngineInstall(package.id) } }
+                        .disabled(package.state == "cancelling" || model.pendingEngineActions.contains(package.id))
+                } else if package.canDownload && !["installed", "existing"].contains(package.state) {
+                    Button(L(package.state == "failed" || package.state == "cancelled" ? "engines.managed.retry" : "engines.managed.download")) {
+                        Task { await model.installEngine(package.id) }
+                    }.disabled(!model.isConnected || model.isShuttingDown || model.pendingEngineActions.contains(package.id))
+                }
+            }
+            if package.state != "idle" {
+                Text(L("engines.managed.state.\(package.state)")).font(.callout).foregroundStyle(.secondary)
+            }
+            if package.state == "downloading" {
+                ProgressView(value: package.progress)
+                    .accessibilityLabel(L("engines.managed.state.downloading"))
+                Text("\(size(package.bytesReceived)) / \(size(package.downloadSize))").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+            } else if package.isActive {
+                ProgressView().controlSize(.small).accessibilityLabel(L("engines.managed.state.\(package.state)"))
+            }
+            if package.state == "failed" {
+                Text(L(package.errorKey ?? "engines.error.install")).font(.callout).foregroundStyle(.red)
+                if let detail = package.errorDetail {
+                    Text(detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+            }
+            if !package.canDownload {
+                Text(L(package.guidanceKey ?? "engines.guidance.macos")).font(.callout).foregroundStyle(.secondary)
+            }
+        }.padding(.vertical, 4)
+    }
 }
 
 private struct DragShortcutEditor: View {

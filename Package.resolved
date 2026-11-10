@@ -1,0 +1,24 @@
+{
+  "originHash" : "3b18e320551dd9e84b34a5ad194254990ceabfb2c3cffd08214df24767976b26",
+  "pins" : [
+    {
+      "identity" : "libjxl-xcode",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/libjxl-Xcode.git",
+      "state" : {
+        "revision" : "069adca6bbe953b52e969d024406781d70ce93ff",
+        "version" : "0.10.4"
+      }
+    },
+    {
+      "identity" : "libwebp-xcode",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/libwebp-Xcode.git",
+      "state" : {
+        "revision" : "2b5256c29ff4e20f2a0d5ee863b62b1a22144434",
+        "version" : "1.6.0"
+      }
+    }
+  ],
+  "version" : 3
+}

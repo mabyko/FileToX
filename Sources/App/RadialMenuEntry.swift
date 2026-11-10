@@ -1,3 +1,4 @@
+import FileToXCore
 import Foundation
 
 enum FileMenuAction: String, CaseIterable, Identifiable {

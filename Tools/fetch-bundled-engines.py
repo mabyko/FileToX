@@ -5,7 +5,6 @@ import hashlib
 import io
 import json
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
@@ -66,8 +65,7 @@ def verified_archive(component):
 
 
 def fetch(rid):
-    subprocess.run([sys.executable, str(ROOT / "Tools/verify-filee-vendor.py")], check=True)
-    manifest = json.loads((ROOT / "Vendor/Filee/src/Filee.Engines/Infrastructure/engines.json").read_text())
+    manifest = json.loads((ROOT / "Sources/Engine/Resources/engines.json").read_text())
     components = manifest["platforms"][rid]["components"]
     destination = ROOT / "build/engines" / rid
     destination.mkdir(parents=True, exist_ok=True)
@@ -124,7 +122,7 @@ def selftest():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--rid", choices=["osx-arm64", "osx-x64"], default="osx-arm64")
+    parser.add_argument("--rid", choices=["osx-arm64"], default="osx-arm64")
     parser.add_argument("--selftest", action="store_true")
     options = parser.parse_args()
     if options.selftest:

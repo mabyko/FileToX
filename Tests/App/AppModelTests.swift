@@ -1,8 +1,153 @@
+import FileToXCore
 import AppKit
 import XCTest
 @testable import FileToX
 
 final class AppModelTests: XCTestCase {
+    @MainActor
+    func testLibraryRefreshDoesNotRequestOrRestartPollingAfterShutdown() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        try Data().write(to: fixture.root.appendingPathComponent("hold-catalog"))
+        let next = fixture.root.appendingPathComponent("next.json")
+        try #"{"pandoc":"idle","ffmpeg":"downloading","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        let refresh = Task { await model.refreshLibrary() }
+        try await wait { FileManager.default.fileExists(atPath: fixture.root.appendingPathComponent("catalog-held").path) }
+        try #"{"pandoc":"idle","ffmpeg":"cancelled","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        await model.shutDown()
+        await refresh.value
+        // A deferred restart would query the closed host on its next 400 ms tick.
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertNil(model.engineInstallError)
+        let status = model.statusMessage
+        let requests = fixture.root.appendingPathComponent("requests.log")
+        let before = try Data(contentsOf: requests)
+        await model.refreshLibrary()
+        XCTAssertEqual(model.statusMessage, status)
+        XCTAssertNil(model.engineInstallError)
+        XCTAssertEqual(try Data(contentsOf: requests), before)
+    }
+
+    @MainActor
+    func testCancelledInstallPollCannotPublishAnAvailabilityError() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
+        let model = AppModel(host: host)
+        await model.connect()
+        model.selectFiles([URL(fileURLWithPath: "/tmp/selection.rst")])
+        await model.installEngine("pandoc")
+        try Data().write(to: fixture.root.appendingPathComponent("hold-catalog"))
+        let next = fixture.root.appendingPathComponent("next.json")
+        try #"{"pandoc":"installed","ffmpeg":"idle","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { FileManager.default.fileExists(atPath: fixture.root.appendingPathComponent("catalog-held").path) }
+        await model.installEngine("ffmpeg")
+        // Release the old poll's catalog response only after its replacement cancelled it.
+        _ = try await host.history()
+        try #"{"pandoc":"installed","ffmpeg":"downloading","bytes":75}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { model.enginePackages.first(where: { $0.id == "ffmpeg" })?.bytesReceived == 75 }
+        XCTAssertNil(model.engineInstallError)
+        await model.cancelEngineInstall("ffmpeg")
+        await model.shutDown()
+    }
+
+    @MainActor
+    func testInstallPollingSurvivesSelectionRefreshFailureAndTracksCancellation() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        model.selectFiles((0...10_000).map { URL(fileURLWithPath: "/tmp/selection-\($0).rst") })
+        await model.installEngine("pandoc")
+        await model.installEngine("ffmpeg")
+        let next = fixture.root.appendingPathComponent("next.json")
+        try #"{"pandoc":"installed","ffmpeg":"downloading","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { model.engineInstallError != nil }
+        XCTAssertEqual(model.engineInstallError, L("한 번에 선택한 파일이 너무 많습니다."))
+        XCTAssertEqual(model.catalog?.engines.first?.available, true)
+        try #"{"pandoc":"installed","ffmpeg":"downloading","bytes":75}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { model.enginePackages.first(where: { $0.id == "ffmpeg" })?.bytesReceived == 75 }
+        await model.cancelEngineInstall("ffmpeg")
+        try await wait { model.enginePackages.first(where: { $0.id == "ffmpeg" })?.state == "cancelled" }
+        await model.shutDown()
+    }
+
+    @MainActor
+    func testCancelRestartsPollingAfterPackageStatusFailure() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        await model.installEngine("ffmpeg")
+        try Data().write(to: fixture.root.appendingPathComponent("fail-status"))
+        try await wait { model.engineInstallError != nil }
+        XCTAssertEqual(model.engineInstallError, L("변환 엔진 연결이 끊겼습니다. 실행 중인 작업을 다시 확인하세요."))
+        await model.cancelEngineInstall("ffmpeg")
+        try await wait { model.enginePackages.first(where: { $0.id == "ffmpeg" })?.state == "cancelled" }
+        await model.shutDown()
+    }
+
+    @MainActor
+    func testCancelRefreshesAvailabilityWhenInstallationAlreadyCommitted() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        await model.installEngine("pandoc")
+        try Data().write(to: fixture.root.appendingPathComponent("finish-on-cancel"))
+        await model.cancelEngineInstall("pandoc")
+        XCTAssertEqual(model.enginePackages.first(where: { $0.id == "pandoc" })?.state, "installed")
+        XCTAssertEqual(model.catalog?.engines.first?.available, true)
+        await model.shutDown()
+    }
+
+    @MainActor
+    func testLibraryRefreshReadsPackagesBeforeAvailabilityAndPollsDespiteInvalidSelection() async throws {
+        let fixture = try makeInstallFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = AppModel(host: EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data")))
+        await model.connect()
+        let next = fixture.root.appendingPathComponent("next.json")
+        try #"{"pandoc":"installed","ffmpeg":"idle","bytes":100}"#.write(to: next, atomically: true, encoding: .utf8)
+        await model.refreshLibrary()
+        XCTAssertEqual(model.enginePackages.first(where: { $0.id == "pandoc" })?.state, "installed")
+        XCTAssertEqual(model.catalog?.engines.first?.available, true)
+        model.selectFiles((0...10_000).map { URL(fileURLWithPath: "/tmp/selection-\($0).rst") })
+        try #"{"pandoc":"installed","ffmpeg":"downloading","bytes":50}"#.write(to: next, atomically: true, encoding: .utf8)
+        await model.refreshLibrary()
+        XCTAssertEqual(model.statusMessage, L("한 번에 선택한 파일이 너무 많습니다."))
+        XCTAssertEqual(model.enginePackages.first(where: { $0.id == "ffmpeg" })?.state, "downloading")
+        XCTAssertEqual(model.catalog?.engines.first?.available, true)
+        try #"{"pandoc":"installed","ffmpeg":"installed","bytes":100}"#.write(to: next, atomically: true, encoding: .utf8)
+        try await wait { model.enginePackages.allSatisfy { $0.state == "installed" } && model.catalog?.engines.allSatisfy(\.available) == true }
+        await model.shutDown()
+    }
+
+    @MainActor
+    func testManagedEngineInstallRefreshesAvailabilityAndCanCancelAndRetry() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let host = EngineHost(executableURL: fixture.executable, dataDirectory: fixture.root.appendingPathComponent("data"))
+        let model = AppModel(host: host)
+        await model.connect()
+        XCTAssertTrue(model.isConnected)
+        XCTAssertEqual(model.enginePackages.first?.state, "idle")
+        await model.resolve([URL(fileURLWithPath: "/tmp/managed.rst")], showRadial: false)
+        XCTAssertEqual(model.catalog?.engines.first?.available, false)
+        await model.installEngine("pandoc")
+        XCTAssertTrue(model.enginePackages.first?.isActive == true)
+        await model.cancelEngineInstall("pandoc")
+        XCTAssertEqual(model.enginePackages.first?.state, "cancelled")
+        await model.installEngine("pandoc")
+        try await wait { model.enginePackages.first?.state == "installed" && model.catalog?.engines.first?.available == true }
+        XCTAssertEqual(model.selection?.unknown, ["/tmp/managed.rst"])
+        XCTAssertNil(model.engineInstallError)
+        XCTAssertTrue(model.pendingEngineActions.isEmpty)
+        await model.shutDown()
+    }
+
     @MainActor
     func testFileActionsCopyURLsAndPathsWithoutChangingSourcesAndRejectMissingFiles() async throws {
         let fixture = try makeFixture()
@@ -321,6 +466,70 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(predicate())
     }
 
+    private func makeInstallFixture() throws -> (root: URL, executable: URL) {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("filetox-install-model-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let executable = root.appendingPathComponent("host.py")
+        let script = #"""
+        #!/usr/bin/env python3
+        import json,sys,os
+        os.setpgid(0,0)
+        root=os.path.dirname(__file__)
+        states={"pandoc":"idle","ffmpeg":"idle"}
+        received=0
+        held_catalog=None
+        def send(value):print(json.dumps(value),flush=True)
+        def response(r,result):send({"v":1,"id":r["id"],"result":result})
+        def error(r,message):send({"v":1,"id":r["id"],"error":{"code":"fixture","message":message}})
+        def package(key):return {"id":key,"version":"1","downloadSize":100,"installedSize":200,"canDownload":True,"state":states[key],"bytesReceived":received}
+        send({"v":1,"event":"hello","data":{"protocol":1,"hostVersion":"test","fileeCommit":"21fdd05ef7181b032ed83ec895cc9bbc4b198985","rid":"osx-arm64","dataDir":"/tmp/data"}})
+        for line in sys.stdin:
+            r=json.loads(line);m=r["method"]
+            with open(os.path.join(root,"requests.log"),"a") as requests:requests.write(m+"\n")
+            if m=="catalog.get":
+                result={"formats":[],"engines":[{"id":k,"displayName":k,"available":s=="installed"} for k,s in states.items()]}
+                hold=os.path.join(root,"hold-catalog")
+                if os.path.exists(hold):
+                    os.unlink(hold)
+                    held_catalog=(r,result)
+                    open(os.path.join(root,"catalog-held"),"w").close()
+                else:response(r,result)
+            elif m=="library.get":response(r,{"revision":1,"settings":{},"presets":[],"profiles":[]})
+            elif m=="history.get":
+                if held_catalog:
+                    response(*held_catalog)
+                    held_catalog=None
+                response(r,{"entries":[]})
+            elif m=="engine.packages":
+                failure=os.path.join(root,"fail-status")
+                if os.path.exists(failure):
+                    os.unlink(failure)
+                    error(r,"변환 엔진 연결이 끊겼습니다. 실행 중인 작업을 다시 확인하세요.")
+                    continue
+                next=os.path.join(root,"next.json")
+                if os.path.exists(next):
+                    with open(next) as f:updates=json.load(f)
+                    os.unlink(next)
+                    received=updates.pop("bytes")
+                    states.update(updates)
+                states={k:"cancelled" if s=="cancelling" else s for k,s in states.items()}
+                response(r,{"packages":[package(k) for k in states]})
+            elif m in ("engine.install","engine.install.cancel"):
+                key=r["params"]["packageId"]
+                states[key]="downloading" if m=="engine.install" else "cancelling"
+                if m=="engine.install.cancel" and os.path.exists(os.path.join(root,"finish-on-cancel")):
+                    states[key]="installed"
+                response(r,package(key))
+            elif m=="selection.resolve":
+                assert len(r["params"]["paths"])>10000
+                error(r,"한 번에 선택한 파일이 너무 많습니다.")
+            else:response(r,{})
+        """#
+        try script.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        return (root, executable)
+    }
+
     private func makeFixture() throws -> (root: URL, executable: URL) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("filetox-model-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -331,17 +540,34 @@ final class AppModelTests: XCTestCase {
         os.setpgid(0,0)
         lock=threading.Lock()
         configured=False
+        install_state="idle"
+        install_polls=0
         settings={}
         revision=1
         def send(value):
             with lock:print(json.dumps(value),flush=True)
         def response(request,result):send({"v":1,"id":request["id"],"result":result})
+        def package():return {"id":"pandoc","version":"3.12","downloadSize":100,"installedSize":200,"canDownload":True,"state":install_state,"bytesReceived":100 if install_state=="installed" else 0}
         send({"v":1,"event":"hello","data":{"protocol":1,"hostVersion":"test","fileeCommit":"21fdd05ef7181b032ed83ec895cc9bbc4b198985","rid":"osx-arm64","dataDir":"/tmp/data"}})
         for line in sys.stdin:
             r=json.loads(line);m=r["method"]
             if m=="catalog.get":response(r,{"formats":[],"engines":[{"id":"ffmpeg","displayName":"FFmpeg","available":configured}]})
             elif m=="library.get":threading.Timer(.1,response,args=(r,{"revision":revision,"settings":settings,"presets":[{"id":"zip-all","name":"ZIP"},{"id":"custom","name":"Custom"},{"id":"unavailable","name":"Unavailable"}],"profiles":[]})).start()
             elif m=="history.get":response(r,{"entries":[]})
+            elif m=="engine.packages":
+                if install_state=="downloading":
+                    install_polls+=1
+                    if install_polls>=2:install_state="installed";configured=True
+                response(r,{"packages":[package()]})
+            elif m=="engine.install":
+                install_state="downloading";install_polls=0
+                response(r,package())
+            elif m=="engine.install.cancel":
+                install_state="cancelled"
+                response(r,package())
+            elif m=="engine.install.stop":
+                if install_state=="downloading":install_state="cancelled"
+                response(r,{})
             elif m=="settings.save":
                 if r["params"]["baseRevision"]!=revision:
                     send({"v":1,"id":r["id"],"error":{"code":"revision_conflict","message":"Settings changed"}})

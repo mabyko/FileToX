@@ -1,0 +1,262 @@
+// The ICC profiles source files other than JPEG and PNG (read in JpegEncoder and ImageEncoder) embed where ImageIO
+// looks for them. `CodecPixels.sourceProfile` matches them with the colour space ImageIO decoded each picture in, so
+// writers repeat the exact source bytes and never ImageIO's defaults for untagged pictures.
+
+import CoreGraphics
+import Foundation
+import libjxl
+
+enum EmbeddedProfiles {
+    /// Most profile bytes read from one file: far more than any real profile (a JPEG holds at most 255 × 65519).
+    static let budget = 1 << 24
+
+    /// The valid profiles of `file` for each of the `count` pictures ImageIO reads from it (one list for all of them when
+    /// the format stores one per file), and whether it declares colour without ICC: HEIF/AVIF nclx, JPEG XL's enumerated
+    /// colour or a JPEG 2000 enumerated colourspace. Nil for other formats, for files whose pictures can't be matched
+    /// with ImageIO's and above the budget: the profile then stays inferred.
+    static func read(_ file: Data, format: String, count: Int) -> (profiles: [[Data]], declared: Bool)? {
+        switch format {
+        case "tiff": tiff(file, count: count).map { ($0, false) }
+        case "psd", "psb": PsdCodec.profiles(file).map { ([$0], false) }
+        case "webp": webp(file).map { ([$0], false) }
+        case "gif": gif(file).map { ([$0], false) }
+        case "heic", "avif": heif(file)
+        case "jxl": jxl(file)
+        case "jp2": jp2(file)
+        case "bmp": bmpProfile(file).map { ([[$0]], false) }
+        case "tga": ([[]], false) // the format has no profile
+        default: nil
+        }
+    }
+
+    /// BMP: the profile a BITMAPV5HEADER embeds (PROFILE_EMBEDDED; a linked profile's path is never followed), for 24-bit
+    /// and 32-bit uncompressed or bit-field pictures. It must be a valid RGB profile within the budget, after the headers
+    /// and apart from the pixel rows; nil for anything else.
+    private static func bmpProfile(_ file: Data) -> Data? {
+        func number(_ at: Int, _ size: Int) -> Int { (0..<size).reduce(0) { $0 | Int(file[file.startIndex + at + $1]) << (8 * $1) } }
+        guard file.count >= 14 + 124, file.starts(with: [0x42, 0x4D]), number(14, 4) == 124,
+              file[file.startIndex + 70..<file.startIndex + 74].elementsEqual("DEBM".utf8) else { return nil } // 'MBED'
+        let width = number(18, 4), height = Int(Int32(truncatingIfNeeded: number(22, 4))), bits = number(28, 2), compression = number(30, 4)
+        guard width > 0, width <= Int(Int32.max), height != 0, number(26, 2) == 1, [24, 32].contains(bits),
+              compression == 0 || (compression == 3 && bits == 32) else { return nil }
+        let pixels = number(10, 4), stride = (width * bits + 31) / 32 * 4, rows = abs(height)
+        guard pixels >= 14 + 124, pixels <= file.count, rows <= (file.count - pixels) / stride else { return nil }
+        let start = 14 + number(126, 4), size = number(130, 4)
+        guard size > 0, size <= budget, start >= 14 + 124, start <= file.count - size,
+              start + size <= pixels || start >= pixels + stride * rows else { return nil }
+        guard let profile = CodecPixels.validProfile(file.subdata(in: file.startIndex + start..<file.startIndex + start + size)),
+              CGColorSpace(iccData: profile as CFData)?.model == .rgb else { return nil }
+        return profile
+    }
+
+    /// For a BMP `bmpProfile` accepts, which ImageIO doesn't decode: a copy whose header names sRGB instead (the profile
+    /// fields cleared), so ImageIO decodes its samples without converting them, and the profile they are in.
+    static func bmpWithoutProfile(_ file: Data) -> (copy: Data, profile: Data)? {
+        guard let profile = bmpProfile(file) else { return nil }
+        var copy = Data(file)
+        copy.replaceSubrange(70..<74, with: Array("BGRs".utf8)) // LCS_sRGB
+        copy.replaceSubrange(126..<134, with: [UInt8](repeating: 0, count: 8))
+        return (copy, profile)
+    }
+
+    /// TIFF: the InterColorProfile tag (34675) of every picture in the main IFD chain, when the chain has as many
+    /// pictures as ImageIO reads.
+    private static func tiff(_ file: Data, count: Int) -> [[Data]]? {
+        guard let directories = tiffValues(file, tags: [34675], directories: count + 1), directories.count == count else { return nil }
+        return directories.map { $0[34675].flatMap(CodecPixels.validProfile).map { [$0] } ?? [] }
+    }
+
+    /// The bytes of `tags` (BYTE, LONG or UNDEFINED values) in the first `directories` IFDs of a classic TIFF's main
+    /// chain. Nil for BigTIFF, a malformed chain or values beyond the budget.
+    static func tiffValues(_ file: Data, tags: Set<Int>, directories: Int) -> [[Int: Data]]? {
+        guard file.count >= 8, file[file.startIndex] == file[file.startIndex + 1], [0x49, 0x4D].contains(file[file.startIndex]) else { return nil }
+        let little = file[file.startIndex] == 0x49
+        func number(_ at: Int, _ size: Int) -> Int {
+            (0..<size).reduce(0) { $0 << 8 | Int(file[file.startIndex + at + (little ? size - 1 - $1 : $1)]) }
+        }
+        guard number(2, 2) == 42 else { return nil }
+        var result: [[Int: Data]] = [], seen = Set<Int>(), ifd = number(4, 4), left = budget
+        while ifd != 0, result.count < directories {
+            // Room for the entry count and the next directory's offset.
+            guard ifd >= 8, ifd <= file.count - 6, seen.insert(ifd).inserted else { return nil }
+            let entries = number(ifd, 2)
+            guard entries <= (file.count - ifd - 6) / 12 else { return nil }
+            var values: [Int: Data] = [:]
+            for entry in (0..<entries).map({ ifd + 2 + 12 * $0 }) where tags.contains(number(entry, 2)) {
+                guard let unit = [1: 1, 4: 4, 7: 1][number(entry + 2, 2)] else { continue }
+                let count = number(entry + 4, 4)
+                guard count <= left / unit else { return nil }
+                let size = count * unit, offset = size <= 4 ? entry + 8 : number(entry + 8, 4)
+                guard offset <= file.count - size else { return nil }
+                left -= size
+                values[number(entry, 2)] = file.subdata(in: file.startIndex + offset..<file.startIndex + offset + size)
+            }
+            result.append(values)
+            ifd = number(ifd + 2 + 12 * entries, 4)
+        }
+        return result
+    }
+
+    /// WebP: the ICCP chunk, the profile of every frame.
+    private static func webp(_ file: Data) -> [Data]? {
+        guard file.count >= 12, file.starts(with: Array("RIFF".utf8)), file.dropFirst(8).starts(with: Array("WEBP".utf8)) else { return nil }
+        var i = file.startIndex + 12
+        while file.endIndex - i >= 8 {
+            let size = file[i + 4..<i + 8].reversed().reduce(0) { $0 << 8 | Int($1) }
+            guard size <= file.endIndex - i - 8 else { break }
+            if file[i..<i + 4].elementsEqual("ICCP".utf8) {
+                guard size <= budget else { return nil }
+                return CodecPixels.validProfile(file.subdata(in: i + 8..<i + 8 + size)).map { [$0] } ?? []
+            }
+            i += 8 + size + size % 2
+        }
+        return []
+    }
+
+    /// GIF: the ICC application extension ("ICCRGBG1" "012") before the first picture, the profile of every frame.
+    private static func gif(_ file: Data) -> [Data]? {
+        let bytes = file.startIndex, end = file.endIndex
+        guard file.count >= 13, file.starts(with: Array("GIF87a".utf8)) || file.starts(with: Array("GIF89a".utf8)) else { return nil }
+        var i = bytes + 13 + (file[bytes + 10] & 0x80 != 0 ? 3 << (Int(file[bytes + 10] & 7) + 1) : 0)
+        while i + 2 < end, file[i] == 0x21 {
+            var block = i + 2, profile: Data?
+            if file[i + 1] == 0xFF, block + 12 <= end, file[block] == 11, file[block + 1..<block + 12].elementsEqual("ICCRGBG1012".utf8) {
+                profile = Data()
+                block += 12
+            }
+            // The extension's sub-blocks: a size byte, then that many bytes, up to a zero size.
+            while block < end, file[block] != 0 {
+                let size = Int(file[block])
+                guard block + 1 + size <= end else { return nil }
+                if profile != nil {
+                    guard profile!.count + size <= budget else { return nil }
+                    profile! += file[block + 1..<block + 1 + size]
+                }
+                block += 1 + size
+            }
+            if let profile { return CodecPixels.validProfile(profile).map { [$0] } ?? [] }
+            i = block + 1
+        }
+        return []
+    }
+
+    /// The boxes of an ISO base media file (HEIF, AVIF, JPEG 2000) between `start` and `end`: type and payload.
+    private static func boxes(_ file: Data, _ start: Int, _ end: Int) -> [(type: String, payload: Range<Int>)] {
+        var result: [(String, Range<Int>)] = [], i = start
+        while end - i >= 8 {
+            var size = file[i..<i + 4].reduce(0) { $0 << 8 | Int($1) }, header = 8
+            if size == 1 {
+                guard end - i >= 16 else { break }
+                let large = file[i + 8..<i + 16].reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+                guard large <= UInt64(end - i) else { break }
+                (size, header) = (Int(large), 16)
+            } else if size == 0 {
+                size = end - i
+            }
+            guard size >= header, size <= end - i else { break }
+            result.append((String(decoding: file[i + 4..<i + 8], as: UTF8.self), i + header..<i + size))
+            i += size
+        }
+        return result
+    }
+
+    /// HEIF/AVIF: the colr properties of the primary item and of the items it is derived from (grid tiles): "prof" and
+    /// "rICC" hold a profile, "nclx" declares colour by code points.
+    private static func heif(_ file: Data) -> (profiles: [[Data]], declared: Bool)? {
+        guard let meta = boxes(file, file.startIndex, file.endIndex).first(where: { $0.type == "meta" })?.payload, meta.count >= 4 else { return nil }
+        // Every value is read from inside the box it belongs to.
+        func number(_ at: Int, _ size: Int, in box: Range<Int>) -> Int? {
+            at >= box.lowerBound && size <= box.upperBound - at ? file[at..<at + size].reduce(0) { $0 << 8 | Int($1) } : nil
+        }
+        var primary: Int?, sources: [Int: [Int]] = [:], properties: [(type: String, payload: Range<Int>)] = [], associations: [Int: [Int]] = [:]
+        for box in boxes(file, meta.lowerBound + 4, meta.upperBound) {
+            let version = box.payload.isEmpty ? 0 : Int(file[box.payload.lowerBound])
+            switch box.type {
+            case "pitm":
+                primary = number(box.payload.lowerBound + 4, version == 0 ? 2 : 4, in: box.payload)
+            case "iref":
+                for reference in boxes(file, box.payload.lowerBound + 4, box.payload.upperBound) where reference.type == "dimg" {
+                    let id = version == 0 ? 2 : 4, ids = reference.payload
+                    guard let from = number(ids.lowerBound, id, in: ids), let count = number(ids.lowerBound + id, 2, in: ids),
+                          count <= (ids.count - id - 2) / id else { continue }
+                    sources[from, default: []] += (0..<count).compactMap { number(ids.lowerBound + id + 2 + id * $0, id, in: ids) }
+                }
+            case "iprp":
+                for child in boxes(file, box.payload.lowerBound, box.payload.upperBound) {
+                    if child.type == "ipco" { properties = boxes(file, child.payload.lowerBound, child.payload.upperBound) }
+                    guard child.type == "ipma", child.payload.count >= 8, let entries = number(child.payload.lowerBound + 4, 4, in: child.payload) else { continue }
+                    let childVersion = Int(file[child.payload.lowerBound]), wide = file[child.payload.lowerBound + 3] & 1 == 1
+                    var at = child.payload.lowerBound + 8
+                    for _ in 0..<min(entries, child.payload.count) {
+                        let id = childVersion < 1 ? 2 : 4
+                        guard let item = number(at, id, in: child.payload), let count = number(at + id, 1, in: child.payload),
+                              at + id + 1 + count * (wide ? 2 : 1) <= child.payload.upperBound else { break }
+                        at += id + 1
+                        associations[item, default: []] += (0..<count).compactMap {
+                            number(at + $0 * (wide ? 2 : 1), wide ? 2 : 1, in: child.payload).map { $0 & (wide ? 0x7FFF : 0x7F) }
+                        }
+                        at += count * (wide ? 2 : 1)
+                    }
+                }
+            default:
+                break
+            }
+        }
+        guard let primary else { return nil }
+        var profiles: [Data] = [], declared = false, left = budget
+        for index in Set(([primary] + (sources[primary] ?? [])).flatMap { associations[$0] ?? [] }).sorted() where index >= 1 && index <= properties.count {
+            let colr = properties[index - 1]
+            guard colr.type == "colr", colr.payload.count >= 4 else { continue }
+            switch String(decoding: file[colr.payload.lowerBound..<colr.payload.lowerBound + 4], as: UTF8.self) {
+            case "nclx":
+                declared = true
+            case "prof", "rICC":
+                guard colr.payload.count - 4 <= left else { return nil }
+                left -= colr.payload.count - 4
+                if let valid = CodecPixels.validProfile(file.subdata(in: colr.payload.lowerBound + 4..<colr.payload.upperBound)) { profiles.append(valid) }
+            default:
+                break
+            }
+        }
+        return ([profiles], declared)
+    }
+
+    /// JPEG XL: the profile libjxl reads from the codestream header; a colour encoded by enumerated values has none.
+    private static func jxl(_ file: Data) -> (profiles: [[Data]], declared: Bool)? {
+        guard let decoder = JxlDecoderCreate(nil) else { return nil }
+        defer { JxlDecoderDestroy(decoder) }
+        guard JxlDecoderSubscribeEvents(decoder, Int32(JXL_DEC_COLOR_ENCODING.rawValue)) == JXL_DEC_SUCCESS else { return nil }
+        return file.withUnsafeBytes { raw -> (profiles: [[Data]], declared: Bool)? in
+            guard JxlDecoderSetInput(decoder, raw.bindMemory(to: UInt8.self).baseAddress, raw.count) == JXL_DEC_SUCCESS else { return nil }
+            JxlDecoderCloseInput(decoder)
+            guard JxlDecoderProcessInput(decoder) == JXL_DEC_COLOR_ENCODING else { return nil }
+            if JxlDecoderGetColorAsEncodedProfile(decoder, JXL_COLOR_PROFILE_TARGET_ORIGINAL, nil) == JXL_DEC_SUCCESS { return ([[]], true) }
+            var size = 0
+            guard JxlDecoderGetICCProfileSize(decoder, JXL_COLOR_PROFILE_TARGET_ORIGINAL, &size) == JXL_DEC_SUCCESS, size <= budget else { return nil }
+            var profile = [UInt8](repeating: 0, count: size)
+            guard JxlDecoderGetColorAsICCProfile(decoder, JXL_COLOR_PROFILE_TARGET_ORIGINAL, &profile, size) == JXL_DEC_SUCCESS else { return nil }
+            return ([CodecPixels.validProfile(Data(profile)).map { [$0] } ?? []], false)
+        }
+    }
+
+    /// JPEG 2000: the colr boxes of the JP2 header. Method 2 and 3 hold a profile; method 1 enumerates a colourspace, of
+    /// which sRGB (16) and greyscale (17) are the defaults a JP2 must name when it has no profile.
+    private static func jp2(_ file: Data) -> (profiles: [[Data]], declared: Bool)? {
+        guard let header = boxes(file, file.startIndex, file.endIndex).first(where: { $0.type == "jp2h" })?.payload else { return ([[]], false) }
+        var profiles: [Data] = [], declared = false, left = budget
+        for colr in boxes(file, header.lowerBound, header.upperBound) where colr.type == "colr" && colr.payload.count >= 3 {
+            switch file[colr.payload.lowerBound] {
+            case 1:
+                let space = colr.payload.count >= 7 ? file[colr.payload.lowerBound + 3..<colr.payload.lowerBound + 7].reduce(0) { $0 << 8 | Int($1) } : 0
+                declared = declared || ![16, 17].contains(space)
+            case 2, 3:
+                guard colr.payload.count - 3 <= left else { return nil }
+                left -= colr.payload.count - 3
+                if let valid = CodecPixels.validProfile(file.subdata(in: colr.payload.lowerBound + 3..<colr.payload.upperBound)) { profiles.append(valid) }
+            default:
+                break
+            }
+        }
+        return ([profiles], declared)
+    }
+}

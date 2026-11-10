@@ -1,0 +1,4 @@
+module CNativeSvg {
+    header "CNativeSvg.h"
+    export *
+}

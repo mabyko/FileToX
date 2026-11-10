@@ -1,0 +1,2 @@
+# Preserve the pinned upstream header bytes.
+headers/** whitespace=-blank-at-eof

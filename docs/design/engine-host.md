@@ -1,6 +1,12 @@
-# FileToX 변환 host 설계
+# FileToX 변환 host 설계 — 전환 전 기록
 
-Mac 전용 SwiftUI 앱의 변환 작업을 처리하는 C# 보조 실행 파일(이하 host)의 설계다. host와 Swift 연동을 구현했다. 이 문서는 설계 기준이며 실제 검증 상태는 [구현 현황](../../EngineHost/IMPLEMENTATION.md)과 [README](../../README.md)를 따른다. 형식 등록과 모든 조합의 런타임 지원은 구분한다.
+현재 host는 `Sources/Engine/Host`·`Sources/EngineMain`의 Swift 실행 파일이며, 작업·설정·이력은
+`Sources/Engine/Core`가 관리한다. 현재 빌드·실행에는 .NET SDK·런타임·NuGet이 필요 없다.
+현재 기준은 [Swift 전환 계획](swift-engine-migration.md), [통신 계약](host-wire-v1.md),
+[검증 결과](engine-differential-triage.md#performance-integration-2026-10-23)와 [README](../../README.md)다.
+
+이하 본문은 전환 전 C# 보조 실행 파일의 설계·조사 기록이다. SDK, Filee 패치, NuGet 및 JIT 관련
+절차는 현재 빌드·배포 지침으로 적용하지 않는다. 통신·파일 안전 동작의 배경을 보존하기 위해 남긴다.
 
 근거 소스는 Filee 커밋 `21fdd05ef7181b032ed83ec895cc9bbc4b198985`(1.8.1)이고, 경로는 그 저장소 기준이다. SDK 10.0.401로 arm64 self-contained 게시와 실제 변환을 확인했다. 아래의 게이트에는 아직 수행하지 않은 배포·외장 볼륨 검증도 포함한다.
 

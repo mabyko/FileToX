@@ -1,3 +1,4 @@
+import FileToXCore
 import AppKit
 import SwiftUI
 import XCTest
@@ -31,6 +32,13 @@ final class LocalizationTests: XCTestCase {
             let localized = try table(language)
             for key in ["engine.reason.not_installed", "engine.reason.error", "engine.reason.unsupported_platform"] {
                 XCTAssertNotNil(localized[key], "\(language.rawValue): \(key)")
+            }
+            for state in ["queued", "downloading", "verifying", "installing", "cancelling", "cancelled", "installed", "existing", "failed"] {
+                XCTAssertNotNil(localized["engines.managed.state.\(state)"], language.rawValue)
+            }
+            for id in ["pandoc", "calibre", "libreoffice", "ffmpeg", "ghostscript"] {
+                XCTAssertNotNil(localized["engines.package.\(id).name"], language.rawValue)
+                XCTAssertNotNil(localized["engines.guidance.macos.\(id)"], language.rawValue)
             }
         }
     }

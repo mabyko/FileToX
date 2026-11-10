@@ -1,10 +1,10 @@
 import Foundation
 
 // Preserve engine options, including fields the current editor does not expose.
-indirect enum JSONValue: Codable, Sendable, Equatable {
+public indirect enum JSONValue: Codable, Sendable, Equatable {
     case object([String: JSONValue]), array([JSONValue]), string(String), number(Double), bool(Bool), null
 
-    init(from decoder: any Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         if container.decodeNil() { self = .null }
         else if let value = try? container.decode(Bool.self) { self = .bool(value) }
@@ -14,7 +14,7 @@ indirect enum JSONValue: Codable, Sendable, Equatable {
         else { self = .object(try container.decode([String: JSONValue].self)) }
     }
 
-    func encode(to encoder: any Encoder) throws {
+    public func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .object(let value): try container.encode(value)
@@ -26,101 +26,116 @@ indirect enum JSONValue: Codable, Sendable, Equatable {
         }
     }
 
-    var object: [String: JSONValue]? { if case .object(let value) = self { value } else { nil } }
-    var array: [JSONValue]? { if case .array(let value) = self { value } else { nil } }
-    var string: String? { if case .string(let value) = self { value } else { nil } }
-    var double: Double? { if case .number(let value) = self { value } else { nil } }
-    var int: Int? {
+    public var object: [String: JSONValue]? { if case .object(let value) = self { value } else { nil } }
+    public var array: [JSONValue]? { if case .array(let value) = self { value } else { nil } }
+    public var string: String? { if case .string(let value) = self { value } else { nil } }
+    public var double: Double? { if case .number(let value) = self { value } else { nil } }
+    public var int: Int? {
         guard let value = double, value.isFinite, value.rounded() == value,
               value >= Double(Int.min), value < Double(Int.max) else { return nil }
         return Int(value)
     }
-    var bool: Bool? { if case .bool(let value) = self { value } else { nil } }
-    subscript(key: String) -> JSONValue? {
+    public var bool: Bool? { if case .bool(let value) = self { value } else { nil } }
+    public subscript(key: String) -> JSONValue? {
         get { object?[key] }
         set { var value = object ?? [:]; value[key] = newValue; self = .object(value) }
     }
 }
 
-struct HostHello: Codable, Sendable {
-    let `protocol`: Int
-    let hostVersion: String
-    let fileeCommit: String
-    let rid: String
-    let dataDir: String
+public struct HostHello: Codable, Sendable {
+    public let `protocol`: Int
+    public let hostVersion: String
+    public let fileeCommit: String
+    public let rid: String
+    public let dataDir: String
 }
 
-struct HostCatalog: Decodable, Sendable {
-    let formats: [FileFormatDefinition]
-    let engines: [HostEngine]
+public struct HostCatalog: Decodable, Sendable {
+    public let formats: [FileFormatDefinition]
+    public let engines: [HostEngine]
 }
 
-struct HostEngine: Codable, Sendable, Identifiable {
-    let id: String
-    let displayName: String
-    let available: Bool
-    let reasonKey: String?
-    let detail: String?
-    let version: String?
+public struct HostEngine: Codable, Sendable, Identifiable {
+    public let id: String
+    public let displayName: String
+    public let available: Bool
+    public let reasonKey: String?
+    public let detail: String?
+    public let version: String?
 }
 
-struct HostSelection: Codable, Sendable {
-    let profileId: String?
-    let formats: [String]
-    let unknown: [String]
-    let rejected: [HostRejectedInput]
-    let slices: [HostSlice]
-    let tools: [HostSlice]?
-    let presetOptions: [HostSlice]?
-    let targets: [HostTarget]
+public struct HostEnginePackage: Codable, Sendable, Identifiable {
+    public let id: String
+    public let version: String?
+    public let downloadSize: Int64
+    public let installedSize: Int64
+    public let canDownload: Bool
+    public let guidanceKey: String?
+    public let state: String
+    public let bytesReceived: Int64
+    public let errorKey: String?
+    public let errorDetail: String?
+    public var isActive: Bool { ["queued", "downloading", "verifying", "installing", "cancelling"].contains(state) }
+    public var progress: Double { downloadSize > 0 ? min(1, max(0, Double(bytesReceived) / Double(downloadSize))) : 0 }
 }
 
-struct HostRejectedInput: Codable, Sendable {
-    let path: String
-    let reason: String
+public struct HostSelection: Codable, Sendable {
+    public let profileId: String?
+    public let formats: [String]
+    public let unknown: [String]
+    public let rejected: [HostRejectedInput]
+    public let slices: [HostSlice]
+    public let tools: [HostSlice]?
+    public let presetOptions: [HostSlice]?
+    public let targets: [HostTarget]
 }
 
-struct HostSlice: Codable, Sendable, Identifiable {
-    let presetId: String
-    let displayName: String
-    let targetFormat: String
-    let available: Bool
-    let reasonKey: String?
-    let reasonText: String?
-    let runnableCount: Int
-    let needsPackage: String?
-    let canDownload: Bool
-    let guidanceKey: String?
-    var id: String { presetId }
+public struct HostRejectedInput: Codable, Sendable {
+    public let path: String
+    public let reason: String
 }
 
-struct HostTarget: Codable, Sendable, Identifiable {
-    let formatId: String
-    let available: Bool
-    let reasonKey: String?
-    let reasonText: String?
-    let runnableCount: Int
-    var id: String { formatId }
+public struct HostSlice: Codable, Sendable, Identifiable {
+    public let presetId: String
+    public let displayName: String
+    public let targetFormat: String
+    public let available: Bool
+    public let reasonKey: String?
+    public let reasonText: String?
+    public let runnableCount: Int
+    public let needsPackage: String?
+    public let canDownload: Bool
+    public let guidanceKey: String?
+    public var id: String { presetId }
 }
 
-struct HostOutput: Codable, Sendable, Equatable, Identifiable {
-    let path: String
-    let isDirectory: Bool
-    var id: String { path }
-    var url: URL { URL(fileURLWithPath: path, isDirectory: isDirectory) }
+public struct HostTarget: Codable, Sendable, Identifiable {
+    public let formatId: String
+    public let available: Bool
+    public let reasonKey: String?
+    public let reasonText: String?
+    public let runnableCount: Int
+    public var id: String { formatId }
 }
 
-struct HostFile: Decodable, Sendable, Identifiable {
-    let source: String
-    let state: String
-    let progress: Double
-    let outputs: [HostOutput]
-    let errorKey: String?
-    let errorDetail: String?
-    var id: String { source }
+public struct HostOutput: Codable, Sendable, Equatable, Identifiable {
+    public let path: String
+    public let isDirectory: Bool
+    public var id: String { path }
+    public var url: URL { URL(fileURLWithPath: path, isDirectory: isDirectory) }
+}
 
-    enum CodingKeys: CodingKey { case source, state, progress, outputs, errorKey, errorDetail }
-    init(from decoder: any Decoder) throws {
+public struct HostFile: Decodable, Sendable, Identifiable {
+    public let source: String
+    public let state: String
+    public let progress: Double
+    public let outputs: [HostOutput]
+    public let errorKey: String?
+    public let errorDetail: String?
+    public var id: String { source }
+
+    public enum CodingKeys: CodingKey { case source, state, progress, outputs, errorKey, errorDetail }
+    public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         source = try c.decode(String.self, forKey: .source)
         state = try c.decode(String.self, forKey: .state)
@@ -131,60 +146,60 @@ struct HostFile: Decodable, Sendable, Identifiable {
     }
 }
 
-struct HostJob: Decodable, Sendable, Identifiable {
-    let jobId: String
-    let state: String
-    let progress: Double
-    let presetName: String
-    let files: [HostFile]
-    let historyEntry: HostHistory?
-    let retrySources: [String]?
-    let preset: JSONValue?
-    var id: String { jobId }
-    var outputs: [HostOutput] { files.flatMap(\.outputs) }
-    var isFinished: Bool { ["completed", "completedWithErrors", "failed", "cancelled"].contains(state) }
+public struct HostJob: Decodable, Sendable, Identifiable {
+    public let jobId: String
+    public let state: String
+    public let progress: Double
+    public let presetName: String
+    public let files: [HostFile]
+    public let historyEntry: HostHistory?
+    public let retrySources: [String]?
+    public let preset: JSONValue?
+    public var id: String { jobId }
+    public var outputs: [HostOutput] { files.flatMap(\.outputs) }
+    public var isFinished: Bool { ["completed", "completedWithErrors", "failed", "cancelled"].contains(state) }
 }
 
-struct HostHistory: Decodable, Sendable, Identifiable {
-    let jobId: String
-    let finishedAt: Date
-    let presetId: String
-    let presetName: String
-    let state: String
-    let sources: [String]
-    let outputs: [String]
-    let failures: [HostHistoryFailure]
-    let preset: JSONValue?
-    var id: String { jobId }
+public struct HostHistory: Decodable, Sendable, Identifiable {
+    public let jobId: String
+    public let finishedAt: Date
+    public let presetId: String
+    public let presetName: String
+    public let state: String
+    public let sources: [String]
+    public let outputs: [String]
+    public let failures: [HostHistoryFailure]
+    public let preset: JSONValue?
+    public var id: String { jobId }
 }
 
-struct HostHistoryFailure: Codable, Sendable, Identifiable {
-    let source: String
-    let errorKey: String?
-    let errorDetail: String?
-    var id: String { source }
+public struct HostHistoryFailure: Codable, Sendable, Identifiable {
+    public let source: String
+    public let errorKey: String?
+    public let errorDetail: String?
+    public var id: String { source }
 }
 
-struct HostLibrary: Codable, Sendable {
-    let revision: Int
-    var settings: JSONValue
-    var presets: [JSONValue]
-    var profiles: [JSONValue]
+public struct HostLibrary: Codable, Sendable {
+    public let revision: Int
+    public var settings: JSONValue
+    public var presets: [JSONValue]
+    public var profiles: [JSONValue]
 }
 
-enum HostEvent: Sendable {
+public enum HostEvent: Sendable {
     case hello(HostHello), updated(HostJob), finished(HostJob), fatal(String), interrupted(String)
 }
 
-struct HostError: Error, LocalizedError, Sendable {
-    let code: String
-    let message: String
-    var errorDescription: String? { message }
-    static let interrupted = HostError(code: "host_crashed", message: "변환 엔진 연결이 끊겼습니다. 실행 중인 작업을 다시 확인하세요.")
+public struct HostError: Error, LocalizedError, Sendable {
+    public let code: String
+    public let message: String
+    public var errorDescription: String? { message }
+    public static let interrupted = HostError(code: "host_crashed", message: "변환 엔진 연결이 끊겼습니다. 실행 중인 작업을 다시 확인하세요.")
 }
 
 extension JSONDecoder {
-    static func hostDecoder() -> JSONDecoder {
+    public static func hostDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let value = try decoder.singleValueContainer().decode(String.self)

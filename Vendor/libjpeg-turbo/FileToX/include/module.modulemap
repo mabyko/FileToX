@@ -1,0 +1,4 @@
+module CJpegTurbo {
+    header "CJpegTurbo.h"
+    export *
+}
