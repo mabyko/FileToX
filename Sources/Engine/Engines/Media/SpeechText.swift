@@ -41,10 +41,17 @@ enum SpeechText {
         if languages.count > 1 {
             let sample = try sample(path, seconds: 45, in: workDirectory)
             defer { if sample != path { try? FileManager.default.removeItem(atPath: sample) } }
-            var heard: [(characters: Int, confidence: Double)] = []
-            for language in languages {
-                let result = try await recognize(sample, language, duration: nil, progress: nil)
-                heard.append((result.cues.reduce(0) { $0 + $1.text.count }, result.confidence))
+            // The languages listen to the sample at the same time.
+            let heard = try await withThrowingTaskGroup(of: (Int, (characters: Int, confidence: Double)).self) { group in
+                for (index, language) in languages.enumerated() {
+                    group.addTask {
+                        let result = try await recognize(sample, language, duration: nil, progress: nil)
+                        return (index, (result.cues.reduce(0) { $0 + $1.text.count }, result.confidence))
+                    }
+                }
+                var heard = [(characters: Int, confidence: Double)](repeating: (0, 0), count: languages.count)
+                for try await (index, result) in group { heard[index] = result }
+                return heard
             }
             if let best = choose(heard) { locale = languages[best] }
         }

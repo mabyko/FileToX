@@ -90,9 +90,13 @@ enum TextRecognition {
     /// line's text split at spaces, so a word and its particle ("English가") stay together. With `allScripts`, the other
     /// Chinese, Japanese and Korean models read the page too (`otherScripts`), for the lines the first leaves out.
     static func lines(in image: CGImage, languages: [Locale.Language] = userLanguages, allScripts: Bool = true) async throws -> (lines: [Line], sideways: Bool) {
-        var readings = [try await read(image, languages)]
-        if allScripts {
-            for other in otherScripts(languages, supported: request(nil).supportedRecognitionLanguages) { readings.append(try await read(image, other)) }
+        // The models read at the same time; their results are merged in the models' order.
+        let models = [languages] + (allScripts ? otherScripts(languages, supported: request(nil).supportedRecognitionLanguages) : [])
+        let readings = try await withThrowingTaskGroup(of: (Int, [Reading]).self) { group in
+            for (index, model) in models.enumerated() { group.addTask { (index, try await read(image, model)) } }
+            var readings = [[Reading]](repeating: [], count: models.count)
+            for try await (index, reading) in group { readings[index] = reading }
+            return readings
         }
         try Task.checkCancellation()
         let read = merge(readings)
