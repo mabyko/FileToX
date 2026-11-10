@@ -6,7 +6,8 @@
 // paragraphs and pictures are put in reading order, also on two-column pages (PdfDocumentReader+Layout.swift). Headings
 // come from font sizes, bold / italic from the fonts, page size and margins from the page. Headers and footers that
 // repeat on the pages (and bare page numbers) are left out. A page without text (a scan) becomes the rendered page as
-// a picture, so the result is complete; only plain text (`readText` with `recognize`) reads such pages with Vision OCR.
+// a picture, so the result is complete. Plain text (`readText` with `recognize`) and outputs that keep every page with
+// its text (`readWithScans`) also read such pages with Vision OCR.
 //
 // Rows laid out with tab stops (a number, a label and a date far to the right) stay one line with tabs at the PDF's
 // positions, and a line that ends early although the next line's first word would have fitted (an address) keeps its
@@ -66,6 +67,15 @@ final class PdfDocumentReader {
     /// the look as well, for outputs that keep every page with its text (`ConversionStep.keepsPages`).
     static func read(_ path: String, _ mediaFolder: String, allText: Bool = false) throws -> HDocument {
         try PdfDocumentReader(path, mediaFolder, textOnly: false, allText: allText).readDocument()
+    }
+
+    /// `read` with `allText`, and its scans read with Vision as well: the recognized text comes before the page's picture,
+    /// so a scanned book can be searched and copied from.
+    static func readWithScans(_ path: String, _ mediaFolder: String) async throws -> HDocument {
+        let reader = PdfDocumentReader(path, mediaFolder, textOnly: false, allText: true)
+        let (pages, title) = try reader.readPages()
+        try await recognizeScans(path, pages.filter(\.scanned), nil)
+        return reader.buildDocument(pages, title)
     }
 
     /// A page with visible text, not turned: the words its text keeps (where they are shown, in page space, and their
@@ -137,6 +147,13 @@ final class PdfDocumentReader {
             // A page on its side is read as turned upright: its lines run across the paper's height.
             page.items = paragraphs(recognizedLines(read.lines, read.sideways ? page.height : page.width, read.sideways ? page.width : page.height))
             page.scanned = false
+            if let scan = page.scanPath {
+                // The page's look stays, after its text (like a page with only an invisible text layer).
+                let picture = Item()
+                picture.picturePath = scan
+                picture.pictureBounds = CGRect(x: 0, y: 0, width: page.width, height: page.height)
+                page.items.append(picture)
+            }
         }
     }
 
@@ -281,6 +298,11 @@ final class PdfDocumentReader {
     }
 
     private func readDocument() throws -> HDocument {
+        let (pages, title) = try readPages()
+        return buildDocument(pages, title)
+    }
+
+    private func readPages() throws -> (pages: [PageContent], title: String?) {
         let pdf = try openDocument()
         var pages: [PageContent] = []
         for index in 0..<pdf.pageCount {
@@ -289,8 +311,7 @@ final class PdfDocumentReader {
             pages.append(try readPage(page, index))
         }
 
-        let title = Self.nullIfBlank(pdf.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String)
-        return buildDocument(pages, title)
+        return (pages, Self.nullIfBlank(pdf.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String))
     }
 
     private func buildDocument(_ pages: [PageContent], _ title: String?) -> HDocument {

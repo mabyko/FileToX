@@ -396,9 +396,10 @@
 "engines.guidance.macos.calibre" = "このMac用の固定バージョンはダウンロードできません。手動でインストールし、下でプログラムまたはアプリを選択してください。";
 "engines.guidance.macos.libreoffice" = "このMac用の固定バージョンはダウンロードできません。手動でインストールし、下でプログラムまたはアプリを選択してください。";
 "speech.languages.title" = "音声認識の言語";
-"speech.languages.help" = "動画・音声をTXTに変換するときに話し声を文字起こしするmacOSの音声認識モデルです。複数の言語がインストールされている場合は、ファイルの冒頭を最もよく聞き取れる言語を使います。モデルはmacOSが管理し、変換中にはダウンロードしません。";
+"speech.languages.help" = "動画・音声をTXT・SRTに変換するときに話し声を文字起こしするmacOSの音声認識モデルです。複数の言語がインストールされている場合は、ファイルの冒頭を最もよく聞き取れる言語を使います。変換中にはダウンロードしません。モデルはmacOSが保管します。「使用しない」を押すとFileToXはその言語を要求しなくなり、ほかのアプリが使っていないモデルは、空き容量が必要になったときにmacOSが削除します。すぐには削除されないことがあります。";
 "speech.languages.none" = "音声認識の言語がインストールされていないため、動画・音声をTXTに変換できません。下から必要な言語をダウンロードしてください。";
-"speech.languages.installed" = "インストール済み";
+"speech.languages.release" = "使用しない";
+"speech.languages.system" = "macOSが管理";
 "speech.languages.add" = "言語をダウンロード…";
 "speech.languages.downloading" = "%@をダウンロード中…";
 "speech.languages.failed" = "%@のモデルをダウンロードできませんでした: %@";

@@ -57,12 +57,23 @@ final class RoutePlannerTests: XCTestCase {
         }
         // A video's or recording's TXT is its speech, never OCR of one still frame; other formats don't go through it.
         // Pictures and comics reach TXT through PDF pages and OCR.
-        for from in ["mp4", "MXF", "webm", "mp3", "wav"] {
-            if #available(macOS 26.0, *) { XCTAssertEqual(planner.plan(from, "txt")?.steps.map { $0.converter.id }, ["ffmpeg"], from) }
-            else { XCTAssertNil(planner.plan(from, "txt"), from) }
+        // A video's subtitle track needs no speech model; a recording's transcript needs macOS 26.
+        for from in ["mp4", "MXF", "webm"] {
+            for to in ["txt", "srt"] { XCTAssertEqual(planner.plan(from, to)?.steps.map { $0.converter.id }, ["ffmpeg"], "\(from) → \(to)") }
         }
-        for to in ["md", "docx", "hwpx", "epub"] { XCTAssertNotEqual(planner.plan("mp4", to)?.steps.first?.to, "txt", to) }
-        XCTAssertNil(planner.plan("mp3", "docx"))
+        for to in ["md", "docx", "hwpx", "epub", "pdf"] {
+            // A video's document is its still frame; a recording's is its transcript.
+            XCTAssertNotEqual(planner.plan("mp4", to)?.steps.first?.to, "txt", to)
+            if #available(macOS 26.0, *) { XCTAssertEqual(planner.plan("mp3", to)?.steps.first?.to, "txt", to) }
+            else { XCTAssertNil(planner.plan("mp3", to), to) }
+        }
+        if #available(macOS 26.0, *) {
+            for to in ["txt", "srt"] { XCTAssertEqual(planner.plan("wav", to)?.steps.map { $0.converter.id }, ["ffmpeg"], to) }
+        }
+        // A transcript never becomes a picture, and nothing else becomes subtitles through a video.
+        for (from, to) in [("mp3", "png"), ("mp3", "jpg"), ("png", "srt"), ("gif", "srt"), ("pdf", "srt"), ("txt", "srt")] {
+            XCTAssertNil(planner.plan(from, to), "\(from) → \(to)")
+        }
         XCTAssertEqual(planner.plan("gif", "txt")?.steps.last?.converter.id, "pdf-text")
         for from in ["png", "JPG", "psd", "jxl", "cbz", "cbr"] { XCTAssertEqual(planner.plan(from, "txt")?.steps.last?.converter.id, "pdf-text", from) }
         for (from, to) in [("mp4", "mp3"), ("mkv", "wav"), ("wav", "mp3"), ("flac", "flac"), ("svg", "txt"), ("dxf", "txt"),

@@ -64,8 +64,12 @@ struct MediaInfo: Equatable {
     let audio: AudioStreamInfo?
     /// Index of an embedded cover picture (JPEG or PNG) such as album art, if any.
     let coverStreamIndex: Int?
+    /// The first subtitle track that is text (not pictures, as on DVDs), counted among the subtitle streams, if any.
+    let subtitleStreamIndex: Int?
 
-    init(_ duration: Double?, _ video: VideoStreamInfo?, _ audio: AudioStreamInfo?, _ coverStreamIndex: Int?) {
+    init(_ duration: Double?, _ video: VideoStreamInfo?, _ audio: AudioStreamInfo?, _ coverStreamIndex: Int?,
+         subtitleStreamIndex: Int? = nil) {
+        self.subtitleStreamIndex = subtitleStreamIndex
         self.duration = duration
         self.video = video
         self.audio = audio
@@ -95,6 +99,8 @@ struct MediaInfo: Equatable {
         var video: VideoStreamInfo?
         var audio: AudioStreamInfo?
         var cover: Int?
+        var subtitle: Int?
+        var subtitles = 0
         var longestStream = 0.0
         for stream in root["streams"] as? [[String: Any]] ?? [] {
             longestStream = max(longestStream, number(stream, "duration"))
@@ -111,6 +117,11 @@ struct MediaInfo: Equatable {
                                         nominalFrameRate: nominalFrameRateOf(stream))
             case "audio" where audio == nil:
                 audio = AudioStreamInfo(int(number(stream, "channels")), int(number(stream, "sample_rate")))
+            case "subtitle":
+                if subtitle == nil, ["subrip", "srt", "ass", "ssa", "mov_text", "webvtt", "text"].contains(text(stream, "codec_name") ?? "") {
+                    subtitle = subtitles
+                }
+                subtitles += 1
             default:
                 break
             }
@@ -118,7 +129,7 @@ struct MediaInfo: Equatable {
 
         var seconds = (root["format"] as? [String: Any]).map { number($0, "duration") } ?? 0
         if seconds <= 0 { seconds = longestStream }
-        return MediaInfo(seconds > 0 ? seconds : nil, video, audio, cover)
+        return MediaInfo(seconds > 0 ? seconds : nil, video, audio, cover, subtitleStreamIndex: subtitle)
     }
 
     private static func isAttachedPicture(_ stream: [String: Any]) -> Bool {

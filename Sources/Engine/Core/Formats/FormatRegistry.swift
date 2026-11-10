@@ -107,6 +107,8 @@ public enum FormatRegistry {
         FileFormat(id: "sda", displayName: "SDA", category: .presentation, extensions: ["sda", "sdd"], writable: false),
         FileFormat(id: "txt", displayName: "TXT", category: .text, extensions: ["txt"]),
         FileFormat(id: "md", displayName: "Markdown", category: .text, extensions: ["md", "markdown"]),
+        // Not in Filee's catalog: the subtitles or transcribed speech of a video or audio file, with their times.
+        FileFormat(id: "srt", displayName: "SRT", category: .text, extensions: ["srt"]),
         FileFormat(id: "html", displayName: "HTML", category: .text, extensions: ["html", "htm", "xhtml"]),
         FileFormat(id: "rst", displayName: "reStructuredText", category: .text, extensions: ["rst"]),
         FileFormat(id: "tex", displayName: "LaTeX", category: .text, extensions: ["tex", "latex"]),

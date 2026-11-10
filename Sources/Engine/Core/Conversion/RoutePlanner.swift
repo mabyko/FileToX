@@ -27,9 +27,11 @@ public final class RoutePlanner {
                 // Do not discard a rendered page just to bridge between formats. Reading an original PDF's text
                 // or explicitly requesting TXT keeps the existing extraction route, unless a re-plan turns it off.
                 if edge.isTextExtraction, !textExtraction || (node != from && edge.to != to) { continue }
-                // A video or audio file's text is its speech, asked for as TXT: never OCR of a still frame, and never
-                // a transcript on the way to another format or from a source without sound.
-                if edge.to == "txt", edge.isTextExtraction ? Self.media(from) : Self.media(edge.from) && (node != from || to != "txt") { continue }
+                // A video or audio file's text is its subtitles or speech: never OCR of a still frame, and never from a
+                // source that became a video on the way. Only a recording goes on from its transcript to a document;
+                // a video's document is its still frame.
+                if edge.to == "txt" || edge.to == "srt", edge.isTextExtraction ? Self.media(from)
+                    : Self.media(edge.from) && (node != from || !(edge.to == to || Self.transcriptDocument(from, to))) { continue }
                 let next = cost + edge.cost
                 if let known = dist[edge.to], known <= next { continue }
                 dist[edge.to] = next; hops[edge.to] = hops[node]! + 1
@@ -45,6 +47,12 @@ public final class RoutePlanner {
     /// Routes that cannot give the target's content are never offered: only video and audio files carry sound.
     static func sourceLacksContent(_ from: String, _ to: String) -> Bool {
         FormatRegistry.find(id: to)?.category == .audio && FormatRegistry.find(id: from) != nil && !media(from)
+    }
+
+    /// Whether an audio file's transcript may go on to `to`: formats made of text.
+    private static func transcriptDocument(_ from: String, _ to: String) -> Bool {
+        guard FormatRegistry.find(id: from)?.category == .audio, let target = FormatRegistry.find(id: to)?.category else { return false }
+        return [.text, .document, .hwp, .pdf, .ebook].contains(target)
     }
 
     private static func media(_ format: String) -> Bool {

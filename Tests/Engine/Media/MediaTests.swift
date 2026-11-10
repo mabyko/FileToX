@@ -71,14 +71,14 @@ final class MediaTests: XCTestCase {
     func testEdgesKeepFileesOrderAndCosts() {
         let videos = FormatRegistry.known.filter { $0.category == .video }.count
         let audios = FormatRegistry.known.filter { $0.category == .audio }.count
-        // Speech → TXT comes after Filee's edges, on macOS 26 or later.
-        var speech = 0
-        if #available(macOS 26.0, *) { speech = videos + audios }
+        // Subtitles and speech → TXT and SRT come after Filee's edges; recordings only on macOS 26 or later.
+        var speech = 2 * videos
+        if #available(macOS 26.0, *) { speech += 2 * audios }
         XCTAssertEqual(converter.edges.count, videos * (17 + 18 + 1) + videos + audios * 18 + 3 + speech)
         XCTAssertEqual(converter.edges.first, ConversionEdge("mp4", "mp4"))
         XCTAssertEqual(converter.edges[17], ConversionEdge("mp4", "mp3"))
         XCTAssertEqual(converter.edges.dropLast(speech).last, ConversionEdge("gif", "mov"))
-        XCTAssertTrue(converter.edges.suffix(speech).allSatisfy { $0.to == "txt" })
+        XCTAssertTrue(converter.edges.suffix(speech).allSatisfy { $0.to == "txt" || $0.to == "srt" })
     }
 
     // ───────────────────────── Command lines (no FFmpeg needed) ─────────────────────────
@@ -800,12 +800,31 @@ final class MediaTests: XCTestCase {
             let text = String(decoding: try Data(contentsOf: URL(fileURLWithPath: try await convert(source, "txt"))).dropFirst(3), as: UTF8.self)
             XCTAssertTrue(text.lowercased().contains("quick brown fox"), text)
         }
+        let cues = SubtitleText.parse(try String(contentsOfFile: try await convert(video, "srt"), encoding: .utf8))
+        XCTAssertTrue(cues.first?.text.lowercased().contains("quick brown fox") == true && cues[0].end > cues[0].start && cues[0].end < 5, "\(cues)")
         do {
             _ = try await convert(try await makeClip(try newFolder(), "silent.mp4", audio: false), "txt")
             XCTFail("a silent video became text")
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("no audio track"), error.localizedDescription)
         }
+    }
+
+    func testSubtitleTrackBecomesTextAndSrtWithoutSpeechRecognition() async throws {
+        try skipUnlessInstalled()
+        let dir = try newFolder(), source = FilePath.combine(dir, "subs.srt"), video = FilePath.combine(dir, "film.mkv")
+        try "1\n00:00:00,500 --> 00:00:01,000\n<i>First line</i>\nwraps here\n\n2\n00:00:01,000 --> 00:00:01,500\n{\\an8}Second cue\n\n3\n00:00:01,500 --> 00:00:01,900\nSecond cue\n"
+            .write(toFile: source, atomically: true, encoding: .utf8)
+        let clip = try await makeClip(dir, "clip.mp4")
+        let made = try ProcessRunner.runBlocking(Self.tools!.ffmpeg, MediaEncoding.common + ["-i", clip, "-i", source, "-c", "copy", "-c:s", "srt", video], timeout: 60)
+        XCTAssertEqual(made.exitCode, 0, made.standardError)
+        let text = String(decoding: try Data(contentsOf: URL(fileURLWithPath: try await convert(video, "txt"))).dropFirst(3), as: UTF8.self)
+        XCTAssertEqual(text, "First line wraps here\r\nSecond cue")
+        let cues = SubtitleText.parse(try String(contentsOfFile: try await convert(video, "srt"), encoding: .utf8))
+        XCTAssertEqual(cues.map(\.text), ["First line wraps here", "Second cue", "Second cue"])
+        XCTAssertEqual(cues.map(\.start), [0.5, 1, 1.5])
+        XCTAssertEqual(SubtitleText.srt([SubtitleText.Cue(start: 3661.5, end: 3662.25, text: "A")]), "1\n01:01:01,500 --> 01:01:02,250\nA\n")
+        XCTAssertEqual(try MediaInfo.parse(#"{"streams":[{"codec_type":"subtitle","codec_name":"hdmv_pgs_subtitle"},{"codec_type":"subtitle","codec_name":"subrip"}]}"#).subtitleStreamIndex, 1)
     }
 
     func testSpeechLanguageIsChosenAmongInstalledModels() {

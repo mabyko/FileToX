@@ -14,7 +14,7 @@ final class HostProtocolTests: XCTestCase {
         for (id,line,code) in [(nil,"{not json","bad_request"),("u",#"{"v":1,"id":"u","method":"nope","params":{}}"#,"unknown_method"),("p",#"{"v":1,"id":"p","method":"catalog.get"}"#,"bad_request"),("w",#"{"v":2,"id":"w","method":"catalog.get","params":{}}"#,"bad_request")] as [(String?,String,String)] { XCTAssertEqual(try host.errorCode(id,line),code) }
         XCTAssertEqual(try host.errorCode(nil,"{\"pad\":\"" + String(repeating:"x",count:WireJson.maxLine + 10) + "\"}"),"bad_request")
         try host.input.fileHandleForWriting.write(contentsOf:Data([0xff,10])); try host.wait { $0.contains { hostObject($0["error"])["message"] as? String == "The line is not UTF-8." } }
-        let catalog = try host.call("catalog.get"); XCTAssertEqual(hostObjects(catalog["formats"]).count,172); XCTAssertTrue(hostObjects(catalog["engines"]).contains { $0["id"] as? String == "fake" })
+        let catalog = try host.call("catalog.get"); XCTAssertEqual(hostObjects(catalog["formats"]).count,173); XCTAssertTrue(hostObjects(catalog["engines"]).contains { $0["id"] as? String == "fake" })
         let source = try d.file("files/a.txt","original"), unknown = try d.file("files/x.unknownext","?")
         let selection = try host.call("selection.resolve",["paths":[source,unknown,d.path + "/missing.txt",bystander]])
         XCTAssertEqual(selection["formats"] as? [String],["txt"]); XCTAssertEqual((selection["unknown"] as? [String])?.count,2); XCTAssertEqual(hostObjects(selection["rejected"]).count,1)

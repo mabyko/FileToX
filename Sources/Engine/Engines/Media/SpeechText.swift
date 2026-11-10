@@ -29,11 +29,11 @@ enum SpeechText {
         return heard.indices.filter { heard[$0].characters * 3 >= longest }.max { heard[$0].confidence < heard[$1].confidence }
     }
 
-    /// The speech of the audio file at `path`: one line for each stretch of speech between pauses. With several language
+    /// The speech of the audio file at `path`: one cue for each stretch of speech between pauses. With several language
     /// models installed, the one that understands the first 45 seconds best reads the file (the user's first language
     /// when no speech is in them). `progress` gets the share of `duration` (seconds) read so far.
     @available(macOS 26.0, *)
-    static func transcribe(_ path: String, duration: Double?, workDirectory: String, progress: ProgressHandler?) async throws -> String {
+    static func transcribe(_ path: String, duration: Double?, workDirectory: String, progress: ProgressHandler?) async throws -> [SubtitleText.Cue] {
         let languages = Array(candidates(await SpeechTranscriber.installedLocales).prefix(5))
         guard var locale = languages.first else {
             throw ConversionError("No speech recognition language is installed. Download one in Settings → Conversion engines → Speech recognition languages.")
@@ -44,11 +44,11 @@ enum SpeechText {
             var heard: [(characters: Int, confidence: Double)] = []
             for language in languages {
                 let result = try await recognize(sample, language, duration: nil, progress: nil)
-                heard.append((result.lines.reduce(0) { $0 + $1.count }, result.confidence))
+                heard.append((result.cues.reduce(0) { $0 + $1.text.count }, result.confidence))
             }
             if let best = choose(heard) { locale = languages[best] }
         }
-        return try await recognize(path, locale, duration: duration, progress: progress).lines.joined(separator: "\r\n")
+        return try await recognize(path, locale, duration: duration, progress: progress).cues
     }
 
     /// The first `seconds` of the audio file as a file of its own (`path` itself when it is no longer than that).
@@ -64,7 +64,7 @@ enum SpeechText {
 
     @available(macOS 26.0, *)
     private static func recognize(_ path: String, _ locale: Locale, duration: Double?, progress: ProgressHandler?) async throws
-        -> (lines: [String], confidence: Double) {
+        -> (cues: [SubtitleText.Cue], confidence: Double) {
         let transcriber = SpeechTranscriber(locale: locale, transcriptionOptions: [], reportingOptions: [], attributeOptions: [.transcriptionConfidence])
         // Also readies an installed model; a request means it is not installed (any more).
         if try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) != nil {
@@ -73,9 +73,9 @@ enum SpeechText {
         let analyzer = SpeechAnalyzer(modules: [transcriber])
         let file = try AVAudioFile(forReading: URL(fileURLWithPath: path))
         return try await withTaskCancellationHandler {
-            async let heard = transcriber.results.reduce(into: (lines: [String](), sum: 0.0, count: 0)) { heard, result in
+            async let heard = transcriber.results.reduce(into: (cues: [SubtitleText.Cue](), sum: 0.0, count: 0)) { heard, result in
                 let line = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !line.isEmpty { heard.lines.append(line) }
+                if !line.isEmpty { heard.cues.append(SubtitleText.Cue(start: result.range.start.seconds, end: result.range.end.seconds, text: line)) }
                 for run in result.text.runs {
                     guard let confidence = run.transcriptionConfidence else { continue }
                     let characters = result.text[run.range].characters.count
@@ -91,7 +91,7 @@ enum SpeechText {
             }
             let result = try await heard
             try Task.checkCancellation()
-            return (result.lines, result.sum / Double(max(1, result.count)))
+            return (result.cues, result.sum / Double(max(1, result.count)))
         } onCancel: {
             Task { await analyzer.cancelAndFinishNow() }
         }

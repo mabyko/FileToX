@@ -20,7 +20,7 @@ PDFium의 검증된 universal 원본과 upstream 출처·고지는 보존한다.
 
 ## 형식과 변환 엔진
 
-실행 시점의 기준은 Swift `FormatRegistry`, `EngineRegistry`, `ConverterCatalog`다. 가상 `folder`를 제외한 171개 형식과 23개 엔진을 등록하며, 읽기 전용 형식은 출력 선택에서 제외한다. PDB(PalmDoc)는 Windows-1252 글자만 담아 한글을 저장할 수 없으므로 Filee와 달리 읽기 전용이며, 이를 대상으로 저장된 프리셋은 검증을 통과하되 경로가 없어 사용할 수 없음으로 표시된다. 등록 수가 모든 형식 쌍의 변환 가능성을 뜻하지 않는다. `ConverterCatalog.statusOf`·`createPlanner`가 사용 가능한 엔진을 반영하고 `RoutePlanner`는 최대 3단계 경로를 찾는다. 원본에 없는 내용이 필요한 대상은 계획하지 않는다. 오디오는 영상·오디오 원본에서만 만든다. 영상·오디오의 TXT는 정지 프레임의 글자 인식이 아니라 말소리 받아쓰기다: FFmpeg 엔진이 소리를 16kHz 모노 WAV로 뽑아 macOS 26 이상의 `SpeechAnalyzer`로 기기 안에서 받아쓰며(`SpeechText`), 언어는 설치된 macOS 음성 모델 중 파일 앞 45초를 가장 잘 알아듣는 것(글자 수가 가장 긴 후보의 1/3 이상인 후보 중 신뢰도 최고)으로 고르고, 모델은 설정 화면에서 사용자가 내려받으며 변환 중에는 내려받지 않는다. TXT가 최종 대상일 때만 계획한다. PDF→TXT는 글자가 없는 페이지(스캔, PDF 페이지로 만든 그림·만화)를 PDFium으로 300dpi·긴 변 4,000px 이하로 렌더링해 Vision으로 읽고, 기존 줄·문단·2단 읽기 순서 처리에 넣는다. 인식 언어는 Mac 언어 순서 중 Vision이 지원하는 언어이며 한중일 언어를 앞에, 영어를 끝에 둔다. Vision은 첫 언어의 문자 모델만 쓰므로 다른 한중일 문자는 읽지 못할 수 있고, 자동 언어 감지는 첫 사용이 느리고 영어가 많은 페이지의 한글을 놓쳐 쓰지 않는다. EPUB·FB2·HTMLZ·TXTZ·ODT처럼 페이지를 그림으로 담는 출력은 인식 글자를 더하지 않는다. `Selection`·`ProfileSelector`가 입력별 프로필과 프리셋·출력 선택을 판단한다. UI는 host의 판단 결과를 사용한다.
+실행 시점의 기준은 Swift `FormatRegistry`, `EngineRegistry`, `ConverterCatalog`다. 가상 `folder`를 제외한 172개 형식(Filee의 171개와 FileToX가 더한 SRT)과 23개 엔진을 등록하며, 읽기 전용 형식은 출력 선택에서 제외한다. PDB(PalmDoc)는 Windows-1252 글자만 담아 한글을 저장할 수 없으므로 Filee와 달리 읽기 전용이며, 이를 대상으로 저장된 프리셋은 검증을 통과하되 경로가 없어 사용할 수 없음으로 표시된다. 등록 수가 모든 형식 쌍의 변환 가능성을 뜻하지 않는다. `ConverterCatalog.statusOf`·`createPlanner`가 사용 가능한 엔진을 반영하고 `RoutePlanner`는 최대 3단계 경로를 찾는다. 원본에 없는 내용이 필요한 대상은 계획하지 않는다. 오디오는 영상·오디오 원본에서만 만든다. 영상·오디오의 TXT·SRT는 정지 프레임의 글자 인식이 아니라 자막이나 말소리다: 영상에 글자 자막 트랙이 있으면 FFmpeg로 첫 트랙을 꺼내고(macOS 15에서도 동작), 없으면 FFmpeg 엔진이 소리를 16kHz 모노 WAV로 뽑아 macOS 26 이상의 `SpeechAnalyzer`로 기기 안에서 받아쓰며(`SpeechText`), 언어는 설치된 macOS 음성 모델 중 파일 앞 45초를 가장 잘 알아듣는 것(글자 수가 가장 긴 후보의 1/3 이상인 후보 중 신뢰도 최고)으로 고르고, 모델은 설정 화면에서 사용자가 내려받으며 변환 중에는 내려받지 않는다. 영상은 TXT·SRT가 최종 대상일 때만 계획하고, 오디오는 받아쓴 TXT에서 글로 된 형식(문서·HWP·PDF·전자책)으로 이어 갈 수 있다. 스캔 페이지의 OCR은 첫 언어 모델이 읽은 줄을 그대로 두고 한국어·일본어·중국어 모델이 따로 읽은 줄 중 신뢰도 0.5를 넘는 것만 더하며, EPUB·FB2·HTMLZ·TXTZ·ODT처럼 페이지를 담는 출력에도 인식 글자를 페이지 그림 앞에 넣는다. PDF→TXT는 글자가 없는 페이지(스캔, PDF 페이지로 만든 그림·만화)를 PDFium으로 300dpi·긴 변 4,000px 이하로 렌더링해 Vision으로 읽고, 기존 줄·문단·2단 읽기 순서 처리에 넣는다. 인식 언어는 Mac 언어 순서 중 Vision이 지원하는 언어이며 한중일 언어를 앞에, 영어를 끝에 둔다. Vision은 첫 언어의 문자 모델만 쓰므로 다른 한중일 문자는 읽지 못할 수 있고, 자동 언어 감지는 첫 사용이 느리고 영어가 많은 페이지의 한글을 놓쳐 쓰지 않는다. EPUB·FB2·HTMLZ·TXTZ·ODT처럼 페이지를 그림으로 담는 출력은 인식 글자를 더하지 않는다. `Selection`·`ProfileSelector`가 입력별 프로필과 프리셋·출력 선택을 판단한다. UI는 host의 판단 결과를 사용한다.
 
 `Resources/FileeFormats.json`은 앱의 정적 카탈로그용이다. 엔진의 실행 가능 여부나 경로를 이 JSON으로 판단하지 않는다. 형식 목록은 [formats.md](formats.md), 기능별 이식 근거는 [Swift 전환 기록](design/swift-engine-migration.md)에 있다.
 
@@ -100,7 +100,7 @@ FileToX는 Filee에서 영감을 받아 만든 Mac 전용 파일 변환 앱이�
 
 ### 설계와 구현 구성
 
-- [전체 형식 목록](formats.md): 실제 171개 형식·257개 확장자, 읽기 전용과 가상 폴더를 보존한 생성 문서.
+- [전체 형식 목록](formats.md): Filee의 실제 171개 형식·257개 확장자(FileToX가 더한 SRT는 없다), 읽기 전용과 가상 폴더를 보존한 생성 문서.
 - [변환 host](design/engine-host.md): 요청·진행·취소·작업 결과, 전체 프리셋·프로필·설정과 파일 안전.
 - [SwiftUI 화면 설계](design/swiftui-port.md): 홈·도넛의 드롭·클릭 흐름, 입력별 활성 상태와 편집·접근성.
 - [macOS 배포](design/macos-packaging.md): OS·아키텍처·런타임·네이티브 라이브러리·엔진·서명과 검증 조건.
@@ -139,7 +139,7 @@ Filee에서 영감을 받아 홈·원형 툴바·프리셋 편집 화면을 macO
 
 ### 형식과 엔진
 
-`FormatRegistry`의 전체 형식을 카탈로그에 담는다. 현재 가상 `folder`를 제외한 171개 형식이 14개 분류로 등록돼 있다. 읽기 전용 형식과 확장자 별칭도 보존한다. 이미지, 벡터, PDF, 문서, HWP, 표, 프레젠테이션, 텍스트, 전자책, 영상, 음성, 압축, 글꼴, CAD가 대상이다.
+`FormatRegistry`의 전체 형식을 카탈로그에 담는다. 현재 가상 `folder`를 제외한 172개 형식이 14개 분류로 등록돼 있다(Filee의 171개와 SRT). 읽기 전용 형식과 확장자 별칭도 보존한다. 이미지, 벡터, PDF, 문서, HWP, 표, 프레젠테이션, 텍스트, 전자책, 영상, 음성, 압축, 글꼴, CAD가 대상이다.
 
 등록된 형식 수는 모든 형식 사이의 변환이 가능하다는 뜻이 아니다. `ConverterCatalog.StatusOf`와 `CreatePlanner`가 실제 사용 가능한 변환을 판단하고 `RoutePlanner`가 최대 3단계 경로를 탐색한다. `ProfileSelector`가 입력에 맞는 프로필을 고른다. UI가 이 규칙을 별도로 하드코딩하지 않는다.
 

@@ -7,6 +7,8 @@ import SwiftUI
 struct SpeechLanguagesSection: View {
     @State private var installed: [Locale] = []
     @State private var available: [Locale] = []
+    /// The languages this app asked macOS to keep; the others are kept by macOS or another app.
+    @State private var reserved: Set<String> = []
     @State private var downloading: Locale?
     @State private var progress: Progress?
     @State private var error: String?
@@ -18,7 +20,11 @@ struct SpeechLanguagesSection: View {
             }
             ForEach(installed, id: \.identifier) { locale in
                 LabeledContent {
-                    Text(L("speech.languages.installed")).font(.callout).foregroundStyle(.secondary)
+                    if reserved.contains(locale.identifier) {
+                        Button(L("speech.languages.release")) { Task { await release(locale) } }.disabled(downloading != nil)
+                    } else {
+                        Text(L("speech.languages.system")).font(.callout).foregroundStyle(.secondary)
+                    }
                 } label: {
                     Label(name(locale), systemImage: "checkmark.circle.fill")
                 }
@@ -52,7 +58,15 @@ struct SpeechLanguagesSection: View {
         let ready = await SpeechTranscriber.installedLocales
         let ids = Set(ready.map(\.identifier))
         installed = ready.sorted { name($0) < name($1) }
+        reserved = Set(await AssetInventory.reservedLocales.map(\.identifier))
         available = await SpeechTranscriber.supportedLocales.filter { !ids.contains($0.identifier) }.sorted { name($0) < name($1) }
+    }
+
+    /// Stops keeping the language for this app. macOS removes the model when nothing else uses it and it needs the space.
+    private func release(_ locale: Locale) async {
+        error = nil
+        _ = await AssetInventory.release(reservedLocale: locale)
+        await reload()
     }
 
     private func download(_ locale: Locale) async {

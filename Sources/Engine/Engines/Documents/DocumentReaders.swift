@@ -29,7 +29,7 @@ enum DocumentReaders {
         case "csv": return try SheetDocument.build(CsvFormat.read(path))
         case "tsv", "xls", "ods": return try SheetDocument.build(SpreadsheetConverter.read(path, f))
         case "pptx", "pptm", "potx", "ppsx": return try PptxReader.read(path, media)
-        case "pdf": return try PdfDocumentReader.read(path, media, allText: keepsPages)
+        case "pdf": return try keepsPages ? await PdfDocumentReader.readWithScans(path, media) : PdfDocumentReader.read(path, media)
         case "hwpx": return try HwpxReader.read(path, media)
         case "html": return try HtmlReader.read(path, media)
         case "epub": return try EpubReader.read(path, media)

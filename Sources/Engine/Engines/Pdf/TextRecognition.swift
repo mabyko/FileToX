@@ -39,23 +39,70 @@ enum TextRecognition {
         return request
     }
 
+    /// The other Chinese, Japanese and Korean models that read a page after the user's: Vision reads with one script model
+    /// at a time and leaves out lines in another script, so a page that mixes them needs each.
+    static func otherScripts(_ languages: [Locale.Language], supported: [Locale.Language]) -> [[Locale.Language]] {
+        func script(_ language: Locale.Language) -> String? { Locale.Language(identifier: language.maximalIdentifier).script?.identifier }
+        let first = languages.first.flatMap(script)
+        return ["ko-KR", "ja-JP", "zh-Hans"].map { Locale.Language(identifier: $0) }
+            .filter { wanted in script(wanted) != first && supported.contains { script($0) == script(wanted) } }
+            .map { [$0] + languages.filter { script($0) == "Latn" } }
+    }
+
+    /// A line as one model read it: its text, how sure the model is, and its box and text direction in the image.
+    private struct Reading {
+        let text: RecognizedText, confidence: Float, box: CGRect, direction: CGPoint
+    }
+
+    private static func read(_ image: CGImage, _ languages: [Locale.Language]) async throws -> [Reading] {
+        try Task.checkCancellation()
+        return try await request(languages).perform(on: image).compactMap { observation in
+            observation.topCandidates(1).first.map {
+                Reading(text: $0, confidence: $0.confidence, box: observation.boundingBox.cgRect,
+                        direction: CGPoint(x: observation.bottomRight.cgPoint.x - observation.bottomLeft.cgPoint.x,
+                                           y: observation.bottomRight.cgPoint.y - observation.bottomLeft.cgPoint.y))
+            }
+        }
+    }
+
+    /// Whether two models read the same line: their boxes share most of the smaller one.
+    private static func same(_ a: CGRect, _ b: CGRect) -> Bool {
+        let shared = a.intersection(b)
+        return !shared.isNull && shared.width * shared.height > 0.5 * min(a.width * a.height, b.width * b.height)
+    }
+
+    /// The first model's lines, and the lines only another model read, with confidence (a model also guesses at a script
+    /// it cannot read: those guesses are unsure). A line the first model read stays as it read it: on a Korean scan the
+    /// other models' surer readings of its lines were wrong more often (word recall 96.5% → 95.3%).
+    private static func merge(_ readings: [[Reading]]) -> [Reading] {
+        var lines = readings.first ?? []
+        for other in readings.dropFirst() {
+            for line in other {
+                if line.confidence > 0.5, !lines.contains(where: { same($0.box, line.box) }) { lines.append(line) }
+            }
+        }
+        return lines
+    }
+
     /// The lines of text in `image`, and whether the page lies on its side. Vision also reads a page turned by 90°, 180° or
     /// 270°, and each line's corners follow its text: most of the text decides the page's turn, and the boxes are given
     /// as on the page turned upright (`sideways`: its width and height are the image's height and width). Words are the
-    /// line's text split at spaces, so a word and its particle ("English가") stay together.
-    static func lines(in image: CGImage, languages: [Locale.Language] = userLanguages) async throws -> (lines: [Line], sideways: Bool) {
+    /// line's text split at spaces, so a word and its particle ("English가") stay together. With `allScripts`, the other
+    /// Chinese, Japanese and Korean models read the page too (`otherScripts`), for the lines the first leaves out.
+    static func lines(in image: CGImage, languages: [Locale.Language] = userLanguages, allScripts: Bool = true) async throws -> (lines: [Line], sideways: Bool) {
+        var readings = [try await read(image, languages)]
+        if allScripts {
+            for other in otherScripts(languages, supported: request(nil).supportedRecognitionLanguages) { readings.append(try await read(image, other)) }
+        }
         try Task.checkCancellation()
-        let observations = try await request(languages).perform(on: image)
-        try Task.checkCancellation()
-        let read = observations.compactMap { observation in observation.topCandidates(1).first.map { (observation, $0) } }
+        let read = merge(readings)
         var votes = [0, 0, 0, 0]
-        for (observation, best) in read {
-            let (from, to) = (observation.bottomLeft.cgPoint, observation.bottomRight.cgPoint)
-            votes[quarterTurns((to.x - from.x) * CGFloat(image.width), (to.y - from.y) * CGFloat(image.height))] += best.string.count
+        for line in read {
+            votes[quarterTurns(line.direction.x * CGFloat(image.width), line.direction.y * CGFloat(image.height))] += line.text.string.count
         }
         let turns = votes.firstIndex(of: votes.max()!)!
-        return (read.compactMap { observation, best -> Line? in
-            let text = best.string, line = upright(observation.boundingBox.cgRect, turns)
+        return (read.compactMap { reading -> Line? in
+            let best = reading.text, text = best.string, line = upright(reading.box, turns)
             var words: Line = []
             var index = text.startIndex
             for word in text.split(whereSeparator: \.isWhitespace) {

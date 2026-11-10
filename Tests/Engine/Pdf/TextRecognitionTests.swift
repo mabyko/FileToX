@@ -132,6 +132,27 @@ final class TextRecognitionTests: XCTestCase {
         }
     }
 
+    func testPageThatMixesScriptsIsReadByEachScriptsModel() async throws {
+        let texts = [("\u{D55C}\u{AD6D}\u{C5B4} \u{BB38}\u{B2E8}\u{C785}\u{B2C8}\u{B2E4}. \u{D30C}\u{C77C} \u{BCC0}\u{D658} \u{C571}\u{C758} \u{AE00}\u{C790} \u{C778}\u{C2DD}\u{C744} \u{C2DC}\u{D5D8}\u{D569}\u{B2C8}\u{B2E4}.", 72.0, 100.0, 14.0),
+                     ("\u{65E5}\u{672C}\u{8A9E}\u{306E}\u{6BB5}\u{843D}\u{3067}\u{3059}\u{3002}\u{30D5}\u{30A1}\u{30A4}\u{30EB}\u{5909}\u{63DB}\u{30A2}\u{30D7}\u{30EA}\u{306E}\u{6587}\u{5B57}\u{8A8D}\u{8B58}\u{3092}\u{8A66}\u{9A13}\u{3057}\u{307E}\u{3059}\u{3002}", 72, 140, 14),
+                     ("This is an English paragraph for the same recognition test.", 72, 180, 14)]
+        let path = try scan("mixed.png", texts, font: "AppleSDGothicNeo-Regular")
+        let image = CGImageSourceCreateImageAtIndex(CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil)!, 0, nil)!
+        let korean = [Locale.Language(identifier: "ko-KR"), Locale.Language(identifier: "en-US")]
+        func text(_ allScripts: Bool) async throws -> String {
+            try await TextRecognition.lines(in: image, languages: korean, allScripts: allScripts).lines.map { $0.map(\.text).joined(separator: " ") }.joined(separator: "\n")
+        }
+        let one = try await text(false), all = try await text(true)
+        XCTAssertFalse(one.contains("\u{65E5}\u{672C}\u{8A9E}"), one) // the Korean model alone leaves the Japanese line out
+        XCTAssertTrue(all.contains("\u{D55C}\u{AD6D}\u{C5B4}") && all.contains("\u{65E5}\u{672C}\u{8A9E}") && all.contains("\u{6587}\u{5B57}\u{8A8D}\u{8B58}") && all.contains("English paragraph"), all)
+        XCTAssertEqual(all.components(separatedBy: "\n").count, 3, all)
+        // The other models: each script but the first's, with the Latin languages kept.
+        let supported = ["en-US", "ko-KR", "ja-JP", "zh-Hans", "zh-Hant"].map { Locale.Language(identifier: $0) }
+        XCTAssertEqual(TextRecognition.otherScripts(korean, supported: supported).map { $0.map(\.minimalIdentifier) }, [["ja", "en"], ["zh", "en"]])
+        XCTAssertEqual(TextRecognition.otherScripts([Locale.Language(identifier: "en-US")], supported: supported).count, 3)
+        XCTAssertEqual(TextRecognition.otherScripts(korean, supported: [Locale.Language(identifier: "en-US")]).count, 0)
+    }
+
     func testRecognitionLanguagesPutChineseJapaneseKoreanFirstAndEndWithEnglish() {
         let ids = ["en-US", "fr-FR", "ko-KR", "ja-JP", "zh-Hans", "zh-Hant"]
         let supported = ids.map { Locale.Language(identifier: $0) }
@@ -144,6 +165,24 @@ final class TextRecognitionTests: XCTestCase {
         XCTAssertEqual(chosen(["zh-CN"]), ["zh-Hans", "en-US"])
         XCTAssertEqual(chosen(["de-DE"]), ["en-US"])
         XCTAssertEqual(chosen([]), ["en-US"])
+    }
+
+    func testScannedBookKeepsItsPagesWithTheirRecognizedText() async throws {
+        let pdf = PdfBuilder().newPage()
+        try pdf.picture(try scan("page.png", [("Scanned chapter heading", 72, 100, 20), ("Body text of the scanned page.", 72, 160, 12)]), 0, 0, 595, 842)
+        let path = try pdf.save(FilePath.combine(dir, "book.pdf"))
+        func blocks(_ document: HDocument) -> (text: String, pictures: Int) {
+            let paragraphs = document.sections.flatMap(\.blocks).compactMap { $0 as? HParagraph }
+            return (paragraphs.map { $0.inlines.compactMap { ($0 as? HText)?.text }.joined() }.joined(separator: "\n"),
+                    paragraphs.reduce(0) { $0 + $1.inlines.filter { $0 is HImage }.count })
+        }
+        // DOCX and HWPX keep the page as its picture only; outputs that keep pages get the text before it.
+        let plain = blocks(try PdfDocumentReader.read(path, FilePath.combine(dir, "plain")))
+        XCTAssertEqual(plain.pictures, 1)
+        XCTAssertFalse(plain.text.contains("Scanned chapter"), plain.text)
+        let read = blocks(try await PdfDocumentReader.readWithScans(path, FilePath.combine(dir, "read")))
+        XCTAssertEqual(read.pictures, 1)
+        XCTAssertTrue(read.text.contains("Scanned chapter heading") && read.text.contains("Body text of the scanned page."), read.text)
     }
 
     func testPictureBecomesTextThroughItsPdfPage() async throws {

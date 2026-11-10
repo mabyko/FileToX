@@ -4,14 +4,15 @@ import XCTest
 
 final class FormatRegistryTests: XCTestCase {
     func testRegistryMatchesFileeCatalog() {
-        XCTAssertEqual(FormatRegistry.known.count, 172)
+        // Filee's 172 and SRT (subtitles and transcripts), which is FileToX's own.
+        XCTAssertEqual(FormatRegistry.known.count, 173)
         // Filee marks 58 formats read only; FileToX also stops writing PDB.
         XCTAssertEqual(FormatRegistry.known.filter { !$0.writable }.count, 59)
         XCTAssertEqual(FormatRegistry.known.first?.id, "png")
         XCTAssertEqual(FormatRegistry.known.last?.id, "eot")
         let extensions = FormatRegistry.known.flatMap(\.extensions).filter { !$0.isEmpty }
-        XCTAssertEqual(extensions.count, 257)
-        XCTAssertEqual(Set(extensions).count, 257)
+        XCTAssertEqual(extensions.count, 258)
+        XCTAssertEqual(Set(extensions).count, 258)
     }
 
     func testRegistryMatchesBundledAppCatalog() throws {
@@ -19,8 +20,9 @@ final class FormatRegistryTests: XCTestCase {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../Resources/FileeFormats.json")
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let formats = try XCTUnwrap(root["formats"] as? [[String: Any]])
-        XCTAssertEqual(formats.map { $0["id"] as? String }, FormatRegistry.known.map(\.id))
-        for (json, format) in zip(formats, FormatRegistry.known) {
+        let known = FormatRegistry.known.filter { $0.id != "srt" } // not in Filee's catalog
+        XCTAssertEqual(formats.map { $0["id"] as? String }, known.map(\.id))
+        for (json, format) in zip(formats, known) {
             XCTAssertEqual(json["extensions"] as? [String], format.extensions, format.id)
             XCTAssertEqual(json["writable"] as? Bool, format.writable || format.id == "pdb", format.id)
             XCTAssertEqual(json["category"] as? String, format.category.rawValue, format.id)

@@ -24,7 +24,7 @@ final class RealEngineHostTests: XCTestCase {
             XCTAssertEqual(history.count, 1)
             XCTAssertEqual(history.first?.outputs, outputs)
             let catalog = try await host.catalog()
-            XCTAssertEqual(catalog.formats.count, 172)
+            XCTAssertEqual(catalog.formats.count, 173)
             await host.shutdown()
             XCTAssertEqual(try Data(contentsOf: core.appendingPathComponent("history.json")), saved)
         } catch {
@@ -106,7 +106,7 @@ final class RealEngineHostTests: XCTestCase {
             let hello = try await host.start()
             XCTAssertEqual(hello.rid, "osx-arm64")
             let catalog = try await host.catalog()
-            XCTAssertEqual(catalog.formats.count, 172)
+            XCTAssertEqual(catalog.formats.count, 173)
             XCTAssertEqual(catalog.engines.count, 23)
             let library = try await host.library()
             let source = try imageFixture(folder.appendingPathComponent("한글 사진.png"))

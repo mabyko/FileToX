@@ -23,7 +23,7 @@ Home keeps file selection, preset selection and execution in the main window. Ch
 ## Features
 
 - Open a radial conversion menu by dragging in Finder and holding the configured shortcut (Control by default), or choose files and folders in the app and run them from Home.
-- Convert images, documents, video, audio and archives through a catalog of 171 formats and 23 engines.
+- Convert images, documents, video, audio and archives through a catalog of 172 formats and 23 engines.
 - Create presets, arrange your radial toolbar and choose where converted files are saved.
 - Follow progress, cancel a job, retry failures and revisit recent conversions.
 - Choose English, Korean or Japanese, and customize the accent with the native macOS color picker.
@@ -56,7 +56,7 @@ The default bundle includes built-in libraries, rhwp, 7-Zip and FFmpeg. Under **
 
 Before encoding, FileToX checks that the selected FFmpeg provides the required encoders and output formats. A missing capability produces a specific error and preserves existing outputs. A pinned Apple Silicon build recipe is available below; FFmpeg is not yet offered as a managed download.
 
-PDF conversions to EPUB, FB2, HTMLZ, TXTZ and ODT retain text and scan images in page order, including mixed text/scan documents and existing OCR text. Pages containing only invisible OCR text also retain a full-page rendering. Text-only PDFs retain the text route; empty pages do not trigger image fallback. These outputs keep scanned pages as pictures without adding recognised text. TXT reads pages without text, such as scans and pictures, with macOS text recognition (Vision) in the first Chinese, Japanese or Korean language of the Mac's language order plus English, and fails only when nothing can be read.
+PDF conversions to EPUB, FB2, HTMLZ, TXTZ and ODT retain text and scan images in page order, including mixed text/scan documents and existing OCR text. Pages containing only invisible OCR text also retain a full-page rendering. Text-only PDFs retain the text route; empty pages do not trigger image fallback. These outputs put the text that macOS text recognition (Vision) reads in a scanned page before its picture, so it can be searched and copied. TXT reads pages without text, such as scans and pictures, the same way, first with the model of the Mac's first language and then with the Korean, Japanese and Chinese models for the lines it left out, and fails only when nothing can be read.
 
 Outputs are written to a hidden staging folder beside each final destination, then published individually. Source files stay protected even with Overwrite; the default conflict policy chooses a new name. If publishing multiple outputs fails partway through, already published results are reported accurately. The whole batch is not an atomic transaction. App data is separated under `~/Library/Application Support/FileToX/{core,engines,tmp}`.
 
@@ -105,13 +105,16 @@ These targets are not offered, or end with an error because of what the file con
 | --- | --- | --- |
 | Pictures, PDF, SVG, CAD, documents → audio formats | Not offered | The source has no sound. Audio comes only from video and audio files. |
 | Writing PDB (PalmDoc) | Not offered | It holds Windows-1252 text only, so Korean, Japanese and emoji break. Reading PDB works. |
-| Video or audio → a transcript in DOCX, MD or other documents | Not supported | Transcripts are written as TXT only. Video → documents and pictures is a still frame. |
-| Video or audio → TXT on macOS 15 | Not offered | Transcription uses the on-device speech recognition of macOS 26 or later. |
+| Video → a transcript in DOCX, MD or other documents | Not supported | A video's documents and pictures are a still frame; its text is written as TXT and SRT only. A recording (audio) also gives its transcript as DOCX, MD, PDF, EPUB and other documents. |
+| Video without a subtitle track, and any audio → TXT or SRT on macOS 15 | Error for video, not offered for audio | Transcription uses the on-device speech recognition of macOS 26 or later. A video with a subtitle track works on macOS 15. |
+| Subtitles of a video that has only picture subtitles (DVD, Blu-ray) | Not read | Only text subtitle tracks are taken out; such a video is transcribed instead. |
 | Video or audio → TXT on a Mac without any speech recognition language installed | "No speech recognition language is installed" error | Download the languages you need in the settings. |
-| Video or audio without speech → TXT | "No speech was recognised" error | Music, effects and silence give no text. Subtitle tracks are not read. |
+| Video or audio without speech → TXT | "No speech was recognised" error | Music, effects and silence give no text. |
 | Pictures or scanned PDFs without text → TXT | "The PDF contains no text" error | There is no text layer and nothing to recognise. Pictures and scans with text are read with OCR. |
 
-Limits of transcription and OCR: the transcription language is chosen among the macOS models downloaded in **Settings → Conversion engines → Speech recognition languages**. With several installed, the one that understands the first 45 seconds of the file best transcribes all of it. A language that is not installed cannot be chosen, a file that changes language is heard in one, and nothing is downloaded during a conversion. There are no speakers or timestamps. OCR does not promise vertical writing, skewed pages, handwriting or Chinese, Japanese and Korean scripts other than the first language's, and does not rebuild tables.
+A video with a text subtitle track is not transcribed: its first subtitle track is taken out as it is. SRT holds the subtitles or the transcribed stretches of speech with their times.
+
+Limits of transcription and OCR: the transcription language is chosen among the macOS models downloaded in **Settings → Conversion engines → Speech recognition languages**. With several installed, the one that understands the first 45 seconds of the file best transcribes all of it. A language that is not installed cannot be chosen, a file that changes language is heard in one, and nothing is downloaded during a conversion. There are no speakers or timestamps. OCR does not promise vertical writing, skewed pages or handwriting, and does not rebuild tables. Another script inside a line (a Japanese word in a Korean line) stays as the first language's model read it. DOCX and HWPX keep a scanned page as its picture only.
 
 ## Verification
 
